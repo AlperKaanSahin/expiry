@@ -1,9 +1,13 @@
+
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 
 export default function AdminPanelScreen({ navigation }) {
+
+  const { logout } = useAuth();
+
   const adminFeatures = [
     {
       title: 'Kullanıcı Yönetimi',
@@ -36,39 +40,43 @@ export default function AdminPanelScreen({ navigation }) {
       color: '#9C27B0'
     },
   ];
+
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('@token');
-    navigation.replace('Login'); 
+    await logout();
   };
 
   return (
-    <SafeAreaView>  
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Admin Paneli</Text>
-        <Text style={styles.subtitle}>Yönetim işlemlerinizi gerçekleştirin</Text>
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <Icon name="logout" size={24} color="#FFF" />
-          <Text style={styles.logoutText}>Çıkış</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView>
+      <ScrollView contentContainerStyle={styles.container}>
 
-      <View style={styles.gridContainer}>
-        {adminFeatures.map((feature, index) => (
+        <View style={styles.header}>
+          <Text style={styles.title}>Admin Paneli</Text>
+          <Text style={styles.subtitle}>Yönetim işlemlerinizi gerçekleştirin</Text>
+
           <TouchableOpacity
-            key={index}
-            style={[styles.featureCard, { backgroundColor: feature.color }]}
-            onPress={() => navigation.navigate(feature.screen)}
+            style={styles.logoutButton}
+            onPress={handleLogout}
           >
-            <Icon name={feature.icon} size={32} color="#FFF" style={styles.icon} />
-            <Text style={styles.featureText}>{feature.title}</Text>
+            <Icon name="logout" size={24} color="#FFF" />
+            <Text style={styles.logoutText}>Çıkış</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+
+        </View>
+
+        <View style={styles.gridContainer}>
+          {adminFeatures.map((feature, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[styles.featureCard, { backgroundColor: feature.color }]}
+              onPress={() => navigation.navigate(feature.screen)}
+            >
+              <Icon name={feature.icon} size={32} color="#FFF" style={styles.icon} />
+              <Text style={styles.featureText}>{feature.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
   );
 }

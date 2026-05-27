@@ -1,8 +1,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
+const API_HOST = '192.168.1.114';
 
-const API_URL = 'http://192.168.1.157:3000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -41,10 +43,12 @@ export const rateShop = async (shopId, rating) => {
 export const loginUser = async ({ email, password }) => {
   try {
     console.log('Login request:', { email, password });
+
     const response = await api.post('/users/login', { email, password });
+
     console.log('Login response:', response.data);
-    await AsyncStorage.setItem('@token', response.data.token);
-    return response.data.user;
+
+    return response.data; // 🔥 TEK DOĞRU SATIR
   } catch (error) {
     console.log('Login error:', error.response?.data || error);
     throw error.response?.data?.error || 'Giriş başarısız';

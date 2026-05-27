@@ -1,47 +1,73 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../context/AuthContext';
 
-const HomeScreen = ({ navigation }) => {
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem('@token');
-    navigation.replace('Login');
-  };
 
-  const quickActions = [
-    {
-      title: 'Marketler',
-      icon: 'storefront',
-      screen: 'Shops',
-      color: '#009688'
-    },
-    {
-      title: 'Siparişler',
-      icon: 'receipt',
-      screen: 'UserOrders',
-      color: '#FF9800'
-    },
-    {
-      title: 'Profil',
-      icon: 'person',
-      screen: 'UserProfile',
-      color: '#6200EE'
-    },
+const HomeScreen = ({ navigation }) =>{
+  const { user, logout } = useAuth();
 
-    {
-      title: 'Ayarlar',
-      icon: 'settings',
-      screen: 'Settings',
-      color: '#2196F3'
-    }
-  ];
+const handleLogout = async () => {
+  await logout();
+};
+
+ const quickActions = [
+  {
+    title: 'Marketler',
+    icon: 'storefront',
+    screen: 'Shops',
+    color: '#009688',
+    roles: ['user', 'market', 'admin']
+  },
+  {
+    title: 'Siparişler',
+    icon: 'receipt',
+    screen: 'UserOrders',
+    color: '#FF9800',
+    roles: ['user', 'market', 'admin']
+  },
+  {
+    title: 'Profil',
+    icon: 'person',
+    screen: 'UserProfile',
+    color: '#6200EE',
+    roles: ['user', 'market', 'admin']
+  },
+  {
+    title: 'Ayarlar',
+    icon: 'settings',
+    screen: 'Settings',
+    color: '#2196F3',
+    roles: ['user', 'market', 'admin']
+  },
+
+  // 🔥 SADECE MARKET
+  {
+    title: 'Marketim',
+    icon: 'store',
+    screen: 'MarketPanel',
+    color: '#4CAF50',
+    roles: ['market']
+  },
+
+  // 🔥 SADECE ADMIN
+  {
+    title: 'Admin Panel',
+    icon: 'admin-panel-settings',
+    screen: 'AdminPanel',
+    color: '#F44336',
+    roles: ['admin']
+  }
+];
+const filteredActions = quickActions.filter(item =>
+  item.roles.includes(user?.role)
+);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Header Bölümü */}
+
         <View style={styles.header}>
           <Image
             source={require('../assets/label.png')}
@@ -52,9 +78,8 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.subtitle}>Hızlı erişim menüsü</Text>
         </View>
 
-        {/* Hızlı Erişim Butonları */}
         <View style={styles.quickActionsContainer}>
-          {quickActions.map((action, index) => (
+          {filteredActions.map((action, index) => (
             <TouchableOpacity
               key={index}
               style={[styles.actionCard, { backgroundColor: action.color }]}
@@ -68,7 +93,7 @@ const HomeScreen = ({ navigation }) => {
           ))}
         </View>
 
-        {/* Çıkış Butonu */}
+        {/* ÇIKIŞ */}
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -77,6 +102,7 @@ const HomeScreen = ({ navigation }) => {
           <Icon name="logout" size={20} color="#FFF" />
           <Text style={styles.logoutText}>Çıkış Yap</Text>
         </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
