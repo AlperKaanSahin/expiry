@@ -1,49 +1,55 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect } from 'react';
 import { fetchMarketProfile } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const MarketPanelScreen = ({ navigation }) => {
+
+  const { logout } = useAuth();
+
   useEffect(() => {
     const saveShopId = async () => {
       try {
         const profile = await fetchMarketProfile();
-        await AsyncStorage.setItem('@shopId', profile.shopId?.toString() || profile.id?.toString());
+        await AsyncStorage.setItem(
+          '@shopId',
+          profile.shopId?.toString() || profile.id?.toString()
+        );
       } catch (error) {
         console.error('Profil yüklenirken hata:', error);
       }
     };
+
     saveShopId();
   }, []);
-  
+
   const handleLogout = async () => {
-    await AsyncStorage.clear();
-    navigation.replace('Login');
+    await logout();
   };
 
   const menuItems = [
-    { 
-      title: 'Ürünlerim', 
+    {
+      title: 'Ürünlerim',
       icon: 'shopping-basket',
       onPress: () => navigation.navigate('MarketProducts'),
       color: '#6200EE'
     },
-    { 
-      title: 'Kutu Yönetimi', 
+    {
+      title: 'Kutu Yönetimi',
       icon: 'inventory',
       onPress: () => navigation.navigate('MarketPackages'),
       color: '#009688'
     },
-    { 
-      title: 'Siparişlerim', 
+    {
+      title: 'Siparişlerim',
       icon: 'receipt',
       onPress: () => navigation.navigate('MarketOrders'),
       color: '#FF9800'
     },
-    { 
-      title: 'Profilim', 
+    {
+      title: 'Profilim',
       icon: 'store',
       onPress: () => navigation.navigate('MarketProfile'),
       color: '#2196F3'
@@ -59,12 +65,12 @@ const MarketPanelScreen = ({ navigation }) => {
 
       <View style={styles.menuContainer}>
         {menuItems.map((item, index) => (
-          <TouchableOpacity 
+          <TouchableOpacity
             key={index}
             style={[styles.menuButton, { backgroundColor: item.color }]}
             onPress={item.onPress}
           >
-            <Icon name={item.icon} size={24} color="#FFF" style={styles.icon} />
+            <Icon name={item.icon} size={24} color="#FFF" />
             <Text style={styles.menuButtonText}>{item.title}</Text>
           </TouchableOpacity>
         ))}
@@ -74,6 +80,7 @@ const MarketPanelScreen = ({ navigation }) => {
         <Icon name="exit-to-app" size={20} color="#FFF" />
         <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
       </TouchableOpacity>
+
     </SafeAreaView>
   );
 };

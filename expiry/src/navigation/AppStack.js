@@ -1,7 +1,7 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import HomeScreen from '../screens/HomeScreen';
-import ShopScreen from '../screens/MarketScreen'; 
+import ShopScreen from '../screens/ShopScreen'; 
 import ShopDetailScreen from '../screens/ShopDetailScreen'; 
 import PackageDetailScreen from '../screens/PackageDetailScreen';
 import MarketPanelScreen from '../screens/MarketPanelScreen';
@@ -14,12 +14,14 @@ import PaymentScreen from '../screens/PaymentScreen';
 import UserOrdersScreen from '../screens/UserOrdersScreen'; 
 import UserListScreen from '../screens/UserListScreen'; 
 import MarketListScreen from '../screens/MarketListScreen'; 
+import UserProfileScreen from '../screens/UserProfileScreen';
 
 
 const Stack = createStackNavigator();
 
 const AppStack = () => (
   <Stack.Navigator>
+    
     <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Shops" component={ShopScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ShopDetail" component={ShopDetailScreen} options={{ headerShown: false }} />
@@ -34,6 +36,7 @@ const AppStack = () => (
     <Stack.Screen name="UserOrders" component={UserOrdersScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserListScreen" component={UserListScreen} options={{ headerShown: false }} />
     <Stack.Screen name="MarketListScreen" component={MarketListScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
 
   </Stack.Navigator>
 );
