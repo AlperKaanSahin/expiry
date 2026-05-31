@@ -2,12 +2,10 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const API_HOST = '192.168.1.114';
-
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: process.env.EXPO_PUBLIC_API_URL + '/api',
   timeout: 10000,
 });
 
@@ -160,10 +158,7 @@ export const fetchMarketOrders = async (shopId) => {
   return response.data;
 };
 
-export const updateMarketOrderStatus = async (id, status) => {
-  const response = await api.put(`/market/orders/${id}`, { status });
-  return response.data;
-};
+
 export const fetchMarketProfile = async () => {
   const response = await api.get('/market/profile');
   return response.data;
@@ -178,12 +173,12 @@ export const changeMarketPassword = async ({ password, newPassword }) => {
   const response = await api.put('/market/profile/password', { password, newPassword });
   return response.data;
 };
-export const confirmReceivedByUser = async (orderId) => {
-  return api.post(`/orders/${orderId}/confirm-user`);
-};
+export const changeOrderStatus = async (orderId, status) => {
+  const response = await api.post(`/orders/${orderId}/status`, {
+    status
+  });
 
-export const confirmReceivedByMarket = async (orderId) => {
-  return api.post(`/orders/${orderId}/confirm-market`);
+  return response.data;
 };
 export const fetchAllUsers = async () => {
   const response = await api.get('/admin/users');

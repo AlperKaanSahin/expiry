@@ -11,11 +11,4 @@ router.delete('/markets/:id', auth, isAdmin, adminController.deleteMarket);
 router.put('/markets/:id', auth, isAdmin, adminController.updateMarket);
 router.post('/markets', auth, isAdmin, adminController.createMarketWithUser);
 
-
-
-
-
-
-
-
 module.exports = router;

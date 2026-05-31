@@ -204,43 +204,6 @@ const ShopDetailScreen = ({ route, navigation }) => {
           </View>
         }
       />
-
-      {/* Puan Verme Bölümü */}
-      <View style={styles.ratingSection}>
-        <Text style={styles.ratingTitle}>Bu marketi puanla</Text>
-
-        <View style={styles.starsContainer}>
-          {[1, 2, 3, 4, 5].map(star => (
-            <TouchableOpacity
-              key={star}
-              onPress={() => setUserRating(star)}
-              activeOpacity={0.7}
-            >
-              <Icon
-                name={userRating >= star ? 'star' : 'star-border'}
-                size={36}
-                color={userRating >= star ? '#FF6B00' : '#CCC'}
-                style={styles.starIcon}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.submitButton,
-            (userRating === 0 || ratingSubmitting) && styles.disabledButton
-          ]}
-          disabled={userRating === 0 || ratingSubmitting}
-          onPress={handleRate}
-        >
-          {ratingSubmitting ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.submitButtonText}>Puanı Gönder</Text>
-          )}
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 };
