@@ -5,10 +5,15 @@ const auth = require('../middlewares/auth');
 const isAdmin = require('../middlewares/isAdmin');
 
 router.get('/users', auth, isAdmin, adminController.getAllUsers);
-router.delete('/users/:id', auth, isAdmin, adminController.deleteUser);
-router.get('/markets', adminController.getAllMarkets);
-router.delete('/markets/:id', auth, isAdmin, adminController.deleteMarket);
-router.put('/markets/:id', auth, isAdmin, adminController.updateMarket);
+router.get('/users/:id', auth, isAdmin, adminController.getUserById);
+router.get('/markets', auth, isAdmin, adminController.getAllMarkets);
+
 router.post('/markets', auth, isAdmin, adminController.createMarketWithUser);
+
+router.put('/markets/:id', auth, isAdmin, adminController.updateMarket);
+router.put('/users/:id/role', auth, isAdmin, adminController.updateUserRole);
+
+router.delete('/users/:id', auth, isAdmin, adminController.deleteUser);
+router.delete('/markets/:id', auth, isAdmin, adminController.deleteMarket);
 
 module.exports = router;

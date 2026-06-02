@@ -73,7 +73,15 @@ export const fetchShops = async () => {
   }
 
 };
+export const getProfile = async () => {
+  const res = await api.get('/users/profile');
+  return res.data;
+};
 
+export const getUserById = async (id) => {
+  const res = await api.get(`/admin/users/${id}`);
+  return res.data;
+};
 export const fetchUserOrders = async (userId) => {
   const response = await api.get(`/orders/user/${userId}`);
   return response.data;
@@ -115,7 +123,13 @@ export const addMarketProduct = async (product) => {
     throw error.response?.data?.error || 'Ürün eklenemedi';
   }
 };
+export const updateUserRole = async (id, role) => {
+  const res = await api.put(`/admin/users/${id}/role`, {
+    role
+  });
 
+  return res.data;
+};
 export const updateMarketProduct = async (id, product) => {
   try {
     const response = await api.put(`/market/products/${id}`, product);
@@ -180,9 +194,9 @@ export const changeOrderStatus = async (orderId, status) => {
 
   return response.data;
 };
-export const fetchAllUsers = async () => {
-  const response = await api.get('/admin/users');
-  return response.data;
+export const fetchAllUsers = async (page, limit, search) => {
+    const res = await api.get(`/admin/users?page=${page}&limit=${limit}`);
+    return res.data;
 };
 
 export const deleteUser = async (userId) => {
