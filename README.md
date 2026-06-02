@@ -1,0 +1,5 @@
+- Moved logic from adminController to adminService (removed controller bloat)
+- Added pagination to admin users list
+- Converted user profile endpoint from static data to dynamic data
+- Implemented role update feature for users (admin/users/:id/role)
+- Added email-based search in admin users endpoint
