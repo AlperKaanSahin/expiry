@@ -1,84 +1,127 @@
+const adminService = require('../services/adminService');
 
-const { User, Shop } = require('../models');
-const bcrypt = require('bcrypt'); // Şifreyi hashlemek için
-
+// USERS
 exports.getAllUsers = async (req, res) => {
-  // Tüm alanları getir (şifre hariç)
-  const users = await User.findAll({
-    attributes: { exclude: ['password', 'deletedAt'] } // Şifre hariç tüm alanlar gelir
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  const result = await adminService.getAllUsers(page, limit);
+
+  res.json({
+    total: result.count,
+    page,
+    limit,
+    users: result.rows
   });
-  res.json(users);
 };
 
 exports.deleteUser = async (req, res) => {
-  await User.destroy({ where: { id: req.params.id } });
+    try {
+
+        await adminService.deleteUser(
+            Number(req.params.id),
+            req.user.id
+        );
+
+        res.json({ success: true });
+
+    } catch (err) {
+
+        res.status(400).json({
+            error: err.message
+        });
+
+    }
+};
+exports.getUserById = async (req, res) => {{
+  const user = await adminService.getUserById(req.params.id);
+
+  if (!user) {
+    return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+  }
+  res.json(user);
+}};
+
+exports.updateUserRole = async (req, res) => {
+  try {
+    const user = await adminService.updateUserRole(
+      req.params.id,
+      req.body.role,
+      req.user.id
+    );
+
+    return res.json({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// MARKETS
+exports.getAllShops = async (req, res) => {
+  const shops = await adminService.getAllShops();
+  res.json(shops);
+};
+
+exports.createShop = async (req, res) => {
+  const shop = await adminService.createShop(req.body);
+  res.status(201).json(shop);
+};
+
+exports.updateShop = async (req, res) => {
+  const updated = await adminService.updateShop(req.params.id, req.body);
+
+  if (!updated) {
+    return res.status(404).json({ error: 'Market bulunamadı' });
+  }
+
+  res.json(updated);
+};
+
+exports.deleteShop = async (req, res) => {
+  const result = await adminService.deleteShop(req.params.id);
+
+  if (!result) {
+    return res.status(404).json({ error: 'Market bulunamadı' });
+  }
+
   res.json({ success: true });
 };
 
+exports.updateShopStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
 
+    const shop = await adminService.updateShopStatus(id, status);
 
-exports.getAllMarkets = async (req, res) => {
-  const markets = await Shop.findAll();
-  res.json(markets);
+    return res.json({
+      message: "Status updated",
+      shop
+    });
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
+exports.updateShopStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
 
-exports.createMarket = async (req, res) => {
-  const { name, address, phone } = req.body;
-  const newMarket = await Shop.create({ name, address, phone });
-  res.status(201).json(newMarket);
+    const shop = await adminService.updateShopStatus(id, status);
+
+    return res.json({
+      message: 'Status updated',
+      shop
+    });
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
-exports.deleteMarket = async (req, res) => {
-  const { id } = req.params;
-  const market = await Shop.findByPk(id);
-  if (!market) return res.status(404).json({ error: 'Market bulunamadı' });
-
-  // Önce market sahibini sil
-  await User.destroy({ where: { id: market.ownerId } });
-
-  // Sonra marketi sil
-  await Shop.destroy({ where: { id } });
-
-  res.json({ success: true });
-};
-exports.updateMarket = async (req, res) => {
-  const { id } = req.params;
-  const { name, address, phone } = req.body;
-  const market = await Shop.findByPk(id);
-  if (!market) return res.status(404).json({ error: 'Market bulunamadı' });
-  market.name = name;
-  market.address = address;
-  market.phone = phone;
-  await market.save();
-  res.json(market);
-};
-exports.createMarketWithUser = async (req, res) => {
-  const {
-    ownerEmail,
-    ownerPassword,
-    ownerFirstName,
-    ownerLastName,
-    name,
-    address,
-    phone
-  } = req.body;
-
-  // 1. Önce kullanıcıyı oluştur
-  const user = await User.create({
-    email: ownerEmail,
-    password: ownerPassword, // DÜZ ŞİFRE GÖNDER!
-    firstName: ownerFirstName,
-    lastName: ownerLastName,
-    role: 'market'
-  });
-
-  // 2. Sonra marketi oluştur
-  const shop = await Shop.create({
-    name,
-    address,
-    phone,
-    ownerId: user.id
-  });
-
-  res.json({ shop, user });
-};
-
