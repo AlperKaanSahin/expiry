@@ -12,36 +12,38 @@ import {
 
 import { api } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchMyOrders } from '../services/api';
 
 const UserOrdersScreen = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const loadOrders = async () => {
-    try {
-      setLoading(true);
+const loadOrders = async () => {
+  try {
+    setLoading(true);
 
-      const userId = await AsyncStorage.getItem('@userId');
-      const res = await api.get(`/orders/user/${userId}`);
+    const data = await fetchMyOrders();
 
-      setOrders(res.data);
+    setOrders(data || []);
 
-    } catch (error) {
-      Alert.alert('Hata', error.toString());
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    Alert.alert('Hata', error.toString());
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     loadOrders();
   }, []);
 
-const activeOrders = orders.filter(o =>
+const safeOrders = Array.isArray(orders) ? orders : [];
+
+const activeOrders = safeOrders.filter(o =>
   ['pending', 'paid', 'delivered'].includes(o.status)
 );
 
-const pastOrders = orders.filter(o =>
+const pastOrders = safeOrders.filter(o =>
   ['confirmed', 'released'].includes(o.status)
 );
 

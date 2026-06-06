@@ -2,28 +2,36 @@ import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchMarketProfile } from '../services/api';
+import { fetchShopProfile } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
 
 const MarketPanelScreen = ({ navigation }) => {
 
   const { logout } = useAuth();
+  const [status, setStatus] = useState(null);
+const [shop, setShop] = useState(null);
+const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const saveShopId = async () => {
-      try {
-        const profile = await fetchMarketProfile();
-        await AsyncStorage.setItem(
-          '@shopId',
-          profile.shopId?.toString() || profile.id?.toString()
-        );
-      } catch (error) {
-        console.error('Profil yüklenirken hata:', error);
-      }
-    };
+useEffect(() => {
+  const load = async () => {
+    try {
+      const data = await fetchShopProfile();
 
-    saveShopId();
-  }, []);
+      console.log("SHOP:", data.shop);
+
+      setStatus(data.status);
+      setShop(data.shop);
+
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  load();
+}, []);
 
   const handleLogout = async () => {
     await logout();
@@ -56,33 +64,55 @@ const MarketPanelScreen = ({ navigation }) => {
     },
   ];
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Market Yönetim Paneli</Text>
-        <Text style={styles.subtitle}>İşlemlerinizi seçiniz</Text>
+return (
+  <SafeAreaView style={styles.container}>
+
+    {loading && (
+      <View>
+        <Text>Yükleniyor...</Text>
       </View>
+    )}
 
-      <View style={styles.menuContainer}>
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={[styles.menuButton, { backgroundColor: item.color }]}
-            onPress={item.onPress}
-          >
-            <Icon name={item.icon} size={24} color="#FFF" />
-            <Text style={styles.menuButtonText}>{item.title}</Text>
-          </TouchableOpacity>
-        ))}
+    {!loading && status === "PENDING" && (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
+          Marketiniz henüz onaylanmadı
+        </Text>
+        <Text style={{ marginTop: 10, color: '#666' }}>
+          Admin onayı bekleniyor
+        </Text>
       </View>
+    )}
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Icon name="exit-to-app" size={20} color="#FFF" />
-        <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
-      </TouchableOpacity>
+    {!loading && status === "ACTIVE" && (
+      <>
+        <View style={styles.header}>
+          <Text style={styles.title}>Market Yönetim Paneli</Text>
+          <Text style={styles.subtitle}>İşlemlerinizi seçiniz</Text>
+        </View>
 
-    </SafeAreaView>
-  );
+        <View style={styles.menuContainer}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[styles.menuButton, { backgroundColor: item.color }]}
+              onPress={item.onPress}
+            >
+              <Icon name={item.icon} size={24} color="#FFF" />
+              <Text style={styles.menuButtonText}>{item.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Icon name="exit-to-app" size={20} color="#FFF" />
+          <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
+        </TouchableOpacity>
+      </>
+    )}
+
+  </SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({
