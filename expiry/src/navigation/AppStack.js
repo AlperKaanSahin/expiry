@@ -18,6 +18,9 @@ import UserProfileScreen from '../screens/UserProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import UserDetailsScreen from '../screens/UserDetailsScreen';
 import MarketApplyScreen from '../screens/MarketApplyScreen';
+import AdminStack from './AdminStack';
+import MarketStack from './MarketStack';
+import NotificationScreen from '../screens/NotificationScreen';
 
 const Stack = createStackNavigator();
 
@@ -28,22 +31,14 @@ const AppStack = () => (
     <Stack.Screen name="Shops" component={ShopScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ShopDetail" component={ShopDetailScreen} options={{ headerShown: false }} />
     <Stack.Screen name="PackageDetail" component={PackageDetailScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="MarketPanel" component={MarketPanelScreen} />
-    <Stack.Screen name="MarketProducts" component={MarketProductsScreen} />
-    <Stack.Screen name="MarketPackages" component={MarketPackagesScreen} />
-    <Stack.Screen name="MarketOrders" component={MarketOrdersScreen} />
-    <Stack.Screen name="MarketProfile" component={MarketProfileScreen} />
-    <Stack.Screen name="AdminPanel" component={AdminPanelScreen} options={{ headerShown: false }} />
     <Stack.Screen name="PaymentScreen" component={PaymentScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserOrders" component={UserOrdersScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="UserListScreen" component={UserListScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="UserDetailsScreen" component={UserDetailsScreen} options={{ headerShown: false }} /> 
-    <Stack.Screen name="MarketListScreen" component={MarketListScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+    <Stack.Screen name="Settings" component={SettingsScreen}/>
     <Stack.Screen name="MarketApply" component={MarketApplyScreen} />
-    <Stack.Screen name="Settings" component={SettingsScreen}
-/>
-
+    <Stack.Screen name="AdminStack" component={AdminStack} options={{ headerShown: false }} />
+    <Stack.Screen name="MarketStack" component={MarketStack} options={{ headerShown: false }} />
+    <Stack.Screen name="Notifications" component={NotificationScreen} options={{ headerShown: false }} />
   </Stack.Navigator>
 );
 

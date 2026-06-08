@@ -227,5 +227,13 @@ export const createMarketWithUser = async (marketData) => {
   const response = await api.post('/admin/markets', marketData);
   return response.data;
 };
+export const fetchNotifications = async () => {
+  const res = await api.get('/notifications');
+  return res.data;
+};
+export const markNotificationAsRead = async (id) => {
+  const res = await api.patch(`/notifications/${id}/read`);
+  return res.data;
+};
 export { api };
 

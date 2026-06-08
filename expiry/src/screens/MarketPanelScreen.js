@@ -1,118 +1,95 @@
-import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchShopProfile } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { useState } from 'react';
 
 const MarketPanelScreen = ({ navigation }) => {
-
   const { logout } = useAuth();
   const [status, setStatus] = useState(null);
-const [shop, setShop] = useState(null);
-const [loading, setLoading] = useState(true);
+  const [shop, setShop] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const load = async () => {
-    try {
-      const data = await fetchShopProfile();
+  useEffect(() => {
+    const loadShopProfile = async () => {
+      try {
+        const data = await fetchShopProfile();
+        console.log("SHOP:", data.shop);
+        setStatus(data.status);
+        setShop(data.shop);
+      } catch (err) {
+        console.log(err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      console.log("SHOP:", data.shop);
-
-      setStatus(data.status);
-      setShop(data.shop);
-
-    } catch (err) {
-      console.log(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  load();
-}, []);
+    loadShopProfile();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
   };
 
   const menuItems = [
-    {
-      title: 'Ürünlerim',
-      icon: 'shopping-basket',
-      onPress: () => navigation.navigate('MarketProducts'),
-      color: '#6200EE'
-    },
-    {
-      title: 'Kutu Yönetimi',
-      icon: 'inventory',
-      onPress: () => navigation.navigate('MarketPackages'),
-      color: '#009688'
-    },
-    {
-      title: 'Siparişlerim',
-      icon: 'receipt',
-      onPress: () => navigation.navigate('MarketOrders'),
-      color: '#FF9800'
-    },
-    {
-      title: 'Profilim',
-      icon: 'store',
-      onPress: () => navigation.navigate('MarketProfile'),
-      color: '#2196F3'
-    },
+    { title: 'Ürünlerim', icon: 'shopping-basket', screen: 'MarketProducts', color: '#6200EE' },
+    { title: 'Kutu Yönetimi', icon: 'inventory', screen: 'MarketPackages', color: '#009688' },
+    { title: 'Siparişlerim', icon: 'receipt', screen: 'MarketOrders', color: '#FF9800' },
+    { title: 'Profilim', icon: 'store', screen: 'MarketProfile', color: '#2196F3' }
   ];
 
-return (
-  <SafeAreaView style={styles.container}>
-
-    {loading && (
-      <View>
-        <Text>Yükleniyor...</Text>
-      </View>
-    )}
-
-    {!loading && status === "PENDING" && (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
-          Marketiniz henüz onaylanmadı
-        </Text>
-        <Text style={{ marginTop: 10, color: '#666' }}>
-          Admin onayı bekleniyor
-        </Text>
-      </View>
-    )}
-
-    {!loading && status === "ACTIVE" && (
-      <>
-        <View style={styles.header}>
-          <Text style={styles.title}>Market Yönetim Paneli</Text>
-          <Text style={styles.subtitle}>İşlemlerinizi seçiniz</Text>
+  // Yükleniyor durumu
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#6200EE" />
+          <Text style={styles.loadingText}>Yükleniyor...</Text>
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        <View style={styles.menuContainer}>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[styles.menuButton, { backgroundColor: item.color }]}
-              onPress={item.onPress}
-            >
-              <Icon name={item.icon} size={24} color="#FFF" />
-              <Text style={styles.menuButtonText}>{item.title}</Text>
-            </TouchableOpacity>
-          ))}
+  // Onay bekleniyor durumu
+  if (status === "PENDING") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Icon name="pending-actions" size={64} color="#FF9800" />
+          <Text style={styles.pendingTitle}>Marketiniz henüz onaylanmadı</Text>
+          <Text style={styles.pendingSubtitle}>Admin onayı bekleniyor</Text>
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Icon name="exit-to-app" size={20} color="#FFF" />
-          <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
-        </TouchableOpacity>
-      </>
-    )}
+  // Aktif market paneli
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Market Yönetim Paneli</Text>
+        <Text style={styles.subtitle}>İşlemlerinizi seçiniz</Text>
+      </View>
 
-  </SafeAreaView>
-);
+      <View style={styles.menuContainer}>
+        {menuItems.map((item, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[styles.menuButton, { backgroundColor: item.color }]}
+            onPress={() => navigation.navigate(item.screen)}
+          >
+            <Icon name={item.icon} size={28} color="#FFF" />
+            <Text style={styles.menuButtonText}>{item.title}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Icon name="logout" size={20} color="#FFF" />
+        <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
@@ -121,12 +98,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     padding: 20,
   },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     marginBottom: 30,
     alignItems: 'center',
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
@@ -155,12 +137,9 @@ const styles = StyleSheet.create({
   },
   menuButtonText: {
     color: '#FFF',
-    fontSize: 18,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
     marginTop: 10,
-  },
-  icon: {
-    marginBottom: 5,
   },
   logoutButton: {
     flexDirection: 'row',
@@ -178,9 +157,27 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
     marginLeft: 10,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  pendingTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  pendingSubtitle: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });
 

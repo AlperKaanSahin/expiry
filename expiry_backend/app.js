@@ -8,6 +8,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
 
+
 require('dotenv').config();
 
 const app = express();
@@ -21,6 +22,8 @@ app.use(express.json());
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/users/profile', require('./routes/userRoutes'));
+
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 app.use('/api/shops', require('./routes/shopRoutes'));
 app.use('/api/packages', require('./routes/packageRoutes'));

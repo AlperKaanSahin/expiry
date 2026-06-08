@@ -109,19 +109,3 @@ exports.updateShopStatus = async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 };
-exports.updateShopStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const shop = await adminService.updateShopStatus(id, status);
-
-    return res.json({
-      message: 'Status updated',
-      shop
-    });
-
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-};
