@@ -1,134 +1,168 @@
-const { Order, OrderPackage, Package, PackageUnit } = require('../models');
+const orderService = require('../services/orderService');
 
+/**
+ * CREATE ORDER
+ */
 async function createOrder(req, res) {
-  const { shopId, packages } = req.body;
-  const userId = req.user.id;
-
-  // totalPrice'ı paketlerin fiyatlarından hesapla
-  const totalPrice = packages.reduce((sum, pkg) => sum + (pkg.price * pkg.quantity), 0);
-
   try {
-    // 1. Her paket için stok kontrolü (satılmamış PackageUnit sayısı yeterli mi?)
-    for (const pkg of packages) {
-      const availableUnits = await PackageUnit.count({
-        where: { packageId: pkg.packageId, isSold: false }
-      });
-      if (availableUnits < pkg.quantity) {
-        return res.status(400).json({ error: 'Yeterli kutu yok' });
-      }
-    }
-
-    // 2. Siparişi oluştur
-    const order = await Order.create({ userId, shopId, totalPrice, status: 'pending' });
-
-    // 3. Sipariş-Paket ilişkilerini kaydet
-    for (const pkg of packages) {
-      await OrderPackage.create({
-        orderId: order.id,
-        packageId: pkg.packageId,
-        quantity: pkg.quantity,
-        price: pkg.price
-      });
-    }
-
+    const order = await orderService.createOrder(req.user.id, req.body);
     res.json(order);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 }
 
+/**
+ * SIMULATE PAYMENT → status = paid
+ */
 async function simulatePayment(req, res) {
-  const { orderId } = req.body;
   try {
-    await Order.update({ status: 'paid' }, { where: { id: orderId } });
-    const orderPackages = await OrderPackage.findAll({ where: { orderId } });
+    const result = await orderService.simulatePayment(req.body.orderId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
-    for (const opkg of orderPackages) {
-      // Satılmamış kutuları bul ve isSold: true yap
-      const units = await PackageUnit.findAll({
-        where: { packageId: opkg.packageId, isSold: false },
-        limit: opkg.quantity
-      });
-      for (const unit of units) {
-        unit.isSold = true;
-        await unit.save();
-      }
+/**
+ * STATUS CHANGE (GENERIC ESCROW FLOW)
+ * pending → paid → delivered → confirmed → released
+ */
+async function changeOrderStatus(req, res) {
+  try {
+    const orderId = req.params.id;
+    const { status } = req.body;
 
-      // Paketin kalan kutu sayısını güncelle
-      const remaining = await PackageUnit.count({
-        where: { packageId: opkg.packageId, isSold: false }
+    const order = await orderService.changeStatus(
+      orderId,
+      status,
+      req.user?.role || 'user'
+    );
+
+    return res.json(order);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
+/**
+ * LIST USER ORDERS
+ */
+async function listUserOrders(req, res) {
+  try {
+    const orders = await orderService.listUserOrders(req.params.userId);
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * LIST SHOP ORDERS
+ */
+async function listShopOrders(req, res) {
+  try {
+    const orders = await orderService.listShopOrders(req.params.shopId);
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+async function markDelivered(req, res) {
+  try {
+    const order = await orderService.changeStatus(
+      req.params.id,
+      'delivered',
+      'market'
+    );
+
+    res.json(order);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+async function confirmOrder(req, res) {
+  try {
+    const order = await orderService.changeStatus(
+      req.params.id,
+      'confirmed',
+      'user'
+    );
+
+    res.json(order);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+async function getShopOrders(req, res) {try {
+    const shop = await Shop.findOne({
+      where: { ownerId: req.user.id }
+    });
+
+    if (!shop) {
+      return res.status(404).json({
+        success: false,
+        message: "Shop not found"
       });
-      await Package.update(
-        { quantity: remaining },
-        { where: { id: opkg.packageId } }
-      );
     }
 
-    res.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-async function listUserOrders(req, res) {
-  const userId = req.params.userId;
-  try {
     const orders = await Order.findAll({
-      where: { userId },
-      include: [{ model: OrderPackage }]
+      where: { shopId: shop.id }
     });
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}
 
-async function listShopOrders(req, res) {
-  const shopId = req.params.shopId;
-  try {
-    const orders = await Order.findAll({
-      where: { shopId },
-      include: [{ model: OrderPackage }]
+    return res.status(200).json({
+      success: true,
+      data: orders
     });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }};
+async function getMyShopOrders(req, res) {
+  try {
+    console.log("USER:", req.user);
+
+    const shop = await orderService.getShopByOwner(req.user.id);
+
+    if (!shop) {
+      return res.status(404).json({
+        message: "No shop found for this user"
+      });
+    }
+
+    const orders = await orderService.listShopOrders(shop.id);
+
+    return res.json(orders);
+
+  } catch (err) {
+    console.log("GET SHOP ORDERS ERROR:", err);
+
+    return res.status(500).json({
+      error: err.message
+    });
+  }
+}
+async function getMyUserOrders(req, res) {
+  try {
+    const orders = await orderService.listUserOrders(req.user.id);
     res.json(orders);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}
-
-async function confirmReceivedByUser(req, res) {
-  try {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı' });
-    order.isReceivedByUser = true;
-    if (order.isReceivedByMarket) order.status = 'completed';
-    await order.save();
-    res.json(order);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}
-
-async function confirmReceivedByMarket(req, res) {
-  try {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı' });
-    order.isReceivedByMarket = true;
-    if (order.isReceivedByUser) order.status = 'completed';
-    await order.save();
-    res.json(order);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 }
 
 module.exports = {
   createOrder,
-  listShopOrders,
   simulatePayment,
+  changeOrderStatus,
   listUserOrders,
-  confirmReceivedByUser,
-  confirmReceivedByMarket
+  listShopOrders,
+  markDelivered,
+  confirmOrder,
+  getShopOrders,
+  getMyShopOrders,
+  getMyUserOrders
 };

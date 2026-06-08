@@ -3,71 +3,84 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'rea
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import{useState} from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+import { fetchNotifications } from '../services/api';
 
-
-const HomeScreen = ({ navigation }) =>{
+const HomeScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
 
-const handleLogout = async () => {
-  await logout();
-};
+    const loadUnread = async () => {
+    try {
+      const res = await fetchNotifications();
+      const data = res.data || [];
 
- const quickActions = [
-  {
-    title: 'Marketler',
-    icon: 'storefront',
-    screen: 'Shops',
-    color: '#009688',
-    roles: ['user', 'market', 'admin']
-  },
-  {
-    title: 'Siparişler',
-    icon: 'receipt',
-    screen: 'UserOrders',
-    color: '#FF9800',
-    roles: ['user', 'market', 'admin']
-  },
-  {
-    title: 'Profil',
-    icon: 'person',
-    screen: 'UserProfile',
-    color: '#6200EE',
-    roles: ['user', 'market', 'admin']
-  },
-  {
-    title: 'Ayarlar',
-    icon: 'settings',
-    screen: 'Settings',
-    color: '#2196F3',
-    roles: ['user', 'market', 'admin']
-  },
+      const unread = data.filter(n => !n.isRead).length;
+      setUnreadCount(unread);
 
-  // 🔥 SADECE MARKET
-  {
-    title: 'Marketim',
-    icon: 'store',
-    screen: 'MarketPanel',
-    color: '#4CAF50',
-    roles: ['market']
-  },
+    } catch (err) {
+      console.log(err);
+    }
+  };
 
-  // 🔥 SADECE ADMIN
-  {
-    title: 'Admin Panel',
-    icon: 'admin-panel-settings',
-    screen: 'AdminPanel',
-    color: '#F44336',
-    roles: ['admin']
-  }
-];
-const filteredActions = quickActions.filter(item =>
-  item.roles.includes(user?.role)
-);
+  // 👇 BURASI
+  useFocusEffect(
+    useCallback(() => {
+      loadUnread();
+    }, [])
+  );
+  const handleLogout = async () => {
+    await logout();
+  };
+
+
+
+  // Rol bazlı buton yapılandırması
+  const getRoleAction = () => {
+    if (user?.role === 'user') {
+      return { title: 'Market Ol', icon: 'store', screen: 'MarketApply', color: '#4CAF50' };
+    }
+    if (user?.role === 'market') {
+      return { title: 'Market Panel', icon: 'dashboard', screen: 'MarketStack', color: '#4CAF50' };
+    }
+    if (user?.role === 'admin') {
+      return { title: 'Admin Panel', icon: 'admin-panel-settings', screen: 'AdminStack', color: '#4CAF50' };
+    }
+    return null;
+  };
+
+  const quickActions = [
+    { title: 'Marketler', icon: 'storefront', screen: 'Shops', color: '#009688' },
+    { title: 'Siparişler', icon: 'receipt', screen: 'UserOrders', color: '#FF9800' },
+    { title: 'Profil', icon: 'person', screen: 'UserProfile', color: '#6200EE' }
+  ];
+
+  const roleAction = getRoleAction();
+  const allActions = roleAction ? [...quickActions, roleAction] : quickActions;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      {/* HEADER WITH NOTIFICATION */}
+      <View style={styles.headerWrapper}>
+        <View style={styles.headerLeft} />
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => navigation.navigate('Notifications')}
+          activeOpacity={0.7}
+        >
+          <Icon name="notifications-none" size={24} color="#333" />
+{unreadCount > 0 && (
+  <View style={styles.notificationBadge}>
+    <Text style={styles.badgeText}>{unreadCount}</Text>
+  </View>
+)}
+        </TouchableOpacity>
+      </View>
 
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* LOGO & WELCOME */}
         <View style={styles.header}>
           <Image
             source={require('../assets/label.png')}
@@ -78,8 +91,9 @@ const filteredActions = quickActions.filter(item =>
           <Text style={styles.subtitle}>Hızlı erişim menüsü</Text>
         </View>
 
+        {/* QUICK ACTIONS + ROL BUTONU */}
         <View style={styles.quickActionsContainer}>
-          {filteredActions.map((action, index) => (
+          {allActions.map((action, index) => (
             <TouchableOpacity
               key={index}
               style={[styles.actionCard, { backgroundColor: action.color }]}
@@ -93,7 +107,7 @@ const filteredActions = quickActions.filter(item =>
           ))}
         </View>
 
-        {/* ÇIKIŞ */}
+        {/* ÇIKIŞ BUTONU */}
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -102,7 +116,6 @@ const filteredActions = quickActions.filter(item =>
           <Icon name="logout" size={20} color="#FFF" />
           <Text style={styles.logoutText}>Çıkış Yap</Text>
         </TouchableOpacity>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -112,6 +125,48 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  headerWrapper: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: '#F5F5F5',
+  },
+  headerLeft: {
+    width: 40,
+  },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#F44336',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   container: {
     flexGrow: 1,
@@ -176,7 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,

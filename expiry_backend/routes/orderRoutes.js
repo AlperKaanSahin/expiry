@@ -3,12 +3,15 @@ const router = express.Router();
 const orderController = require('../controllers/orderController');
 const auth = require('../middlewares/auth');
 
-
 router.post('/', auth, orderController.createOrder);
+
 router.post('/simulate-payment', auth, orderController.simulatePayment);
-router.get('/shop/:shopId', orderController.listShopOrders);
-router.get('/user/:userId', auth, orderController.listUserOrders)
-router.post('/:id/confirm-user', auth, orderController.confirmReceivedByUser);
-router.post('/:id/confirm-market', auth, orderController.confirmReceivedByMarket);
+
+// TEK STATE ENDPOINT
+router.post('/:id/status', auth, orderController.changeOrderStatus);
+
+
+router.get('/user/me', auth, orderController.getMyUserOrders);
+router.get('/shop/me', auth, orderController.getMyShopOrders);
 
 module.exports = router;
