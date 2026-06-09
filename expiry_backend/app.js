@@ -6,10 +6,12 @@ const { sequelize } = require('./models');
 const marketProductRoutes = require('./routes/marketProductRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const auditRoutes = require('./routes/auditRoutes');
 
-
-
+require('./handlers/notification.handler');
+require('./handlers/audit.handler');
 require('dotenv').config();
+
 
 const app = express();
 
@@ -24,6 +26,8 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/users/profile', require('./routes/userRoutes'));
 
 app.use('/api/notifications', require('./routes/notificationRoutes'));
+
+app.use('/api/audit-logs', auditRoutes);
 
 app.use('/api/shops', require('./routes/shopRoutes'));
 app.use('/api/packages', require('./routes/packageRoutes'));

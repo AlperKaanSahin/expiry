@@ -98,8 +98,9 @@ exports.updateShopStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const shop = await adminService.updateShopStatus(id, status);
+    const shop = await adminService.updateShopStatus(id, status, req.user.id);
 
+    
     return res.json({
       message: "Status updated",
       shop

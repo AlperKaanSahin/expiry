@@ -2,7 +2,10 @@ const { User, Shop, Notification } = require('../models');
 const bcrypt = require('bcrypt');
 const auditService = require("./auditService");
 const audit = require("../utils/auditHelper");
-  const notificationService = require('../services/notificationService');
+const notificationService = require('../services/notificationService');
+const eventBus = require('../events/eventBus');
+const SHOP_EVENTS = require('../events/shop.events');
+const { canTransition } = require('../domain/shopState');
 
 // USERS
 exports.getAllUsers = async (page = 1, limit = 10) => {
@@ -33,10 +36,13 @@ exports.deleteUser = async (targetUserId, currentUserId) => {
   // 1. delete
   await user.destroy();
 
-  // 2. audit (1 satır!)
-  await audit.userDeleted({
+  // 2. AUDIT EVENT (BURASI)
+  eventBus.emit(AUDIT_EVENTS.USER_DELETED, {
     actorId: currentUserId,
-    user
+    user: {
+      id: user.id,
+      email: user.email
+    }
   });
 
   return true;
@@ -57,21 +63,21 @@ exports.updateUserRole = async (userId, role, currentUserId) => {
     throw new Error('User not found');
   }
 
-const oldRole = user.role;
+  const oldRole = user.role;
 
-user.role = role;
-await user.save();
+  user.role = role;
+  await user.save();
 
-await audit.roleChanged({
-  actorId: currentUserId,
-  user: {
-    id: user.id,
-    email: user.email,
-    role: user.role
-  },
-  oldRole,
-  newRole: role
-});
+  // 🔥 AUDIT EVENT (BURASI)
+  eventBus.emit(AUDIT_EVENTS.ROLE_CHANGED, {
+    actorId: currentUserId,
+    user: {
+      id: user.id,
+      email: user.email
+    },
+    oldRole,
+    newRole: role
+  });
 
   return user;
 };
@@ -87,9 +93,14 @@ exports.createShop = async ({ name, address, phone }, currentUserId) => {
 
   const shop = await Shop.create({ name, address, phone });
 
-  await audit.shopCreated({
+  // 🔥 AUDIT EVENT
+  eventBus.emit(AUDIT_EVENTS.SHOP_CREATED, {
     actorId: currentUserId,
-    shop
+    shop: {
+      id: shop.id,
+      name: shop.name,
+      address: shop.address
+    }
   });
 
   return shop;
@@ -110,11 +121,17 @@ exports.updateShop = async (id, data, currentUserId) => {
 
   await shop.save();
 
-  // 3. audit
-  await audit.shopUpdated({
+  // 🔥 AUDIT EVENT
+  eventBus.emit(AUDIT_EVENTS.SHOP_UPDATED, {
     actorId: currentUserId,
+    shop: {
+      id: shop.id,
+      name: shop.name,
+      address: shop.address,
+      phone: shop.phone
+    },
     oldShop,
-    newShop: shop
+    newShop: shop.dataValues
   });
 
   return shop;
@@ -124,78 +141,108 @@ exports.deleteShop = async (id, currentUserId) => {
   const shop = await Shop.findByPk(id);
   if (!shop) return null;
 
-  // 1. audit BEFORE delete (data lazım olduğu için)
   const ownerId = shop.ownerId;
 
-  // 2. delete user + shop
+  // 🔥 SNAPSHOT BEFORE DELETE
+  const shopSnapshot = {
+    id: shop.id,
+    name: shop.name,
+    address: shop.address,
+    ownerId: shop.ownerId
+  };
+
+  // 🔥 DELETE OPERATIONS
   await User.destroy({ where: { id: ownerId } });
   await Shop.destroy({ where: { id } });
 
-  // 3. audit AFTER delete
-  await audit.shopDeleted({
+  // 🔥 AUDIT EVENTS
+  eventBus.emit(AUDIT_EVENTS.SHOP_DELETED, {
     actorId: currentUserId,
-    shop
+    shop: shopSnapshot
   });
 
-  await audit.userDeleted({
+  eventBus.emit(AUDIT_EVENTS.USER_DELETED, {
     actorId: currentUserId,
     user: {
-      id: ownerId,
-      email: null // çünkü user silindi
-    }
+      id: ownerId
+    },
+    reason: 'Shop deleted by admin'
   });
 
   return true;
 };
 
-exports.updateShopStatus = async (id, status) => {
-
-  const allowed = ['pending', 'active', 'rejected'];
-  if (!allowed.includes(status)) {
-    throw new Error('Invalid status');
-  }
+exports.updateShopStatus = async (id, status, currentUserId) => {
 
   const shop = await Shop.findByPk(id);
   if (!shop) throw new Error('Shop not found');
 
+  if (!status) throw new Error('Status is required');
+
+  const allowed = ['pending', 'active', 'rejected', 'inactive'];
+  if (!allowed.includes(status)) {
+    throw new Error('Invalid status');
+  }
+
+  const transitions = {
+    pending: ['active', 'rejected'],
+    active: ['inactive'],
+    inactive: ['active'],
+    rejected: []
+  };
+
+  if (!transitions[shop.status].includes(status)) {
+    throw new Error(`Invalid transition: ${shop.status} → ${status}`);
+  }
+
+  // 🔥 SNAPSHOT (IMPORTANT)
+  const fromStatus = shop.status;
+
+  // 🔥 UPDATE SHOP
   shop.status = status;
   await shop.save();
 
-  // 🔥 USER ROLE SYNC
+  // 🔥 USER SYNC
   const user = await User.findByPk(shop.ownerId);
 
+  let previousRole = null;
+  let newRole = null;
+
   if (user) {
-    if (status === 'active') {
+    previousRole = user.role;
+
+    if (status === 'active' || status === 'inactive') {
       user.role = 'market';
-    } else {
+    }
+
+    if (status === 'rejected') {
       user.role = 'user';
     }
 
+    newRole = user.role;
     await user.save();
   }
 
-  // 🔔 NOTIFICATION (BURASI EKLENİYOR)
+  // 🔥 DOMAIN EVENT (CLEAN VERSION)
+  eventBus.emit(SHOP_EVENTS.STATUS_CHANGED, {
+    actorId: currentUserId,
 
+    shop: {
+      id: shop.id,
+      name: shop.name
+    },
 
-  if (status === 'active') {
-    await notificationService.createNotification({
-      userId: shop.ownerId,
-      title: 'Market Başvurusu Onaylandı',
-      message: 'Market başvurunuz onaylandı. Artık market paneline erişebilirsiniz.',
-      type: 'SHOP_APPROVED',
-      targetId: shop.id
-    });
-  }
+    status: {
+      from: fromStatus,
+      to: status
+    },
 
-  if (status === 'rejected') {
-    await notificationService.createNotification({
-      userId: shop.ownerId,
-      title: 'Market Başvurusu Reddedildi',
-      message: 'Market başvurunuz reddedildi.',
-      type: 'SHOP_REJECTED',
-      targetId: shop.id
-    });
-  }
+    user: user ? {
+      id: user.id,
+      fromRole: previousRole,
+      toRole: newRole
+    } : null
+  });
 
   return shop;
 };
