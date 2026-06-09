@@ -21,7 +21,7 @@ module.exports = {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-// userController.js örneği
+
       const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
       return res.json({ user, token });
     } catch (error) {

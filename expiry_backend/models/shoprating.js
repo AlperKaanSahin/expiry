@@ -2,7 +2,8 @@ module.exports = (sequelize, DataTypes) => {
   const ShopRating = sequelize.define('ShopRating', {
     shopId: { type: DataTypes.INTEGER, allowNull: false },
     userId: { type: DataTypes.INTEGER, allowNull: false },
-    rating: { type: DataTypes.INTEGER, allowNull: false }
+    rating: { type: DataTypes.INTEGER, allowNull: false },
+    orderId: { type: DataTypes.INTEGER,allowNull: false}
   }, {
     tableName: 'shopratings',
     timestamps: true

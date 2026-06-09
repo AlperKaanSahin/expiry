@@ -30,7 +30,7 @@ export default function AdminPanelScreen({ navigation }) {
     {
       title: 'Raporlar',
       icon: 'analytics',
-      screen: 'ReportsScreen',
+      screen: 'AuditLogsScreen',
       color: '#FF5252'
     },
     {
