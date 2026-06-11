@@ -9,7 +9,6 @@ class AuditService {
     description,
     metadata = null
   }) {
-    // 👇 actor bilgisi snapshot al
     const actor = await User.findByPk(actorId, {
       attributes: ['id', 'firstName', 'lastName', 'email', 'role']
     });
@@ -20,16 +19,22 @@ class AuditService {
       entityType,
       entityId,
       description,
-
-      // 🔥 EN ÖNEMLİ EK
       actorSnapshot: actor ? {
         id: actor.id,
         name: `${actor.firstName} ${actor.lastName}`,
         email: actor.email,
         role: actor.role
       } : null,
-
       metadata
+    });
+  }
+
+  async getLogs(page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    return await AuditLog.findAndCountAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
     });
   }
 }

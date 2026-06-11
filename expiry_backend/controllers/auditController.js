@@ -1,16 +1,19 @@
-const { AuditLog, User } = require('../models');
+const auditService = require('../services/auditService');
 
 exports.getAuditLogs = async (req, res) => {
   try {
-    console.log("USER:", req.user);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
 
-    const logs = await AuditLog.findAll();
+    const result = await auditService.getLogs(page, limit);
 
-    console.log("LOGS COUNT:", logs.length);
-
-    return res.json(logs);
+    res.json({
+      total: result.count,
+      page,
+      limit,
+      logs: result.rows
+    });
   } catch (err) {
-    console.log("AUDIT ERROR:", err);
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
