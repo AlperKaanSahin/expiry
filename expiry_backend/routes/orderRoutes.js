@@ -2,13 +2,13 @@ const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
 const auth = require('../middlewares/auth');
+const validate = require('../middlewares/validate');
+const orderValidator = require('../validators/order.validator');
 
-
-router.post('/', auth, orderController.createOrder);
+router.get('/user/me', auth, orderController.getMyUserOrders);
+router.get('/shop/me', auth, orderController.getMyShopOrders);
+router.post('/', auth, orderValidator.createOrder, validate, orderController.createOrder);
 router.post('/simulate-payment', auth, orderController.simulatePayment);
-router.get('/shop/:shopId', orderController.listShopOrders);
-router.get('/user/:userId', auth, orderController.listUserOrders)
-router.post('/:id/confirm-user', auth, orderController.confirmReceivedByUser);
-router.post('/:id/confirm-market', auth, orderController.confirmReceivedByMarket);
+router.post('/:id/status', auth, orderValidator.changeOrderStatus, validate, orderController.changeOrderStatus);
 
 module.exports = router;

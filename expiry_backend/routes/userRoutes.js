@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 const auth = require('../middlewares/auth');
-const { listUserOrders } = require('../controllers/orderController');
+const validate = require('../middlewares/validate');
+const userValidator = require('../validators/user.validator');
 
-router.post('/register', userController.register);
-router.post('/login', userController.login);
-router.get('/profile', require('../middlewares/auth'), userController.getProfile);
-router.get('/orders', require('../middlewares/auth'), listUserOrders);
+router.post('/register', userValidator.register, validate, userController.register);
+router.post('/login', userValidator.login, validate, userController.login);
+router.get('/profile', auth, userController.getProfile);
+router.put('/change-password', auth, userController.changePassword);
 
 module.exports = router;

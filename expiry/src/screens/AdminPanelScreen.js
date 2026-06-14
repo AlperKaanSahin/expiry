@@ -16,9 +16,9 @@ export default function AdminPanelScreen({ navigation }) {
       color: '#6200EE'
     },
     {
-      title: 'Market Yönetimi',
+      title: 'Shop Yönetimi',
       icon: 'store',
-      screen: 'MarketListScreen',
+      screen: 'ShopListScreen',
       color: '#03DAC6'
     },
     {
@@ -30,7 +30,7 @@ export default function AdminPanelScreen({ navigation }) {
     {
       title: 'Raporlar',
       icon: 'analytics',
-      screen: 'ReportsScreen',
+      screen: 'AuditLogsScreen',
       color: '#FF5252'
     },
     {

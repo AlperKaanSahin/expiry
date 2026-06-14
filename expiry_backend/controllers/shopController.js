@@ -1,119 +1,72 @@
-const { User, Shop, Package } = require('../models');
-const { PackageProduct, ShopProduct } = require('../models');
-const { ShopRating } = require('../models');
+const shopService = require('../services/shopService');
 
-
-async function getMarketProfile(req, res) {
+async function getMyShop(req, res) {
   try {
-    const shop = await Shop.findOne({ where: { ownerId: req.user.id } });
-    if (!shop) return res.status(404).json({ error: 'Market bulunamadı' });
-    res.json(shop);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const shop = await shopService.getMyShop(req.user.id);
+
+    if (!shop) {
+      return res.status(404).json({ error: 'Market bulunamadı' });
+    }
+
+    const status = shop.status === 'pending' ? 'PENDING' : 'ACTIVE';
+    res.json({ status, shop });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 }
-module.exports = {
 
-  async list(req, res) {
-    try {
-      const shops = await Shop.findAll({
-        attributes: [
-          'id',
-          'name',
-          'address',
-          'phone',
-          'ratingAverage',
-          'ratingCount'
-        ]
-      });
-      return res.json(shops);
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
-    }
-  },
-  async getShopWithPackages(req, res) {
-    try {
-      const shop = await Shop.findOne({
-        where: { id: req.params.id },
-        include: [{
-          model: Package,
-          include: [{
-            model: PackageProduct,
-            include: [{ model: ShopProduct }]
-          }]
-        }]
-      });
-      if (!shop) return res.status(404).json({ error: 'Market bulunamadı' });
+async function list(req, res) {
+  try {
+    const shops = await shopService.listActiveShops();
+    res.json(shops);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
-      // Paketlerin products dizisini oluştur
-      const shopJson = shop.toJSON();
-      shopJson.Packages = shopJson.Packages.map(pkg => ({
-        ...pkg,
-        products: pkg.PackageProducts.map(pp => ({
-          name: pp.ShopProduct.name,
-          price: pp.ShopProduct.price,
-          quantity: pp.quantity,
-          imageUrl: pp.ShopProduct.imageUrl,
-          expiryDate: pp.ShopProduct.expiryDate
-        }))
-      }));
+async function getShopWithPackages(req, res) {
+  try {
+    const shop = await shopService.getShopWithPackages(req.params.id);
+    if (!shop) return res.status(404).json({ error: 'Shop not found' });
+    res.json(shop);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
-      return res.json(shopJson);
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
-    }
-  },
-  async rateShop(req, res) {
+async function rateShop(req, res) {
+  try {
+    const result = await shopService.rateShop(req.user.id, req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
 
-    const { shopId, rating } = req.body;
-    const userId = req.user?.id || 1;
+async function canRateShop(req, res) {
+  try {
+    const result = await shopService.canRateShop(req.user.id, req.params.shopId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
-    if (!shopId || !rating || !userId) {
-      return res.status(400).json({ error: 'Eksik veri' });
-    }
+async function applyShop(req, res) {
+  try {
+    const shop = await shopService.applyShop(req.user.id, req.body);
+    res.json({ message: 'Başvuru alındı', shop });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+async function updateShopProfile(req, res) {
+  try {
+    const shop = await shopService.updateShopProfile(req.user.id, req.body);
+    res.json({ message: 'Profil güncellendi', shop });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
 
-    try {
-      // Her puan için yeni kayıt ekle
-      console.log('rateShop gelen shopId:', shopId);
-      await ShopRating.create({ shopId, userId, rating });
-
-      // Ortalama puanı hesapla
-      const ratings = await ShopRating.findAll({ where: { shopId } });
-      const ratingCount = ratings.length;
-      const ratingAverage = ratingCount > 0
-        ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratingCount
-        : 0;
-
-      await Shop.update({ ratingAverage, ratingCount }, { where: { id: shopId } });
-      const [affectedRows] = await Shop.update({ ratingAverage, ratingCount }, { where: { id: shopId } });
-      console.log('Güncellenen satır sayısı:', affectedRows);
-
-      res.json({ ratingAverage, ratingCount });
-    } catch (err) {
-      console.error('rateShop error:', err);
-      res.status(500).json({ error: 'Something went wrong!' });
-    }
-  },
-  async canRateShop(req, res) {
-    try {
-      const { shopId } = req.params;
-      const userId = req.user.id;
-
-      // Kullanıcının bu marketten başarılı (ör: 'paid') siparişi var mı kontrol et
-      const order = await Order.findOne({
-        where: {
-          shopId,
-          userId,
-          status: 'paid' // Siparişin başarılı/ödenmiş olduğunu belirten status
-        }
-      });
-
-      res.json({ canRate: !!order });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  },
-  getMarketProfile
-
-
-};
+module.exports = { list, getShopWithPackages, rateShop, canRateShop, applyShop, getMyShop, updateShopProfile };

@@ -1,5 +1,6 @@
 'use strict';
 const { Model } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
   class Order extends Model {
     static associate(models) {
@@ -8,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       Order.hasMany(models.OrderPackage, { foreignKey: 'orderId' });
     }
   }
+
   Order.init({
     userId: {
       type: DataTypes.INTEGER,
@@ -21,26 +23,19 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.FLOAT,
       allowNull: false
     },
-    status: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      defaultValue: 'pending'
-    },
-    isReceivedByUser: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false
-    },
-    isReceivedByMarket: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false
-    }
+
+    // 🔥 ESCROW STATE
+status: {
+  type: DataTypes.STRING,
+  defaultValue: 'pending'
+}
+
   }, {
     sequelize,
     modelName: 'Order',
     tableName: 'orders',
     timestamps: true
   });
+
   return Order;
 };

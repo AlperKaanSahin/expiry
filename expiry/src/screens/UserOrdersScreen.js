@@ -1,116 +1,185 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Alert, SafeAreaView, StyleSheet, TouchableOpacity } from 'react-native';
-import { fetchUserOrders } from '../services/api';
+import {
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  TouchableOpacity,
+  StyleSheet
+} from 'react-native';
+
+import { api } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchMyOrders } from '../services/api';
 
 const UserOrdersScreen = () => {
-    const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    const loadOrders = async () => {
-        try {
-            setLoading(true);
-            const userId = await AsyncStorage.getItem('@userId');
-            const data = await fetchUserOrders(userId);
-            setOrders(data);
-        } catch (error) {
-            Alert.alert('Hata', error.toString());
-        } finally {
-            setLoading(false);
-        }
-    };
-    const activeOrders = orders.filter(order => order.status !== 'completed' && order.status.toLowerCase() !== 'teslim edildi');
-    const pastOrders = orders.filter(order => order.status === 'completed' || order.status.toLowerCase() === 'teslim edildi');
-    const handleUserConfirm = async (orderId) => {
-        try {
-            await confirmReceivedByUser(orderId);
-            loadOrders();
-            Alert.alert('Başarılı', 'Teslim alındı olarak işaretlendi');
-        } catch (error) {
-            Alert.alert('Hata', error.toString());
-        }
-    };
-    useEffect(() => {
-        loadOrders();
-    }, []);
+const loadOrders = async () => {
+  try {
+    setLoading(true);
 
-    const getStatusColor = (status) => {
-        switch (status.toLowerCase()) {
-            case 'hazırlanıyor': return '#FFA000';
-            case 'yolda': return '#2196F3';
-            case 'teslim edildi': return '#4CAF50';
-            case 'iptal edildi': return '#F44336';
-            default: return '#9E9E9E';
-        }
-    };
+    const data = await fetchMyOrders();
 
-    const renderOrderItem = ({ item }) => (
-        <View style={styles.orderItem}>
-            <View style={styles.orderHeader}>
-                <Text style={styles.orderId}>Sipariş #{item.id}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                    <Text style={styles.statusText}>{item.status}</Text>
-                </View>
-            </View>
+    setOrders(data || []);
 
-            <View style={styles.orderFooter}>
-                <Text style={styles.priceText}>{item.totalPrice} ₺</Text>
-                {/* Teslim Aldım butonu: Sadece Yolda ve kullanıcı henüz teslim almadıysa */}
-                {item.status.toLowerCase() === 'yolda' && !item.isReceivedByUser && (
-                    <TouchableOpacity
-                        style={[styles.button, styles.deliveredButton]}
-                        onPress={() => handleUserConfirm(item.id)}
-                    >
-                        <Text style={styles.buttonText}>Teslim Aldım</Text>
-                    </TouchableOpacity>
-                )}
-                {/* Market teslim ettiyse ama kullanıcı henüz teslim almadıysa bilgi gösterebilirsin */}
-                {item.status === 'Yolda' && item.isReceivedByMarket && !item.isReceivedByUser && (
-                    <Text style={{ color: '#2196F3', fontWeight: 'bold', marginLeft: 8 }}>
-                        Satıcı teslim etti, onayınızı bekliyor.
-                    </Text>
-                )}
-            </View>
-        </View>
-    );
-
-    return (
-        <SafeAreaView style={styles.container}>
-            <Text style={styles.title}>Aktif Siparişlerim</Text>
-            {loading ? (
-                <ActivityIndicator size="large" color="#6200EE" style={styles.loader} />
-            ) : activeOrders.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>Aktif siparişiniz yok</Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={activeOrders}
-                    keyExtractor={item => item.id.toString()}
-                    renderItem={renderOrderItem}
-                    contentContainerStyle={styles.listContent}
-                />
-            )}
-
-            <Text style={styles.title}>Geçmiş Siparişlerim</Text>
-            {pastOrders.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>Geçmiş siparişiniz yok</Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={pastOrders}
-                    keyExtractor={item => item.id.toString()}
-                    renderItem={renderOrderItem}
-                    contentContainerStyle={styles.listContent}
-                />
-            )}
-        </SafeAreaView>
-    );
+  } catch (error) {
+    Alert.alert('Hata', error.toString());
+  } finally {
+    setLoading(false);
+  }
 };
 
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+const safeOrders = Array.isArray(orders) ? orders : [];
+
+const activeOrders = safeOrders.filter(o =>
+  ['pending', 'paid', 'delivered'].includes(o.status)
+);
+
+const pastOrders = safeOrders.filter(o =>
+  ['confirmed', 'released'].includes(o.status)
+);
+
+  const handleUserConfirm = async (orderId) => {
+    try {
+      await api.post(`/orders/${orderId}/status`, {
+        status: 'confirmed'
+      });
+
+      Alert.alert('Başarılı', 'Sipariş onaylandı');
+      loadOrders();
+
+    } catch (error) {
+      Alert.alert('Hata', error.toString());
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return '#9E9E9E';
+      case 'paid': return '#FFA000';
+      case 'delivered': return '#2196F3';
+      case 'confirmed': return '#673AB7';
+      case 'released': return '#4CAF50';
+      default: return '#9E9E9E';
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'pending': return 'Sipariş Alındı';
+      case 'paid': return 'Ödeme Alındı';
+      case 'delivered': return 'Shop Teslim Etti';
+      case 'confirmed': return 'Onaylandı';
+      case 'released': return 'Tamamlandı';
+      default: return status;
+    }
+  };
+  
+
+  const renderOrderItem = ({ item }) => (
+    <View style={styles.orderItem}>
+
+      <View style={styles.orderHeader}>
+        <Text style={styles.orderId}>Sipariş #{item.id}</Text>
+
+        <View style={[
+          styles.statusBadge,
+          { backgroundColor: getStatusColor(item.status) }
+        ]}>
+          <Text style={styles.statusText}>
+            {getStatusText(item.status)}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.priceText}>
+        {item.totalPrice} ₺
+      </Text>
+
+      {/* USER ACTION */}
+      {item.status === 'delivered' && !item.isReceivedByUser && (
+        <TouchableOpacity
+          style={[styles.button, styles.deliveredButton]}
+          onPress={() => handleUserConfirm(item.id)}
+        >
+          <Text style={styles.buttonText}>Teslim Aldım</Text>
+        </TouchableOpacity>
+      )}
+
+    </View>
+  );
+  const [tab, setTab] = useState('active');
+const filteredOrders =
+  tab === 'active' ? activeOrders : pastOrders;
+
+return (
+  <SafeAreaView style={styles.container}>
+
+    {/* TAB BAR */}
+    <View style={styles.tabContainer}>
+      <TouchableOpacity onPress={() => setTab('active')}>
+        <Text style={[
+          styles.tab,
+          tab === 'active' && styles.activeTab
+        ]}>
+          Aktif
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => setTab('past')}>
+        <Text style={[
+          styles.tab,
+          tab === 'past' && styles.activeTab
+        ]}>
+          Geçmiş
+        </Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* LIST */}
+    {loading ? (
+      <ActivityIndicator />
+    ) : (
+      <FlatList
+        data={filteredOrders}
+        keyExtractor={i => i.id.toString()}
+        renderItem={renderOrderItem}
+        contentContainerStyle={styles.listContent}
+      />
+    )}
+
+  </SafeAreaView>
+);
+};
+
+
 const styles = StyleSheet.create({
-    container: {
+  tabContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-around',
+  marginBottom: 15,
+},
+tab: {
+  fontSize: 16,
+  color: '#888',
+  padding: 8,
+},
+
+activeTab: {
+  color: '#6200EE',
+  fontWeight: 'bold',
+  borderBottomWidth: 2,
+  borderBottomColor: '#6200EE',
+},  
+  container: {
         flex: 1,
         backgroundColor: '#F5F5F5',
         padding: 16,
