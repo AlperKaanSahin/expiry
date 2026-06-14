@@ -33,7 +33,7 @@ const ShopScreen = () => {
       const data = await fetchShops();
       setShops(data);
     } catch (error) {
-      console.error('Market yükleme hatası:', error);
+      console.error('Shop yükleme hatası:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -102,7 +102,7 @@ const ShopScreen = () => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Marketler</Text>
+        <Text style={styles.title}>Shoplar</Text>
         <TouchableOpacity style={styles.cartButton}>
           <Icon name="shopping-cart" size={24} color="#FF6B00" />
         </TouchableOpacity>
@@ -112,7 +112,7 @@ const ShopScreen = () => {
       <View style={styles.searchContainer}>
         <Icon name="search" size={20} color="#999" style={styles.searchIcon} />
         <TextInput
-          placeholder="Market ara..."
+          placeholder="Shop ara..."
           placeholderTextColor="#999"
           style={styles.searchInput}
           value={searchQuery}
@@ -155,7 +155,7 @@ const ShopScreen = () => {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Icon name="store" size={50} color="#888" />
-            <Text style={styles.emptyText}>Market bulunamadı</Text>
+            <Text style={styles.emptyText}>Shop bulunamadı</Text>
           </View>
         }
       />

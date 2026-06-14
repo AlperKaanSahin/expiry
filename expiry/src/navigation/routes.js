@@ -6,6 +6,6 @@ export const ROUTES = {
   HOME: 'Home',
 
   ADMIN_STACK: 'AdminStack',
-  MARKET_STACK: 'MarketStack',
+  SHOP_STACK: 'ShopStack',
 
 };

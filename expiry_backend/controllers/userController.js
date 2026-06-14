@@ -27,5 +27,15 @@ module.exports = {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  },
+  async changePassword(req, res) {
+  try {
+    const { password, newPassword } = req.body;
+    await userService.changePassword(req.user.id, password, newPassword);
+    res.json({ message: 'Şifre başarıyla değiştirildi' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
+}
+  
 };

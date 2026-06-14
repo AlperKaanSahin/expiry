@@ -18,7 +18,7 @@ exports.applyShop = async (userId, data) => {
       status: 'pending'
     });
 
-    await notifyAdmin(`${data.name} yeni market başvurusu yaptı`);
+    await notifyAdmin(`${data.name} yeni market başvurusu yaptı`, 'SHOP_APPLY');
     return shop;
   }
 
@@ -34,20 +34,20 @@ exports.applyShop = async (userId, data) => {
     existingShop.status = 'pending';
     await existingShop.save();
 
-    await notifyAdmin(`${existingShop.name} tekrar başvuru yaptı`);
+    await notifyAdmin(`${existingShop.name} tekrar başvuru yaptı`, 'SHOP_REAPPLY');
     return existingShop;
   }
 
   throw new Error('Geçersiz market durumu');
 };
 
-async function notifyAdmin(message) {
+async function notifyAdmin(message, type) {
   const admin = await User.findOne({ where: { role: 'admin' } });
   if (!admin) return;
 
   await createNotification({
     userId: admin.id,
-    type: 'SHOP_APPLICATION',
+    type,
     title: 'Market Başvurusu',
     message
   });
@@ -73,4 +73,16 @@ exports.getShopWithPackages = async (shopId) => {
       }]
     }]
   });
+};
+exports.updateShopProfile = async (userId, data) => {
+  const shop = await Shop.findOne({ where: { ownerId: userId } });
+  if (!shop) throw new Error('Market bulunamadı');
+
+  const { name, address, phone } = data;
+  shop.name = name || shop.name;
+  shop.address = address || shop.address;
+  shop.phone = phone || shop.phone;
+  await shop.save();
+
+  return shop;
 };

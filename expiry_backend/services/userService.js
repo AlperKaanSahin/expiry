@@ -40,3 +40,16 @@ exports.getProfile = async (userId) => {
   if (!user) throw new Error('User not found');
   return user;
 };
+exports.changePassword = async (userId, currentPassword, newPassword) => {
+  const user = await User.findByPk(userId);
+  if (!user) throw new Error('Kullanıcı bulunamadı');
+
+  if (!user.validPassword(currentPassword)) {
+    throw new Error('Mevcut şifre yanlış');
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  return true;
+};

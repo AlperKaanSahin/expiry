@@ -7,6 +7,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import{ fetchShopProfile } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
+import { CommonActions } from '@react-navigation/native';
+
 
 
 const NotificationScreen = ({ navigation }) => {
@@ -38,26 +40,26 @@ const getNavigationScreen = (item) => {
 
     case 'SHOP_APPLY':
       return {
-        stack: 'AdminStack',
-        screen: 'MarketListScreen'
+        stack: 'ShopStack',
+        screen: 'ShopListScreen'
       };
 
     case 'SHOP_REAPPLY':
       return {
-        stack: 'AdminStack',
-        screen: 'MarketListScreen'
+        stack: 'ShopStack',
+        screen: 'ShopListScreen'
       };
 
     case 'SHOP_APPROVED':
       return {
-        stack: 'MarketStack',
-        screen: 'MarketPanel'
+        stack: 'ShopStack',
+        screen: 'ShopPanel'
       };
 
     case 'SHOP_REJECTED':
       return {
-        stack: 'MarketStack',
-        screen: 'MarketApply'
+        stack: 'ShopStack',
+        screen: 'ShopApply'
       };
 
     default:
@@ -67,7 +69,7 @@ const getNavigationScreen = (item) => {
 
 const handlePress = async (item) => {
   try {
-    console.log("CLICKED NOTIFICATION");
+    console.log("NOTIFICATION TYPE:", item.type);
 
     // 1) mark as read
     await markNotificationAsRead(item.id);
@@ -79,42 +81,44 @@ const handlePress = async (item) => {
     );
 
     // 2) ADMIN FLOW
-    if (user.role === 'admin') {
-      switch (item.type) {
-        case 'SHOP_APPLY':
-        case 'SHOP_REAPPLY':
-          navigation.navigate('AdminStack', {
-            screen: 'MarketListScreen'
-          });
-          break;
-
-        default:
-          navigation.navigate('AdminStack');
-      }
-      return;
-    }
+if (user.role === 'admin') {
+  switch (item.type) {
+    case 'SHOP_APPLY':
+    case 'SHOP_REAPPLY':
+      navigation.dispatch(
+        CommonActions.navigate({
+          name: 'AdminStack',
+          params: { screen: 'ShopListScreen' },
+        })
+      );
+      break;
+    default:
+      navigation.navigate('AdminStack');
+  }
+  return;
+}
 
     // 3) USER FLOW
     const shop = await fetchShopProfile();
 
     switch (item.type) {
       case 'SHOP_APPROVED':
-        navigation.navigate('MarketStack', {
-          screen: 'MarketPanel'
+        navigation.navigate('ShopStack', {
+          screen: 'ShopPanel'
         });
         break;
 
       case 'SHOP_REJECTED':
-        navigation.navigate('MarketStack', {
-          screen: 'MarketApply'
+        navigation.navigate('ShopStack', {
+          screen: 'ShopApply'
         });
         break;
 
       default:
-        navigation.navigate('MarketStack', {
+        navigation.navigate('ShopStack', {
           screen: shop.status === 'active'
-            ? 'MarketPanel'
-            : 'MarketApply'
+            ? 'ShopPanel'
+            : 'ShopApply'
         });
     }
 

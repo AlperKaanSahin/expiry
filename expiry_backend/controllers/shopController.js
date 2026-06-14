@@ -60,5 +60,13 @@ async function applyShop(req, res) {
     res.status(400).json({ error: err.message });
   }
 }
+async function updateShopProfile(req, res) {
+  try {
+    const shop = await shopService.updateShopProfile(req.user.id, req.body);
+    res.json({ message: 'Profil güncellendi', shop });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
 
-module.exports = { list, getShopWithPackages, rateShop, canRateShop, applyShop, getMyShop };
+module.exports = { list, getShopWithPackages, rateShop, canRateShop, applyShop, getMyShop, updateShopProfile };
