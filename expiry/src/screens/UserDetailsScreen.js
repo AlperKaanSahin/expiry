@@ -9,37 +9,47 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  PanResponder
+  PanResponder,
+  StatusBar,
 } from 'react-native';
-import { getUserById, updateUserRole, deleteUser } from '../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { getUserById, updateUserRole, deleteUser } from '../services/api';
+import { COLORS } from '../theme/colors';
+
+const ROLES = [
+  { key: 'user',   label: 'Kullanıcı', desc: 'Standart kullanıcı yetkileri', icon: 'person' },
+  { key: 'market', label: 'Market',     desc: 'Market yönetim yetkileri',     icon: 'store' },
+  { key: 'admin',  label: 'Admin',      desc: 'Tüm yetkilere sahip',          icon: 'admin-panel-settings' },
+];
+
+const ROLE_CONFIG = {
+  admin:  { color: '#D97706', bg: '#FEF3C7' },
+  market: { color: '#2563EB', bg: '#EFF6FF' },
+  user:   { color: '#16A34A', bg: '#F0FDF4' },
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'Belirtilmemiş';
+  return new Date(dateString).toLocaleDateString('tr-TR', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+};
 
 const UserDetailsScreen = ({ route, navigation }) => {
   const { userId } = route.params;
-
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
   const [roleModal, setRoleModal] = useState(false);
 
-  // PanResponder ile sola kaydırma
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dy) < 50;
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx > 50) {
-          navigation.goBack();
-        }
-      },
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 20 && Math.abs(g.dy) < 50,
+      onPanResponderRelease: (_, g) => { if (g.dx > 50) navigation.goBack(); },
     })
   ).current;
-
-  useEffect(() => {
-    fetchUser();
-  }, []);
 
   const fetchUser = async () => {
     try {
@@ -54,12 +64,13 @@ const UserDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  useEffect(() => { fetchUser(); }, []);
+
   const handleRoleChange = async (newRole) => {
     try {
-      setRole(newRole);
       await updateUserRole(user.id, newRole);
+      setRole(newRole);
       setRoleModal(false);
-      Alert.alert('Başarılı', 'Rol başarıyla değiştirildi');
       fetchUser();
     } catch (err) {
       Alert.alert('Hata', err.message);
@@ -69,167 +80,144 @@ const UserDetailsScreen = ({ route, navigation }) => {
   const handleDelete = async () => {
     try {
       await deleteUser(user.id);
-      setModalVisible(false);
-      Alert.alert('Başarılı', 'Kullanıcı silindi');
+      setDeleteModal(false);
       navigation.goBack();
     } catch (err) {
       Alert.alert('Hata', err.message);
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Belirtilmemiş';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('tr-TR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getRoleColor = (role) => {
-    switch(role) {
-      case 'admin': return '#FF6B35';
-      case 'market': return '#4CAF50';
-      default: return '#6200EE';
-    }
-  };
-
-  const getRoleIcon = (role) => {
-    switch(role) {
-      case 'admin': return '👑';
-      case 'market': return '🏪';
-      default: return '👤';
-    }
-  };
-
   if (loading) {
     return (
-      <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" color="#6200EE" />
-        <Text style={styles.loadingText}>Kullanıcı bilgileri yükleniyor...</Text>
+      <SafeAreaView style={styles.safe}>
+        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
       </SafeAreaView>
     );
   }
 
   if (!user) {
     return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.errorText}>Kullanıcı bulunamadı</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>Geri Dön</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Icon name="error-outline" size={48} color={COLORS.border} />
+          <Text style={styles.emptyText}>Kullanıcı bulunamadı</Text>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.backBtnText}>Geri Dön</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
+  const roleConfig = ROLE_CONFIG[role] || { color: COLORS.primary, bg: COLORS.primaryLight };
+  const initials = `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase();
+
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          
-          {/* HEADER */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButtonHeader}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.backButtonHeaderText}>← Geri</Text>
-            </TouchableOpacity>
-            <View style={styles.headerContent}>
-              <View style={styles.avatarContainer}>
-                <Text style={styles.avatarText}>
-                  {user.email ? user.email[0].toUpperCase() : '?'}
-                </Text>
-              </View>
-              <Text style={styles.title}>{user.email}</Text>
-              <View style={[styles.roleBadge, { backgroundColor: getRoleColor(role) + '15' }]}>
-                <Text style={[styles.roleBadgeText, { color: getRoleColor(role) }]}>
-                  {getRoleIcon(role)} {role.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.placeholderIcon} />
-          </View>
+    <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-          {/* INFO CARD */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>📋 Kullanıcı Bilgileri</Text>
-            
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>ID:</Text>
-              <Text style={styles.infoValue}>#{user.id}</Text>
-            </View>
-            
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email:</Text>
-              <Text style={styles.infoValue}>{user.email}</Text>
-            </View>
-            
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Kayıt Tarihi:</Text>
-              <Text style={styles.infoValue}>{formatDate(user.createdAt)}</Text>
-            </View>
-          </View>
-
-          {/* ROLE ACTION CARD */}
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => setRoleModal(true)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.actionCardContent}>
-              <View>
-                <Text style={styles.actionLabel}>Kullanıcı Rolü</Text>
-                <View style={[styles.currentRoleBadge, { backgroundColor: getRoleColor(role) + '20' }]}>
-                  <Text style={[styles.currentRoleText, { color: getRoleColor(role) }]}>
-                    {getRoleIcon(role)} {role}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.changeText}>Değiştir →</Text>
-            </View>
+        {/* HEADER */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={22} color={COLORS.text} />
           </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.appName}>expiry</Text>
+            <View style={styles.dot} />
+          </View>
+          <View style={{ width: 36 }} />
+        </View>
 
-          {/* DELETE BUTTON */}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+
+          {/* AVATAR */}
+          <View style={styles.avatarSection}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials || '?'}</Text>
+            </View>
+            <Text style={styles.fullName}>{user.firstName} {user.lastName}</Text>
+            <Text style={styles.email}>{user.email}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: roleConfig.bg }]}>
+              <Text style={[styles.roleText, { color: roleConfig.color }]}>
+                {ROLES.find(r => r.key === role)?.label || role}
+              </Text>
+            </View>
+          </View>
+
+          {/* INFO */}
+          <View style={styles.section}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}>
+                <Icon name="tag" size={16} color={COLORS.primary} />
+              </View>
+              <View>
+                <Text style={styles.infoLabel}>Kullanıcı ID</Text>
+                <Text style={styles.infoValue}>#{user.id}</Text>
+              </View>
+            </View>
+            <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+              <View style={styles.infoIcon}>
+                <Icon name="calendar-today" size={16} color={COLORS.primary} />
+              </View>
+              <View>
+                <Text style={styles.infoLabel}>Kayıt Tarihi</Text>
+                <Text style={styles.infoValue}>{formatDate(user.createdAt)}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ROLE */}
           <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => setModalVisible(true)}
+            style={styles.roleCard}
+            onPress={() => setRoleModal(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.deleteText}>🗑️ Kullanıcıyı Sil</Text>
+            <View>
+              <Text style={styles.infoLabel}>Kullanıcı Rolü</Text>
+              <View style={[styles.roleBadgeSmall, { backgroundColor: roleConfig.bg }]}>
+                <Text style={[styles.roleTextSmall, { color: roleConfig.color }]}>
+                  {ROLES.find(r => r.key === role)?.label || role}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.changeRow}>
+              <Text style={styles.changeText}>Değiştir</Text>
+              <Icon name="chevron-right" size={18} color={COLORS.primary} />
+            </View>
           </TouchableOpacity>
 
+          {/* DELETE */}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => setDeleteModal(true)}
+            activeOpacity={0.8}
+          >
+            <Icon name="delete" size={18} color={COLORS.red} />
+            <Text style={styles.deleteText}>Kullanıcıyı Sil</Text>
+          </TouchableOpacity>
         </ScrollView>
 
         {/* DELETE MODAL */}
-        <Modal
-          transparent
-          visible={modalVisible}
-          animationType="fade"
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
+        <Modal transparent visible={deleteModal} animationType="fade" onRequestClose={() => setDeleteModal(false)}>
+          <Pressable style={styles.overlay} onPress={() => setDeleteModal(false)}>
             <View style={styles.modalBox}>
-              <Text style={styles.modalIcon}>⚠️</Text>
+              <View style={styles.warningIcon}>
+                <Icon name="warning" size={32} color="#D97706" />
+              </View>
               <Text style={styles.modalTitle}>Kullanıcıyı Sil</Text>
               <Text style={styles.modalMessage}>
                 Bu işlem geri alınamaz. "{user.email}" kullanıcısını silmek istediğinizden emin misiniz?
               </Text>
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={[styles.modalBtn, styles.cancelBtn]}
-                  onPress={() => setModalVisible(false)}
+                  style={styles.cancelBtn}
+                  onPress={() => setDeleteModal(false)}
                 >
                   <Text style={styles.cancelBtnText}>İptal</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.confirmDeleteBtn]}
-                  onPress={handleDelete}
-                >
-                  <Text style={styles.confirmDeleteText}>Sil</Text>
+                <TouchableOpacity style={styles.confirmBtn} onPress={handleDelete}>
+                  <Text style={styles.confirmBtnText}>Sil</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -237,70 +225,45 @@ const UserDetailsScreen = ({ route, navigation }) => {
         </Modal>
 
         {/* ROLE MODAL */}
-        <Modal
-          visible={roleModal}
-          animationType="slide"
-          transparent={false}
-          onRequestClose={() => setRoleModal(false)}
-        >
-          <SafeAreaView style={styles.fullModal}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity 
-                onPress={() => setRoleModal(false)} 
-                style={styles.backButton}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.backButtonText}>← Geri</Text>
+        <Modal visible={roleModal} animationType="slide" transparent={false} onRequestClose={() => setRoleModal(false)}>
+          <SafeAreaView style={styles.safe}>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setRoleModal(false)}>
+                <Icon name="arrow-back" size={22} color={COLORS.text} />
               </TouchableOpacity>
-              <View style={styles.titleContainer}>
-                <Text style={styles.modalHeaderTitle}>Rol Seçimi</Text>
+              <View style={styles.headerCenter}>
+                <Text style={styles.appName}>expiry</Text>
+                <View style={styles.dot} />
               </View>
-              <View style={styles.placeholder} />
+              <View style={{ width: 36 }} />
             </View>
-            
-            <ScrollView 
-              style={styles.roleList} 
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.roleListContent}
-            >
-              <TouchableOpacity
-                style={[styles.roleItem, role === 'user' && styles.selectedRole]}
-                onPress={() => handleRoleChange('user')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.roleIcon}>👤</Text>
-                <View style={styles.roleInfo}>
-                  <Text style={styles.roleName}>Kullanıcı</Text>
-                  <Text style={styles.roleDesc}>Standart kullanıcı yetkileri</Text>
-                </View>
-                {role === 'user' && <Text style={styles.checkMark}>✓</Text>}
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.roleItem, role === 'admin' && styles.selectedRole]}
-                onPress={() => handleRoleChange('admin')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.roleIcon}>👑</Text>
-                <View style={styles.roleInfo}>
-                  <Text style={styles.roleName}>Admin</Text>
-                  <Text style={styles.roleDesc}>Tüm yetkilere sahip</Text>
-                </View>
-                {role === 'admin' && <Text style={styles.checkMark}>✓</Text>}
-              </TouchableOpacity>
+            <View style={styles.roleModalHero}>
+              <Text style={styles.heroName}>Rol Seçimi</Text>
+            </View>
 
-              <TouchableOpacity
-                style={[styles.roleItem, role === 'market' && styles.selectedRole]}
-                onPress={() => handleRoleChange('market')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.roleIcon}>🏪</Text>
-                <View style={styles.roleInfo}>
-                  <Text style={styles.roleName}>Market</Text>
-                  <Text style={styles.roleDesc}>Market yönetim yetkileri</Text>
-                </View>
-                {role === 'market' && <Text style={styles.checkMark}>✓</Text>}
-              </TouchableOpacity>
+            <ScrollView contentContainerStyle={styles.roleList}>
+              {ROLES.map(r => {
+                const cfg = ROLE_CONFIG[r.key];
+                const selected = role === r.key;
+                return (
+                  <TouchableOpacity
+                    key={r.key}
+                    style={[styles.roleItem, selected && { borderColor: COLORS.primary, borderWidth: 1.5 }]}
+                    onPress={() => handleRoleChange(r.key)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.roleItemIcon, { backgroundColor: cfg.bg }]}>
+                      <Icon name={r.icon} size={22} color={cfg.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.roleName}>{r.label}</Text>
+                      <Text style={styles.roleDesc}>{r.desc}</Text>
+                    </View>
+                    {selected && <Icon name="check-circle" size={22} color={COLORS.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </SafeAreaView>
         </Modal>
@@ -310,330 +273,152 @@ const UserDetailsScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA'
-  },
-  safeArea: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA'
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#6C757D'
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#DC3545',
-    marginBottom: 16
-  },
-  backBtn: {
-    backgroundColor: '#6200EE',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8
-  },
-  backBtnText: {
-    color: '#FFF',
-    fontWeight: '600'
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFF',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
   },
-  backButtonHeader: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#F8F9FA',
-    zIndex: 10
-  },
-  backButtonHeaderText: {
-    fontSize: 14,
-    color: '#6200EE',
-    fontWeight: '600'
-  },
-  headerContent: {
-    flex: 1,
-    alignItems: 'center'
-  },
-  placeholderIcon: {
-    width: 60
-  },
-  avatarContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#6200EE',
+  backButton: {
+    width: 36, height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12
   },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FFF'
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  body: { paddingHorizontal: 20, paddingBottom: 40 },
+
+  avatarSection: { alignItems: 'center', marginBottom: 24 },
+  avatar: {
+    width: 72, height: 72,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 6
-  },
-  roleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16
-  },
-  roleBadgeText: {
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  card: {
-    backgroundColor: '#FFF',
-    margin: 16,
-    marginTop: 20,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 16
+  avatarText: { fontSize: 26, fontWeight: '800', color: COLORS.primary },
+  fullName: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 4 },
+  email: { fontSize: 13, color: COLORS.textMuted, marginBottom: 10 },
+  roleBadge: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20 },
+  roleText: { fontSize: 12, fontWeight: '700' },
+
+  section: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    marginBottom: 12,
   },
   infoRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0'
+    borderBottomColor: COLORS.border,
   },
-  infoLabel: {
-    width: 100,
-    fontSize: 14,
-    color: '#6C757D',
-    fontWeight: '500'
+  infoIcon: {
+    width: 36, height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  infoValue: {
-    flex: 1,
-    fontSize: 14,
-    color: '#212529'
-  },
-  actionCard: {
-    backgroundColor: '#FFF',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2
-  },
-  actionCardContent: {
+  infoLabel: { fontSize: 12, color: COLORS.textMuted, marginBottom: 2 },
+  infoValue: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+
+  roleCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  actionLabel: {
-    fontSize: 14,
-    color: '#6C757D',
-    marginBottom: 8
-  },
-  currentRoleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8
-  },
-  currentRoleText: {
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  changeText: {
-    fontSize: 14,
-    color: '#6200EE',
-    fontWeight: '600'
-  },
-  deleteBtn: {
-    backgroundColor: '#DC3545',
-    marginHorizontal: 16,
-    marginBottom: 30,
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
     padding: 16,
-    borderRadius: 12,
-    alignItems: 'center'
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 12,
   },
-  deleteText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700'
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  roleBadgeSmall: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8, marginTop: 4 },
+  roleTextSmall: { fontSize: 12, fontWeight: '700' },
+  changeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  changeText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
+
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center'
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: COLORS.redLight,
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
+  deleteText: { fontSize: 15, fontWeight: '600', color: COLORS.red },
+
+  // DELETE MODAL
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   modalBox: {
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.white,
     borderRadius: 20,
     padding: 24,
     width: '85%',
-    maxWidth: 340,
-    alignItems: 'center'
+    alignItems: 'center',
   },
-  modalIcon: {
-    fontSize: 48,
-    marginBottom: 16
+  warningIcon: {
+    width: 64, height: 64,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 12
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: '#6C757D',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%'
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center'
-  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  modalMessage: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalActions: { flexDirection: 'row', gap: 10, width: '100%' },
   cancelBtn: {
-    backgroundColor: '#F8F9FA'
-  },
-  cancelBtnText: {
-    color: '#6C757D',
-    fontWeight: '600'
-  },
-  confirmDeleteBtn: {
-    backgroundColor: '#DC3545'
-  },
-  confirmDeleteText: {
-    color: '#FFF',
-    fontWeight: '600'
-  },
-  fullModal: {
-    flex: 1,
-    backgroundColor: '#F8F9FA'
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.bg, borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF'
   },
-  backButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#F8F9FA',
-    zIndex: 10
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#6200EE',
-    fontWeight: '600'
-  },
-  titleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center'
-  },
-  placeholder: {
-    width: 60
-  },
-  roleList: {
-    flex: 1
-  },
-  roleListContent: {
-    padding: 20,
-    paddingBottom: 40
-  },
+  cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
+  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: COLORS.red, alignItems: 'center' },
+  confirmBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // ROLE MODAL
+  roleModalHero: { paddingHorizontal: 20, marginBottom: 16 },
+  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+  roleList: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
   roleItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1
-  },
-  selectedRole: {
-    backgroundColor: '#F3E5F5',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#6200EE'
+    borderColor: COLORS.border,
+    gap: 12,
   },
-  roleIcon: {
-    fontSize: 32,
-    marginRight: 12
-  },
-  roleInfo: {
-    flex: 1
-  },
-  roleName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 4
-  },
-  roleDesc: {
-    fontSize: 12,
-    color: '#6C757D'
-  },
-  checkMark: {
-    fontSize: 20,
-    color: '#6200EE',
-    fontWeight: 'bold'
-  }
+  roleItemIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  roleName: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
+  roleDesc: { fontSize: 12, color: COLORS.textMuted },
+
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 20 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
+  backBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  backBtnText: { color: COLORS.white, fontWeight: '600' },
 });
 
 export default UserDetailsScreen;

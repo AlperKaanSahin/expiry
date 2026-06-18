@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,169 +7,180 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Image,
   ActivityIndicator,
-  Alert,
-} from "react-native";
+  StatusBar,
+  ScrollView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import Toast from 'react-native-toast-message';
+import { useAuth } from '../context/AuthContext';
+import { COLORS } from '../theme/colors';
 
-import { useAuth } from "../context/AuthContext";
-import Icon from "react-native-vector-icons/MaterialIcons";
-
-const LoginScreen = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+const LoginScreen = ({ navigation }) => {
+  const { login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [secureTextEntry, setSecureTextEntry] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
-const { login } = useAuth();
-
-const handleLogin = async () => {
-  try {
-    setLoading(true);
-    await login(email, password);
-  } catch (err) {
-    Alert.alert('Hata', err.toString());
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'Email ve şifre zorunlu' });
+      return;
+    }
+    try {
+      setLoading(true);
+      await login(email, password);
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Giriş Başarısız', text2: err.toString() });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <View style={styles.innerContainer}>
-        <Image
-          source={require("../assets/label.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.body}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* HERO */}
+          <View style={styles.hero}>
+            <Text style={styles.appName}>expiry</Text>
+            <View style={styles.dot} />
+            <Text style={styles.heroTitle}>Tekrar hoş geldin</Text>
+            <Text style={styles.heroSub}>Devam etmek için giriş yap</Text>
+          </View>
 
-        <Text style={styles.title}>Hoş Geldiniz</Text>
+          {/* FORM */}
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Email</Text>
+              <View style={styles.inputBox}>
+                <Icon name="email" size={18} color={COLORS.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="ornek@email.com"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                />
+              </View>
+            </View>
 
-        {/* EMAIL */}
-        <View style={styles.inputContainer}>
-          <Icon
-            name="email"
-            size={20}
-            color="#6200EE"
-            style={styles.inputIcon}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Email adresiniz"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Şifre</Text>
+              <View style={styles.inputBox}>
+                <Icon name="lock" size={18} color={COLORS.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Şifreniz"
+                  placeholderTextColor={COLORS.textMuted}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
+                  <Icon
+                    name={showPassword ? 'visibility' : 'visibility-off'}
+                    size={18}
+                    color={COLORS.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
 
-        {/* PASSWORD */}
-        <View style={styles.inputContainer}>
-          <Icon
-            name="lock"
-            size={20}
-            color="#6200EE"
-            style={styles.inputIcon}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Şifreniz"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
+          {/* SUBMIT */}
           <TouchableOpacity
-            onPress={() => setSecureTextEntry(!secureTextEntry)}
+            style={styles.submitButton}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.8}
           >
-            <Icon
-              name={secureTextEntry ? "visibility-off" : "visibility"}
-              size={20}
-              color="#888"
-            />
+            {loading ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.submitText}>Giriş Yap</Text>
+            )}
           </TouchableOpacity>
-        </View>
 
-        {/* BUTTON */}
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.loginButtonText}>Giriş Yap</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          {/* REGISTER LINK */}
+          <TouchableOpacity
+            style={styles.registerLink}
+            onPress={() => navigation.navigate('Register')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.registerText}>
+              Hesabın yok mu?{' '}
+              <Text style={styles.registerTextBold}>Kayıt Ol</Text>
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFF",
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
+  body: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    justifyContent: 'center',
   },
 
-  innerContainer: {
-    flex: 1,
-    padding: 30,
-    justifyContent: "center",
-  },
+  hero: { alignItems: 'center', marginBottom: 40 },
+  appName: { fontSize: 36, fontWeight: '800', color: COLORS.primary, letterSpacing: -1 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary, marginTop: 4, marginBottom: 24 },
+  heroTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  heroSub: { fontSize: 14, color: COLORS.textMuted },
 
-  logo: {
-    width: 150,
-    height: 150,
-    alignSelf: "center",
-    marginBottom: 30,
+  form: { gap: 16, marginBottom: 24 },
+  inputGroup: { gap: 6 },
+  inputLabel: { fontSize: 13, fontWeight: '500', color: COLORS.textMuted },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
   },
+  input: { flex: 1, fontSize: 15, color: COLORS.text },
 
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 30,
-    textAlign: "center",
+  submitButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 15,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 16,
   },
+  submitText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
 
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    height: 50,
-  },
-
-  inputIcon: {
-    marginRight: 10,
-  },
-
-  input: {
-    flex: 1,
-    height: "100%",
-    color: "#333",
-  },
-
-  loginButton: {
-    backgroundColor: "#6200EE",
-    borderRadius: 10,
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 20,
-    elevation: 3,
-  },
-
-  loginButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  registerLink: { alignItems: 'center', paddingVertical: 8 },
+  registerText: { fontSize: 14, color: COLORS.textMuted },
+  registerTextBold: { fontWeight: '700', color: COLORS.primary },
 });
+
 export default LoginScreen;

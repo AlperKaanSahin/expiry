@@ -6,6 +6,7 @@ import ShopPackagesScreen from '../screens/ShopPackagesScreen';
 import ShopOrdersScreen from '../screens/ShopOrdersScreen';
 import ShopProfileScreen from '../screens/ShopProfileScreen';
 import ShopApplyScreen from '../screens/ShopApplyScreen';
+import RateShopScreen from '../screens/RateShopScreen';
 
 const Stack = createStackNavigator();
 
@@ -18,6 +19,7 @@ export default function ShopStack() {
       <Stack.Screen name="ShopOrders" component={ShopOrdersScreen} />
       <Stack.Screen name="ShopProfile" component={ShopProfileScreen} />
       <Stack.Screen name="ShopApply" component={ShopApplyScreen} />
+      <Stack.Screen name="RateShopScreen"component={RateShopScreen}options={{ headerShown: false }}/>
     </Stack.Navigator>
   );
 }

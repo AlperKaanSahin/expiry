@@ -1,6 +1,8 @@
 const {
   Order, OrderPackage, Package, PackageUnit, Shop, sequelize
 } = require('../models');
+const eventBus = require('../events/eventBus');
+const ORDER_EVENTS = require('../events/order.events');
 
 const transitions = {
   pending: ['paid'],
@@ -17,10 +19,48 @@ async function runSideEffects(order, status, transaction) {
   switch (status) {
     case 'paid':
       await reserveStock(order, transaction);
+      
+      // Teslimat saatini çek
+      const orderPackages = await OrderPackage.findAll({
+        where: { orderId: order.id },
+        include: [{ model: Package, attributes: ['deliveryStart', 'deliveryEnd', 'name'] }],
+        transaction
+      });
+
+      const firstPackage = orderPackages[0]?.Package;
+      const deliveryStart = firstPackage?.deliveryStart;
+      const deliveryEnd = firstPackage?.deliveryEnd;
+
+      eventBus.emit(ORDER_EVENTS.PAID, {
+        orderId: order.id,
+        userId: order.userId,
+        shopId: order.shopId,
+        deliveryStart,
+        deliveryEnd,
+      });
       break;
+
     case 'delivered':
+      eventBus.emit(ORDER_EVENTS.DELIVERED, {
+        orderId: order.id,
+        userId: order.userId,
+        shopId: order.shopId,
+      });
+      break;
+
     case 'confirmed':
+      eventBus.emit(ORDER_EVENTS.CONFIRMED, {
+        orderId: order.id,
+        userId: order.userId,
+        shopId: order.shopId,
+      });
+      break;
+
     case 'released':
+      eventBus.emit(ORDER_EVENTS.RELEASED, {
+        orderId: order.id,
+        shopId: order.shopId,
+      });
       break;
   }
 }

@@ -5,7 +5,7 @@ exports.createPackage = [
     .notEmpty()
     .withMessage('Paket adı zorunlu'),
   body('price')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
     .withMessage('Geçerli bir fiyat giriniz'),
   body('quantity')
@@ -34,7 +34,7 @@ exports.updatePackage = [
     .notEmpty()
     .withMessage('Paket adı boş olamaz'),
   body('price')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0 })
     .withMessage('Geçerli bir fiyat giriniz'),
   body('quantity')

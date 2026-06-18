@@ -1,4 +1,4 @@
-const { body } = require('express-validator');
+const { body,param } = require('express-validator');
 
 exports.applyShop = [
   body('name')
@@ -19,6 +19,9 @@ exports.rateShop = [
   body('rating')
     .isFloat({ min: 1, max: 5 })
     .withMessage('Puan 1 ile 5 arasında olmalı'),
+  body('orderId')
+    .isInt({ min: 1 })
+    .withMessage('Geçerli bir sipariş ID giriniz'),
 ];
 
 exports.updateShopStatus = [

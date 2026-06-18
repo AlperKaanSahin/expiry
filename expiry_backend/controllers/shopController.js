@@ -36,7 +36,12 @@ async function getShopWithPackages(req, res) {
 
 async function rateShop(req, res) {
   try {
-    const result = await shopService.rateShop(req.user.id, req.body);
+    const result = await shopService.rateShop(
+      req.user.id,
+      req.body.shopId,
+      req.body.rating,
+      req.body.orderId
+    );
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });

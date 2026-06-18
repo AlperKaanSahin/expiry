@@ -218,7 +218,7 @@ const ShopProductsScreen = () => {
                   keyboardType="numeric"
                   placeholder="0.00"
                   placeholderTextColor={COLORS.textMuted}
-                  returnKeyType="done"
+                  returnKeyType="next"
                   onSubmitEditing={Keyboard.dismiss}
                 />
               </View>

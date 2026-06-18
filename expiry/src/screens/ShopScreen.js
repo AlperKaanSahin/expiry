@@ -1,24 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
-  Dimensions,
   TextInput,
   RefreshControl,
-  SafeAreaView,
-  ScrollView
+  StatusBar,
+  ScrollView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { fetchShops } from '../services/api';
-import { useFocusEffect } from '@react-navigation/native';
+import { COLORS } from '../theme/colors';
 
-const { width } = Dimensions.get('window');
 
 const ShopScreen = () => {
   const navigation = useNavigation();
@@ -27,13 +25,14 @@ const ShopScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loadShops = async () => {
+
+  const loadShops = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
     try {
-      setRefreshing(true);
       const data = await fetchShops();
       setShops(data);
-    } catch (error) {
-      console.error('Shop yükleme hatası:', error);
+    } catch {
+      //
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -41,271 +40,190 @@ const ShopScreen = () => {
   };
 
   useFocusEffect(
-    React.useCallback(() => {
-      loadShops();
-    }, [])
+    useCallback(() => { loadShops(); }, [])
   );
 
   const filteredShops = shops.filter(shop =>
     shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    shop.address.toLowerCase().includes(searchQuery.toLowerCase())
+    shop.address?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleShopSelect = (shop) => {
-    navigation.navigate('ShopDetail', {
-      shopId: shop.id,
-      shopName: shop.name
-    });
-  };
-
-  const renderShopCard = ({ item }) => (
+  const renderShop = ({ item }) => (
     <TouchableOpacity
-      style={styles.shopCard}
-      onPress={() => handleShopSelect(item)}
-      activeOpacity={0.9}
+      style={styles.card}
+      onPress={() => navigation.navigate('ShopDetail', { shopId: item.id, shopName: item.name })}
+      activeOpacity={0.8}
     >
-      <Image
-        source={item.imageUrl ? { uri: item.imageUrl } : require('../assets/placeholder_shops.jpg')}
-        style={styles.shopImage}
-        resizeMode="cover"
-      />
-      <View style={styles.shopInfo}>
-        <Text style={styles.shopName}>{item.name}</Text>
-
-        <View style={styles.shopMetaRow}>
-          <View style={styles.ratingContainer}>
-            <Icon name="star" size={16} color="#FFD700" />
-            <Text style={styles.ratingText}>
-              {item.ratingAverage ? item.ratingAverage.toFixed(1) : '4.5'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.shopMeta}>
-          <Icon name="location-on" size={16} color="#666" />
-          <Text style={styles.shopAddress} numberOfLines={1}>{item.address}</Text>
+      <View style={styles.cardLeft}>
+        <View style={styles.shopInitial}>
+          <Text style={styles.shopInitialText}>
+            {item.name.charAt(0).toUpperCase()}
+          </Text>
         </View>
       </View>
-      <Icon name="chevron-right" size={24} color="#888" />
+
+      <View style={styles.cardBody}>
+        <Text style={styles.shopName}>{item.name}</Text>
+        <View style={styles.metaRow}>
+          <Icon name="location-on" size={13} color={COLORS.textMuted} />
+          <Text style={styles.shopAddress} numberOfLines={1}>{item.address}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Icon name="star" size={13} color="#F59E0B" />
+          <Text style={styles.ratingText}>
+            {item.ratingAverage && item.ratingAverage > 0
+              ? `${item.ratingAverage.toFixed(1)} (${item.ratingCount})`
+              : 'Yeni'}
+          </Text>
+        </View>
+      </View>
+
+      <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
     </TouchableOpacity>
   );
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B00" />
-      </View>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.title}>Shoplar</Text>
-        <TouchableOpacity style={styles.cartButton}>
-          <Icon name="shopping-cart" size={24} color="#FF6B00" />
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.dot} />
+        </View>
       </View>
 
-      {/* Arama Çubuğu */}
-      <View style={styles.searchContainer}>
-        <Icon name="search" size={20} color="#999" style={styles.searchIcon} />
+      {/* HERO */}
+      <View style={styles.hero}>
+        <Text style={styles.heroLabel}>Keşfet</Text>
+        <Text style={styles.heroName}>Marketler</Text>
+      </View>
+
+      {/* SEARCH */}
+      <View style={styles.searchBox}>
+        <Icon name="search" size={18} color={COLORS.textMuted} />
         <TextInput
-          placeholder="Shop ara..."
-          placeholderTextColor="#999"
           style={styles.searchInput}
+          placeholder="Market ara..."
+          placeholderTextColor={COLORS.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Icon name="close" size={20} color="#999" />
+            <Icon name="close" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Kategoriler */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoriesContainer}
-      >
-        {['Tümü', 'Süpermarket', 'Manav', 'Kasap', 'Şarküteri', 'Bakkal'].map((category, index) => (
-          <TouchableOpacity key={index} style={styles.categoryItem}>
-            <Text style={styles.categoryText}>{category}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
-      {/* Market Listesi */}
-      <FlatList
-        data={filteredShops}
-        renderItem={renderShopCard}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={loadShops}
-            colors={['#FF6B00']}
-            tintColor="#FF6B00"
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Icon name="store" size={50} color="#888" />
-            <Text style={styles.emptyText}>Shop bulunamadı</Text>
-          </View>
-        }
-      />
+
+      {/* LIST */}
+      {loading ? (
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+      ) : (
+        <FlatList
+          data={filteredShops}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderShop}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadShops(true)}
+              colors={[COLORS.primary]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Icon name="store" size={48} color={COLORS.border} />
+              <Text style={styles.emptyText}>Market bulunamadı</Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F8F8',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#FFF',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  cartButton: {
-    padding: 5,
-  },
-  searchContainer: {
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  hero: { paddingHorizontal: 20, marginBottom: 16 },
+  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
+  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+
+  // SEARCH
+  searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 8,
-    marginHorizontal: 15,
-    marginBottom: 10,
-    paddingHorizontal: 15,
-    height: 45,
-    elevation: 2,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  categoriesContainer: {
-    paddingHorizontal: 15,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
   },
-  categoryItem: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    marginRight: 10,
-    elevation: 1,
+  searchInput: { flex: 1, fontSize: 15, color: COLORS.text },
+
+  catItemActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
   },
-  categoryText: {
-    color: '#333',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  listContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  shopCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  shopImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  shopInfo: {
-    flex: 1,
-  },
-  shopName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 6,
-  },
-  shopMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  shopMeta: {
+  catText: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
+  catTextActive: { color: COLORS.primary },
+
+  loader: { marginTop: 40 },
+  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
+
+  // CARD
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
   },
-  shopAddress: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 6,
-    flex: 1,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF8E1',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  ratingText: {
-    fontSize: 14,
-    color: '#FF6B00',
-    marginLeft: 4,
-    fontWeight: '600',
-  },
-  deliveryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  deliveryText: {
-    fontSize: 13,
-    color: '#666',
-    marginLeft: 6,
-  },
-  emptyContainer: {
-    flex: 1,
+  cardLeft: {},
+  shopInitial: {
+    width: 52, height: 52,
+    borderRadius: 14,
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 50,
   },
-  emptyText: {
-    fontSize: 18,
-    color: '#888',
-    marginTop: 16,
+  shopInitialText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.primary,
   },
+  cardBody: { flex: 1, gap: 4 },
+  shopName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  shopAddress: { fontSize: 12, color: COLORS.textMuted, flex: 1 },
+  ratingText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
+
+  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
 });
 
 export default ShopScreen;
