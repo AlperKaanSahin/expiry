@@ -1,12 +1,7 @@
 const { Package, Shop, PackageProduct, ShopProduct, PackageUnit, sequelize } = require('../models');
 
 const getShopByUserId = async (userId) => {
-  const shop = await Shop.findOne({
-  where: { ownerId: userId },
-  paranoid: false
-});
-
-console.log("RAW SHOP:", shop);
+  const shop = await Shop.findOne({ where: { ownerId: userId } });
   if (!shop) throw new Error('Market bulunamadı');
   return shop;
 };
@@ -64,43 +59,31 @@ exports.listPackages = async (userId) => {
 };
 
 exports.createPackage = async (userId, data) => {
-  console.log("➡️ CREATE PACKAGE START");
-console.log("USER ID:", userId);
   const shop = await getShopByUserId(userId);
-console.log("SHOP FOUND:", shop);
 
-if (!shop) {
-  console.log("❌ SHOP NOT FOUND FOR USER");
-  throw new Error("Shop bulunamadı");
-}
   const { name, description, price, products, deliveryStart, deliveryEnd,
     autoPriceDropEnabled, priceDropAmount, priceDropInterval, minPriceDropLimit, quantity } = data;
 
-console.log("PRODUCTS RAW:", products);
-
-let calculatedPrice = 0;
-
-if (Array.isArray(products)) {
-  for (const p of products) {
-    const price = Number(p.price) || 0;
-    const qty = Number(p.quantity) || 0;
-
-    calculatedPrice += price * qty;
+  let calculatedPrice = 0;
+  if (Array.isArray(products)) {
+    for (const p of products) {
+      const price = Number(p.price) || 0;
+      const qty = Number(p.quantity) || 0;
+      calculatedPrice += price * qty;
+    }
   }
-}
 
-const finalPrice =
-  price !== undefined &&
-  price !== null &&
-  String(price).trim() !== '' &&
-  !isNaN(Number(price))
-    ? Number(price)
-    : calculatedPrice;
+  const finalPrice =
+    price !== undefined &&
+    price !== null &&
+    String(price).trim() !== '' &&
+    !isNaN(Number(price))
+      ? Number(price)
+      : calculatedPrice;
 
-// 🔥 safety net
-if (isNaN(finalPrice)) {
-  throw new Error("Price hesaplanamadı (NaN)");
-}
+  if (isNaN(finalPrice)) {
+    throw new Error('Price hesaplanamadı (NaN)');
+  }
 
   const t = await sequelize.transaction();
   try {
@@ -117,6 +100,13 @@ if (isNaN(finalPrice)) {
 
     if (Array.isArray(products)) {
       for (const p of products) {
+        // OWNERSHIP KONTROLÜ
+        const product = await ShopProduct.findOne({
+          where: { id: p.id, shopId: shop.id },
+          transaction: t
+        });
+        if (!product) throw new Error(`Geçersiz ürün: ${p.id}`);
+
         await PackageProduct.create({
           packageId: newPackage.id,
           shopProductId: p.id,
@@ -124,12 +114,9 @@ if (isNaN(finalPrice)) {
           price: p.price
         }, { transaction: t });
 
-        const product = await ShopProduct.findByPk(p.id, { transaction: t });
-        if (product) {
-          const totalDeduct = unitCount * (Number(p.quantity) || 1);
-          product.quantity = Math.max(0, (product.quantity || 0) - totalDeduct);
-          await product.save({ transaction: t });
-        }
+        const totalDeduct = unitCount * (Number(p.quantity) || 1);
+        product.quantity = Math.max(0, (product.quantity || 0) - totalDeduct);
+        await product.save({ transaction: t });
       }
     }
 
@@ -163,6 +150,10 @@ exports.updatePackage = async (userId, packageId, data) => {
   if (Array.isArray(products)) {
     await PackageProduct.destroy({ where: { packageId: pkg.id } });
     for (const p of products) {
+      // OWNERSHIP KONTROLÜ
+      const product = await ShopProduct.findOne({ where: { id: p.id, shopId: shop.id } });
+      if (!product) throw new Error(`Geçersiz ürün: ${p.id}`);
+
       await PackageProduct.create({
         packageId: pkg.id,
         shopProductId: p.id,

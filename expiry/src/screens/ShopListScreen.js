@@ -10,7 +10,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from '@expo/vector-icons/MaterialIcons';
 import { fetchAllShopsAdmin, updateShopStatus, deleteShop } from '../services/api';
 import { actionsByStatus, actionToStatus, actionLabels, actionColors } from '../constants/shopWorkflow';
 import { COLORS } from '../theme/colors';

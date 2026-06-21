@@ -24,6 +24,11 @@ exports.getUserById = async (id) => {
 };
 
 exports.updateUserRole = async (userId, role, currentUserId) => {
+  const validRoles = ['user', 'market', 'admin'];
+  if (!validRoles.includes(role)) {
+    throw new Error('Geçersiz rol');
+  }
+
   const user = await User.findByPk(userId);
   if (!user) throw new Error('User not found');
 
@@ -70,18 +75,6 @@ exports.getAllShops = async () => {
     order: [['createdAt', 'DESC']]
   });
 };
-
-exports.createShop = async ({ name, address, phone }, currentUserId) => {
-  const shop = await Shop.create({ name, address, phone });
-
-  eventBus.emit(AUDIT_EVENTS.SHOP_CREATED, {
-    actorId: currentUserId,
-    shop: { id: shop.id, name: shop.name, address: shop.address }
-  });
-
-  return shop;
-};
-
 exports.updateShop = async (id, data, currentUserId) => {
   const shop = await Shop.findByPk(id);
   if (!shop) return null;

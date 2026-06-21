@@ -101,17 +101,35 @@ async function reserveStock(order, transaction) {
 
 async function createOrder(userId, data) {
   const { shopId, packages } = data;
-  const totalPrice = packages.reduce((sum, p) => sum + p.price * p.quantity, 0);
 
   const t = await sequelize.transaction();
   try {
+    let totalPrice = 0;
+    const validatedPackages = [];
+
     for (const pkg of packages) {
+      const dbPackage = await Package.findOne({
+        where: { id: pkg.packageId, shopId },
+        transaction: t
+      });
+
+      if (!dbPackage) throw new Error(`Geçersiz paket: ${pkg.packageId}`);
+
       const available = await PackageUnit.count({
         where: { packageId: pkg.packageId, isSold: false },
         transaction: t
       });
 
       if (available < pkg.quantity) throw new Error('Not enough stock');
+
+      const realPrice = dbPackage.price;
+      totalPrice += realPrice * pkg.quantity;
+
+      validatedPackages.push({
+        packageId: pkg.packageId,
+        quantity: pkg.quantity,
+        price: realPrice
+      });
     }
 
     const order = await Order.create(
@@ -119,7 +137,7 @@ async function createOrder(userId, data) {
       { transaction: t }
     );
 
-    for (const pkg of packages) {
+    for (const pkg of validatedPackages) {
       await OrderPackage.create(
         { orderId: order.id, packageId: pkg.packageId, quantity: pkg.quantity, price: pkg.price },
         { transaction: t }
@@ -150,11 +168,22 @@ async function simulatePayment(orderId) {
   }
 }
 
-async function changeStatus(orderId, newStatus, actor = 'user') {
+async function changeStatus(orderId, newStatus, actor = 'user', userId = null) {
   const t = await sequelize.transaction();
   try {
     const order = await Order.findOne({ where: { id: orderId }, transaction: t });
     if (!order) throw new Error('Order not found');
+
+    // BURAYA — yetki kontrolü
+    if (actor === 'user' && order.userId !== userId) {
+      throw new Error('Bu siparişe erişim yetkiniz yok');
+    }
+
+    if (actor === 'market') {
+      const shop = await Shop.findOne({ where: { id: order.shopId, ownerId: userId }, transaction: t });
+      if (!shop) throw new Error('Bu siparişe erişim yetkiniz yok');
+    }
+    // admin her şeye erişebilir, kontrol yok
 
     await changeStatusInternal(order, newStatus, actor, t);
 

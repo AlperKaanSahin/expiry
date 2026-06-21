@@ -7,7 +7,9 @@ const userValidator = require('../validators/user.validator');
 
 router.post('/register', userValidator.register, validate, userController.register);
 router.post('/login', userValidator.login, validate, userController.login);
+router.post('/refresh', userController.refreshToken);
 router.get('/profile', auth, userController.getProfile);
+router.put('/profile', auth, userController.updateProfile);
 router.put('/change-password', auth, userController.changePassword);
 
 module.exports = router;
