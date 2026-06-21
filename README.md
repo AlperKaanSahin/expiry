@@ -24,3 +24,8 @@ pending → paid → delivered → confirmed → released
 ### 5. Ngrok Migration
 - Backend connection switched to Ngrok for mobile testing
 - Localhost removed from production testing flow
+- Moved logic from adminController to adminService (removed controller bloat)
+- Added pagination to admin users list
+- Converted user profile endpoint from static data to dynamic data
+- Implemented role update feature for users (admin/users/:id/role)
+- Added email-based search in admin users endpoint

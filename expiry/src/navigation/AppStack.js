@@ -16,6 +16,7 @@ import UserListScreen from '../screens/UserListScreen';
 import MarketListScreen from '../screens/MarketListScreen'; 
 import UserProfileScreen from '../screens/UserProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import UserDetailsScreen from '../screens/UserDetailsScreen';
 
 const Stack = createStackNavigator();
 
@@ -35,6 +36,7 @@ const AppStack = () => (
     <Stack.Screen name="PaymentScreen" component={PaymentScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserOrders" component={UserOrdersScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserListScreen" component={UserListScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="UserDetailsScreen" component={UserDetailsScreen} options={{ headerShown: false }} /> 
     <Stack.Screen name="MarketListScreen" component={MarketListScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen}
