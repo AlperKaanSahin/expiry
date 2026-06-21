@@ -235,5 +235,9 @@ export const markNotificationAsRead = async (id) => {
   const res = await api.patch(`/notifications/${id}/read`);
   return res.data;
 };
+export const fetchAuditLogs = () => {
+  console.log("FETCH AUDIT LOGS");
+  return api.get('/audit-logs');
+};
 export { api };
 
