@@ -1,7 +1,8 @@
-const { User, Shop } = require('../models');
+const { User, Shop, Notification } = require('../models');
 const bcrypt = require('bcrypt');
 const auditService = require("./auditService");
 const audit = require("../utils/auditHelper");
+  const notificationService = require('../services/notificationService');
 
 // USERS
 exports.getAllUsers = async (page = 1, limit = 10) => {
@@ -167,10 +168,33 @@ exports.updateShopStatus = async (id, status) => {
     if (status === 'active') {
       user.role = 'market';
     } else {
-      user.role = 'user'; // rejected/pending
+      user.role = 'user';
     }
 
     await user.save();
+  }
+
+  // 🔔 NOTIFICATION (BURASI EKLENİYOR)
+
+
+  if (status === 'active') {
+    await notificationService.createNotification({
+      userId: shop.ownerId,
+      title: 'Market Başvurusu Onaylandı',
+      message: 'Market başvurunuz onaylandı. Artık market paneline erişebilirsiniz.',
+      type: 'SHOP_APPROVED',
+      targetId: shop.id
+    });
+  }
+
+  if (status === 'rejected') {
+    await notificationService.createNotification({
+      userId: shop.ownerId,
+      title: 'Market Başvurusu Reddedildi',
+      message: 'Market başvurunuz reddedildi.',
+      type: 'SHOP_REJECTED',
+      targetId: shop.id
+    });
   }
 
   return shop;

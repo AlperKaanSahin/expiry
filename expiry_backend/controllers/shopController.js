@@ -92,8 +92,12 @@ async function applyShop(req, res) {
     });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+  console.log("🔥 APPLY SHOP ERROR:", err);
+  return res.status(500).json({
+    message: err.message,
+    stack: err.stack
+  });
+}
 }
 module.exports = {
   list,
