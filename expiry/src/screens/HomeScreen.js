@@ -34,14 +34,7 @@ const handleLogout = async () => {
     color: '#6200EE',
     roles: ['user', 'market', 'admin']
   },
-  {
-    title: 'Ayarlar',
-    icon: 'settings',
-    screen: 'Settings',
-    color: '#2196F3',
-    roles: ['user', 'market', 'admin']
-  },
-
+  
   // 🔥 SADECE MARKET
   {
     title: 'Marketim',
@@ -50,7 +43,7 @@ const handleLogout = async () => {
     color: '#4CAF50',
     roles: ['market']
   },
-
+  
   // 🔥 SADECE ADMIN
   {
     title: 'Admin Panel',
@@ -58,6 +51,13 @@ const handleLogout = async () => {
     screen: 'AdminPanel',
     color: '#F44336',
     roles: ['admin']
+  },
+  {
+    title: 'Ayarlar',
+    icon: 'settings',
+    screen: 'Settings',
+    color: '#2196F3',
+    roles: ['user', 'market', 'admin']
   }
 ];
 const filteredActions = quickActions.filter(item =>

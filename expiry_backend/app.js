@@ -20,8 +20,9 @@ app.use(express.json());
 
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/users/profile', require('./routes/userRoutes'));
 app.use('/api/shops', require('./routes/shopRoutes'));
-app.use('/api/market', require('./routes/shopRoutes')); // Bunu EKLE
+app.use('/api/market', require('./routes/shopRoutes'));
 app.use('/api/packages', require('./routes/packageRoutes'));
 app.use('/api', marketProductRoutes);
 app.use('/api/orders', orderRoutes);

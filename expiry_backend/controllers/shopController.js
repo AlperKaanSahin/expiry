@@ -1,6 +1,6 @@
-const { User, Shop, Package } = require('../models');
 const { PackageProduct, ShopProduct } = require('../models');
 const { ShopRating } = require('../models');
+const { User, Shop, Package, Order } = require('../models');
 
 
 async function getMarketProfile(req, res) {
@@ -63,50 +63,80 @@ module.exports = {
       return res.status(500).json({ error: error.message });
     }
   },
-  async rateShop(req, res) {
+async rateShop(req, res) {
+  const { shopId, rating, orderId } = req.body;
+  const userId = req.user.id;
 
-    const { shopId, rating } = req.body;
-    const userId = req.user?.id || 1;
+  try {
+    // 1. Order kontrolü
+    const order = await Order.findOne({
+      where: {
+        id: orderId,
+        userId,
+        shopId,
+        status: 'completed'
+      }
+    });
 
-    if (!shopId || !rating || !userId) {
-      return res.status(400).json({ error: 'Eksik veri' });
+    if (!order) {
+      return res.status(400).json({
+        error: 'Bu sipariş için rating veremezsiniz'
+      });
     }
 
-    try {
-      // Her puan için yeni kayıt ekle
-      console.log('rateShop gelen shopId:', shopId);
-      await ShopRating.create({ shopId, userId, rating });
+    // 2. duplicate check
+    const existing = await ShopRating.findOne({
+      where: { orderId, userId }
+    });
 
-      // Ortalama puanı hesapla
-      const ratings = await ShopRating.findAll({ where: { shopId } });
-      const ratingCount = ratings.length;
-      const ratingAverage = ratingCount > 0
+    if (existing) {
+      return res.status(400).json({
+        error: 'Bu sipariş zaten puanlanmış'
+      });
+    }
+
+    // 3. create rating
+    await ShopRating.create({
+      shopId,
+      userId,
+      orderId,
+      rating
+    });
+
+    // 4. rating update
+    const ratings = await ShopRating.findAll({ where: { shopId } });
+
+    const ratingCount = ratings.length;
+    const ratingAverage =
+      ratingCount > 0
         ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratingCount
         : 0;
 
-      await Shop.update({ ratingAverage, ratingCount }, { where: { id: shopId } });
-      const [affectedRows] = await Shop.update({ ratingAverage, ratingCount }, { where: { id: shopId } });
-      console.log('Güncellenen satır sayısı:', affectedRows);
+    await Shop.update(
+      { ratingAverage, ratingCount },
+      { where: { id: shopId } }
+    );
 
-      res.json({ ratingAverage, ratingCount });
-    } catch (err) {
-      console.error('rateShop error:', err);
-      res.status(500).json({ error: 'Something went wrong!' });
-    }
-  },
+    return res.json({ ratingAverage, ratingCount });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+},
   async canRateShop(req, res) {
     try {
       const { shopId } = req.params;
       const userId = req.user.id;
 
       // Kullanıcının bu marketten başarılı (ör: 'paid') siparişi var mı kontrol et
-      const order = await Order.findOne({
-        where: {
-          shopId,
-          userId,
-          status: 'paid' // Siparişin başarılı/ödenmiş olduğunu belirten status
-        }
-      });
+const order = await Order.findOne({
+  where: {
+    shopId,
+    userId,
+    status: 'completed'
+  }
+});
 
       res.json({ canRate: !!order });
     } catch (error) {
