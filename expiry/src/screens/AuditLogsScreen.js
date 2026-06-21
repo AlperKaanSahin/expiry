@@ -13,8 +13,8 @@ const AuditLogsScreen = ({ navigation }) => {
 
   const loadLogs = async () => {
     try {
-      const res = await fetchAuditLogs();
-      const data = res.data || [];
+const res = await fetchAuditLogs();
+const data = res.data?.logs || [];
     // 🔥 En yeni loglar en üstte olacak şekilde sırala
     const sortedLogs = [...data].sort((a, b) => {
       return new Date(b.createdAt) - new Date(a.createdAt);

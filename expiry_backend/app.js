@@ -7,6 +7,7 @@ const marketProductRoutes = require('./routes/marketProductRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const auditRoutes = require('./routes/auditRoutes');
+const rateLimit = require('express-rate-limit');
 
 require('./handlers/notification.handler');
 require('./handlers/audit.handler');
@@ -20,6 +21,11 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
+
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+app.use('/api/users/login', authLimiter);
+app.use('/api/users/register', authLimiter);
 
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));

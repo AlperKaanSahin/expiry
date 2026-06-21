@@ -1,25 +1,14 @@
-const { Shop, User } = require('../models');
+const { Shop, User, Package, PackageProduct, ShopProduct } = require('../models');
 const { createNotification } = require('./notificationService');
 
 exports.applyShop = async (userId, data) => {
-  const existingShop = await Shop.findOne({
-    where: { ownerId: userId }
-  });
-
-  console.log("apply shop hit");
-  console.log("userid:", userId);
-  console.log("data:", data);
-
-  // -------------------------
-  // VALIDATION
-  // -------------------------
   if (!data?.name || !data?.address || !data?.phone) {
-    throw new Error("missing shop data");
+    throw new Error('Eksik market bilgisi');
   }
 
-  // -------------------------
-  // FIRST TIME APPLY
-  // -------------------------
+  const existingShop = await Shop.findOne({ where: { ownerId: userId } });
+
+  // İlk başvuru
   if (!existingShop) {
     const shop = await Shop.create({
       name: data.name,
@@ -28,59 +17,60 @@ exports.applyShop = async (userId, data) => {
       ownerId: userId,
       status: 'pending'
     });
-const admin = await User.findOne({
-  where: { role: 'admin' }
-});
-    // 🔥 NOTIFICATION → ADMIN
-await createNotification({
-  userId: admin.id,
-  type: 'SHOP_REAPPLY',
-  title: 'Market Başvurusu Güncellendi',
-  message: `${existingShop.name} tekrar başvuru yaptı`
-});
 
+    await notifyAdmin(`${data.name} yeni market başvurusu yaptı`);
     return shop;
   }
 
   const status = existingShop.status?.toLowerCase();
 
-  // -------------------------
-  // ACTIVE SHOP
-  // -------------------------
-  if (status === 'active') {
-    throw new Error('zaten aktif bir marketiniz var');
-  }
+  if (status === 'active') throw new Error('Zaten aktif bir marketiniz var');
+  if (status === 'pending') throw new Error('Başvurunuz zaten inceleniyor');
 
-  // -------------------------
-  // PENDING SHOP
-  // -------------------------
-  if (status === 'pending') {
-    throw new Error('başvurunuz zaten inceleniyor');
-  }
-
-  // -------------------------
-  // REJECTED → RE-APPLY
-  // -------------------------
   if (status === 'rejected') {
     existingShop.name = data.name;
     existingShop.address = data.address;
     existingShop.phone = data.phone;
     existingShop.status = 'pending';
-
     await existingShop.save();
-  const admin = await User.findOne({
-    where: { role: 'admin' }
-  });
-    // 🔥 NOTIFICATION → ADMIN
-    await createNotification({
-      userId: admin.id,
-      type: 'SHOP_REAPPLY',
-      title: 'Market Başvurusu Güncellendi',
-      message: `${existingShop.name} tekrar başvuru yaptı`
-    });
 
+    await notifyAdmin(`${existingShop.name} tekrar başvuru yaptı`);
     return existingShop;
   }
 
-  throw new Error('invalid shop state');
+  throw new Error('Geçersiz market durumu');
+};
+
+async function notifyAdmin(message) {
+  const admin = await User.findOne({ where: { role: 'admin' } });
+  if (!admin) return;
+
+  await createNotification({
+    userId: admin.id,
+    type: 'SHOP_APPLICATION',
+    title: 'Market Başvurusu',
+    message
+  });
+}
+
+exports.getMyShop = async (userId) => {
+  const shop = await Shop.findOne({ where: { ownerId: userId } });
+  if (!shop) return null;
+  return shop;
+};
+
+exports.listActiveShops = async () => {
+  return await Shop.findAll({ where: { status: 'active' } });
+};
+
+exports.getShopWithPackages = async (shopId) => {
+  return await Shop.findByPk(shopId, {
+    include: [{
+      model: Package,
+      include: [{
+        model: PackageProduct,
+        include: [{ model: ShopProduct }]
+      }]
+    }]
+  });
 };

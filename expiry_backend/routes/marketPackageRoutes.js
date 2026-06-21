@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middlewares/auth');
 const onlyMarket = require('../middlewares/onlyMarket');
-const marketPackageController = require('../controllers/marketPackageController');
+const marketPackageController = require('../controllers/shopPackageController');
 
 router.get('/market/packages', auth, onlyMarket, marketPackageController.list);
 router.post('/market/packages', auth, onlyMarket, marketPackageController.create);
