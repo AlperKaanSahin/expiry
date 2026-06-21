@@ -62,6 +62,11 @@ exports.deleteUser = async (targetUserId, currentUserId) => {
 // MARKETS
 exports.getAllShops = async () => {
   return await Shop.findAll({
+    include: [{
+      model: User,
+      as: 'owner',
+      attributes: ['id', 'firstName', 'lastName', 'email'],
+    }],
     order: [['createdAt', 'DESC']]
   });
 };

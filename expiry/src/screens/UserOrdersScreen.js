@@ -76,7 +76,7 @@ const pastOrders = safeOrders.filter(o =>
     switch (status) {
       case 'pending': return 'Sipariş Alındı';
       case 'paid': return 'Ödeme Alındı';
-      case 'delivered': return 'Market Teslim Etti';
+      case 'delivered': return 'Shop Teslim Etti';
       case 'confirmed': return 'Onaylandı';
       case 'released': return 'Tamamlandı';
       default: return status;

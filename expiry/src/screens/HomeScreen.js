@@ -40,10 +40,10 @@ const HomeScreen = ({ navigation }) => {
   // Rol bazlı buton yapılandırması
   const getRoleAction = () => {
     if (user?.role === 'user') {
-      return { title: 'Market Ol', icon: 'store', screen: 'MarketApply', color: '#4CAF50' };
+      return { title: 'Shop Ol', icon: 'store', screen: 'ShopApply', color: '#4CAF50' };
     }
     if (user?.role === 'market') {
-      return { title: 'Market Panel', icon: 'dashboard', screen: 'MarketStack', color: '#4CAF50' };
+      return { title: 'Shop Panel', icon: 'dashboard', screen: 'ShopStack', color: '#4CAF50' };
     }
     if (user?.role === 'admin') {
       return { title: 'Admin Panel', icon: 'admin-panel-settings', screen: 'AdminStack', color: '#4CAF50' };
@@ -52,7 +52,7 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const quickActions = [
-    { title: 'Marketler', icon: 'storefront', screen: 'Shops', color: '#009688' },
+    { title: 'Shoplar', icon: 'storefront', screen: 'Shops', color: '#009688' },
     { title: 'Siparişler', icon: 'receipt', screen: 'UserOrders', color: '#FF9800' },
     { title: 'Profil', icon: 'person', screen: 'UserProfile', color: '#6200EE' }
   ];

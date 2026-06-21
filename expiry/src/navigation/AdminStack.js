@@ -1,5 +1,5 @@
 import UserListScreen from '../screens/UserListScreen';
-import MarketListScreen from '../screens/MarketListScreen';
+import ShopListScreen from '../screens/ShopListScreen';
 import AdminPanelScreen from '../screens/AdminPanelScreen';
 import AuditLogsScreen from '../screens/AuditLogsScreen';
 import UserDetailsScreen from '../screens/UserDetailsScreen';
@@ -14,7 +14,7 @@ export default function AdminStack() {
     <Stack.Navigator>
       <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
       <Stack.Screen name="UserListScreen" component={UserListScreen} />
-      <Stack.Screen name="MarketListScreen" component={MarketListScreen} />
+      <Stack.Screen name="ShopListScreen" component={ShopListScreen} />
       <Stack.Screen name="AuditLogsScreen" component={AuditLogsScreen} />
       <Stack.Screen name ="UserDetailsScreen" component={UserDetailsScreen} />
 
