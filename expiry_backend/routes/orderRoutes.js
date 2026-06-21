@@ -10,7 +10,8 @@ router.post('/simulate-payment', auth, orderController.simulatePayment);
 // TEK STATE ENDPOINT
 router.post('/:id/status', auth, orderController.changeOrderStatus);
 
-router.get('/shop/:shopId', auth, orderController.listShopOrders);
-router.get('/user/:userId', auth, orderController.listUserOrders);
+
+router.get('/user/me', auth, orderController.getMyUserOrders);
+router.get('/shop/me', auth, orderController.getMyShopOrders);
 
 module.exports = router;

@@ -12,7 +12,7 @@ const handleLogout = async () => {
   await logout();
 };
 
- const quickActions = [
+const quickActions = [
   {
     title: 'Marketler',
     icon: 'storefront',
@@ -34,8 +34,17 @@ const handleLogout = async () => {
     color: '#6200EE',
     roles: ['user', 'market', 'admin']
   },
-  
-  // 🔥 SADECE MARKET
+
+  // 🔥 MARKET BAŞVURU
+  {
+    title: 'Market Ol',
+    icon: 'add-business',
+    screen: 'MarketApply',
+    color: '#8E44AD',
+    roles: ['user']
+  },
+
+  // 🔥 MARKET PANEL
   {
     title: 'Marketim',
     icon: 'store',
@@ -43,8 +52,8 @@ const handleLogout = async () => {
     color: '#4CAF50',
     roles: ['market']
   },
-  
-  // 🔥 SADECE ADMIN
+
+  // 🔥 ADMIN
   {
     title: 'Admin Panel',
     icon: 'admin-panel-settings',
@@ -52,6 +61,7 @@ const handleLogout = async () => {
     color: '#F44336',
     roles: ['admin']
   },
+
   {
     title: 'Ayarlar',
     icon: 'settings',

@@ -29,6 +29,14 @@ export const registerUser = async (userData) => {
     throw error.response?.data?.error || 'Kayıt başarısız';
   }
 };
+export const updateShopStatus = async (id, status) => {
+  const res = await api.put(`/admin/shops/${id}/status`, { status });
+  return res.data;
+};
+export const applyForShop = async (data) => {
+  const response = await api.post('/shops/apply', data);
+  return response.data;
+};
 export const rateShop = async (shopId, rating) => {
   try {
     const response = await api.post('/shops/rate', { shopId, rating });
@@ -46,7 +54,7 @@ export const loginUser = async ({ email, password }) => {
 
     console.log('Login response:', response.data);
 
-    return response.data; // 🔥 TEK DOĞRU SATIR
+    return response.data; 
   } catch (error) {
     console.log('Login error:', error.response?.data || error);
     throw error.response?.data?.error || 'Giriş başarısız';
@@ -71,7 +79,10 @@ export const fetchShops = async () => {
   } catch (error) {
     throw error.response?.data?.error || 'Marketler yüklenemedi';
   }
-
+};
+export const fetchAllShopsAdmin = async () => {
+  const res = await api.get('/admin/shops');
+  return res.data;
 };
 export const getProfile = async () => {
   const res = await api.get('/users/profile');
@@ -82,18 +93,8 @@ export const getUserById = async (id) => {
   const res = await api.get(`/admin/users/${id}`);
   return res.data;
 };
-export const fetchUserOrders = async (userId) => {
-  const response = await api.get(`/orders/user/${userId}`);
-  return response.data;
-};
-export const getShopOrders = async (shopId) => {
-  try {
-    const response = await api.get(`/orders/shop/${shopId}`);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Siparişler alınamadı';
-  }
-};
+
+
 export const fetchShopPackages = async (shopId) => {
   const response = await api.get(`/packages/shop/${shopId}/packages`);
   return response.data;
@@ -113,6 +114,15 @@ export const fetchMarketProducts = async () => {
   } catch (error) {
     throw error.response?.data?.error || 'Ürünler yüklenemedi';
   }
+};
+export const fetchMyOrders = async () => {
+  const res = await api.get('/orders/user/me');
+  return res.data;
+};
+
+export const fetchShopOrders = async () => {
+  const res = await api.get('/orders/shop/me');
+  return res.data || [];   // 👈 kritik
 };
 
 export const addMarketProduct = async (product) => {
@@ -167,17 +177,13 @@ export async function deleteMarketPackage(id, count) {
     data: count ? { count } : undefined
   });
 }
-export const fetchMarketOrders = async (shopId) => {
-  const response = await api.get(`/orders/shop/${shopId}`);
-  return response.data;
+
+
+
+export const fetchShopProfile = async () => {
+  const res = await api.get('/shops/me'); // 👈 
+  return res.data;
 };
-
-
-export const fetchMarketProfile = async () => {
-  const response = await api.get('/market/profile');
-  return response.data;
-};
-
 export const updateMarketProfile = async (profile) => {
   const response = await api.put('/market/profile', profile);
   return response.data;

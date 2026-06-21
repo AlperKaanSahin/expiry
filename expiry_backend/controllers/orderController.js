@@ -94,6 +94,65 @@ async function confirmOrder(req, res) {
     res.status(400).json({ error: err.message });
   }
 }
+async function getShopOrders(req, res) {try {
+    const shop = await Shop.findOne({
+      where: { ownerId: req.user.id }
+    });
+
+    if (!shop) {
+      return res.status(404).json({
+        success: false,
+        message: "Shop not found"
+      });
+    }
+
+    const orders = await Order.findAll({
+      where: { shopId: shop.id }
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: orders
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }};
+async function getMyShopOrders(req, res) {
+  try {
+    console.log("USER:", req.user);
+
+    const shop = await orderService.getShopByOwner(req.user.id);
+
+    if (!shop) {
+      return res.status(404).json({
+        message: "No shop found for this user"
+      });
+    }
+
+    const orders = await orderService.listShopOrders(shop.id);
+
+    return res.json(orders);
+
+  } catch (err) {
+    console.log("GET SHOP ORDERS ERROR:", err);
+
+    return res.status(500).json({
+      error: err.message
+    });
+  }
+}
+async function getMyUserOrders(req, res) {
+  try {
+    const orders = await orderService.listUserOrders(req.user.id);
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
 module.exports = {
   createOrder,
@@ -103,4 +162,7 @@ module.exports = {
   listShopOrders,
   markDelivered,
   confirmOrder,
+  getShopOrders,
+  getMyShopOrders,
+  getMyUserOrders
 };

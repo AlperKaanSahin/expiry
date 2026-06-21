@@ -5,6 +5,7 @@ const {
   PackageUnit,
   sequelize
 } = require('../models');
+const { Shop } = require('../models');
 
 /**
  * STATE MACHINE
@@ -226,24 +227,29 @@ async function changeStatusInternal(order, newStatus, actor, transaction) {
 /**
  * LIST ORDERS
  */
+
+
+
 async function listUserOrders(userId) {
   return await Order.findAll({
-    where: { userId },
-    include: [OrderPackage]
+    where: { userId }
   });
 }
-
 async function listShopOrders(shopId) {
   return await Order.findAll({
-    where: { shopId },
-    include: [OrderPackage]
+    where: { shopId }
   });
 }
-
+async function getShopByOwner(ownerId) {
+  return await Shop.findOne({
+    where: { ownerId }
+  });
+}
 module.exports = {
   createOrder,
   simulatePayment,
   changeStatus,
   listUserOrders,
-  listShopOrders
+  listShopOrders,
+  getShopByOwner
 };

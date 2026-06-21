@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { StyleSheet } from 'react-native';
-import { fetchMarketOrders, changeOrderStatus } from '../services/api';
+import { fetchShopOrders, changeOrderStatus } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const MarketOrdersScreen = () => {
@@ -19,35 +19,29 @@ const MarketOrdersScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadOrders = async () => {
-    try {
-      setLoading(true);
+const loadOrders = async () => {
+  try {
+    setLoading(true);
 
-      const shopId = await AsyncStorage.getItem('@shopId');
+    const data = await fetchShopOrders();
 
-      if (!shopId) {
-        throw new Error('Market ID bulunamadı');
-      }
-
-      const data = await fetchMarketOrders(shopId);
-      setOrders(data);
-
-    } catch (error) {
-      Alert.alert('Hata', error.toString());
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    setOrders(Array.isArray(data) ? data : []);
+  } catch (error) {
+    Alert.alert('Hata', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     loadOrders();
   }, []);
 
-const activeOrders = orders.filter(o =>
+const safeOrders = Array.isArray(orders) ? orders : [];
+
+const activeOrders = safeOrders.filter(o =>
   ['pending', 'paid', 'delivered'].includes(o.status)
 );
-
 const pastOrders = orders.filter(o =>
   ['confirmed', 'released'].includes(o.status)
 );

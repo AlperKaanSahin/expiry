@@ -14,7 +14,7 @@ import {
     KeyboardAvoidingView,
     Platform
 } from 'react-native';
-import { fetchAllMarkets, deleteMarket, createMarket, updateMarket, createMarketWithUser } from '../services/api';
+import { fetchAllShopsAdmin, deleteShop, createShop, updateShop, createShopWithUser, updateShopStatus } from '../services/api';
 
 const initialMarketState = {
     ownerEmail: '',
@@ -34,64 +34,68 @@ export default function MarketListScreen() {
     const [loading, setLoading] = useState(true);
     const [addModalVisible, setAddModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
-    const [selectedMarket, setSelectedMarket] = useState(null);
-    const [newMarket, setNewMarket] = useState({ ...initialMarketState });
+    const [selectedShop, setSelectedShop] = useState(null);
+    const [newShop, setNewShop] = useState({ ...initialMarketState });
 
-    const loadMarkets = async () => {
+    const loadShops = async () => {
         setLoading(true);
         try {
-            const data = await fetchAllMarkets();
+            const data = await fetchAllShopsAdmin();
             setMarkets(data);
         } catch (error) {
-            Alert.alert('Hata', 'Marketler yüklenirken bir sorun oluştu: ' + error.message);
+            Alert.alert('Hata', 'Mağazalar yüklenirken bir sorun oluştu: ' + error.message);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadMarkets();
+        loadShops();
     }, []);
 
-    const handleAddMarket = async () => {
+    const handleStatus = async (id, status) => {
         try {
-            await createMarketWithUser(newMarket);
-            setAddModalVisible(false);
-            setNewMarket({ ...initialMarketState });
-            loadMarkets();
-            Alert.alert('Başarılı', 'Market başarıyla eklendi');
-        } catch (error) {
-            Alert.alert('Hata', 'Market eklenirken bir sorun oluştu: ' + error.message);
+            await updateShopStatus(id, status);
+            if (status === 'active') {
+                Alert.alert('Başarılı', 'Market aktifleştirildi');
+            } else if (status === 'rejected') {
+                Alert.alert('Başarılı', 'Market reddedildi');
+            }
+            loadShops();
+        } catch (err) {
+            Alert.alert('Hata', err.message);
         }
     };
 
+
     const handleEditMarket = async () => {
         try {
-            await updateMarket(selectedMarket.id, selectedMarket);
+            await updateShop(selectedShop.id, selectedShop);
             setEditModalVisible(false);
-            setSelectedMarket(null);
-            loadMarkets();
-            Alert.alert('Başarılı', 'Market başarıyla güncellendi');
+            setSelectedShop(null);
+            loadShops();
+            Alert.alert('Başarılı', 'Mağaza başarıyla güncellendi');
         } catch (error) {
-            Alert.alert('Hata', 'Market güncellenirken bir sorun oluştu: ' + error.message);
+            Alert.alert('Hata', 'Mağaza güncellenirken bir sorun oluştu: ' + error.message);
         }
     };
 
     const handleDeleteMarket = (marketId) => {
         Alert.alert(
             'Silme Onayı',
-            'Bu marketi silmek istediğinize emin misiniz?',
+            'Bu mağazayı silmek istediğinize emin misiniz?',
             [
                 { text: 'İptal', style: 'cancel' },
                 {
                     text: 'Sil',
+                    style: 'destructive',
                     onPress: async () => {
                         try {
-                            await deleteMarket(marketId);
-                            loadMarkets();
-                            Alert.alert('Başarılı', 'Market başarıyla silindi');
+                            await deleteShop(marketId);
+                            loadShops();
+                            Alert.alert('Başarılı', 'Mağaza başarıyla silindi');
                         } catch (error) {
-                            Alert.alert('Hata', 'Market silinirken bir sorun oluştu: ' + error.message);
+                            Alert.alert('Hata', 'Mağaza silinirken bir sorun oluştu: ' + error.message);
                         }
                     }
                 }
@@ -99,32 +103,108 @@ export default function MarketListScreen() {
         );
     };
 
-    const renderItem = ({ item }) => (
-        <View style={styles.marketItem}>
-            <View style={styles.marketInfoContainer}>
-                <Text style={styles.marketName}>{item.name}</Text>
-                <Text style={styles.marketInfo}>Adres: {item.address || 'Belirtilmemiş'}</Text>
-                <Text style={styles.marketInfo}>Telefon: {item.phone || 'Belirtilmemiş'}</Text>
+    const getStatusStyle = (status) => {
+        switch(status) {
+            case 'active': return { bg: '#E8F5E9', color: '#4CAF50', text: 'AKTİF' };
+            case 'pending': return { bg: '#FFF3E0', color: '#FF9800', text: 'BEKLEMEDE' };
+            case 'rejected': return { bg: '#FFEBEE', color: '#F44336', text: 'REDDEDİLDİ' };
+            default: return { bg: '#F5F5F5', color: '#9E9E9E', text: status?.toUpperCase() || 'BİLİNMİYOR' };
+        }
+    };
+
+    const renderItem = ({ item }) => {
+        const statusStyle = getStatusStyle(item.status);
+        const isPending = item.status === 'pending';
+        const isActive = item.status === 'active';
+        const isRejected = item.status === 'rejected';
+
+        return (
+            <View style={styles.marketItem}>
+                <View style={styles.marketInfoContainer}>
+                    <View style={styles.marketHeader}>
+                        <Text style={styles.marketName}>{item.name}</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                            <Text style={[styles.statusText, { color: statusStyle.color }]}>{statusStyle.text}</Text>
+                        </View>
+                    </View>
+
+                    <Text style={styles.marketInfo}>
+                        📍 Adres: {item.address || 'Belirtilmemiş'}
+                    </Text>
+
+                    <Text style={styles.marketInfo}>
+                        📞 Telefon: {item.phone || 'Belirtilmemiş'}
+                    </Text>
+                </View>
+
+                <View style={styles.buttonContainer}>
+                    {isPending && (
+                        <>
+                            <TouchableOpacity
+                                style={styles.approveButton}
+                                onPress={() => handleStatus(item.id, 'active')}
+                            >
+                                <Text style={styles.buttonText}>✓ Onayla</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.rejectButton}
+                                onPress={() => handleStatus(item.id, 'rejected')}
+                            >
+                                <Text style={styles.buttonText}>✗ Reddet</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
+
+                    {isActive && (
+                        <>
+                            <TouchableOpacity
+                                style={styles.editButton}
+                                onPress={() => {
+                                    setSelectedShop(item);
+                                    setEditModalVisible(true);
+                                }}
+                            >
+                                <Text style={styles.buttonText}>✎ Düzenle</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.deleteButton}
+                                onPress={() => handleDeleteMarket(item.id)}
+                            >
+                                <Text style={styles.buttonText}>🗑 Sil</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.rejectButton}
+                                onPress={() => handleStatus(item.id, 'rejected')}
+                            >
+                                <Text style={styles.buttonText}>✗ Reddet</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
+
+                    {isRejected && (
+                        <>
+                            <TouchableOpacity
+                                style={styles.approveButton}
+                                onPress={() => handleStatus(item.id, 'active')}
+                            >
+                                <Text style={styles.buttonText}>✓ Onayla</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.deleteButton}
+                                onPress={() => handleDeleteMarket(item.id)}
+                            >
+                                <Text style={styles.buttonText}>🗑 Sil</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
+                </View>
             </View>
-            <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => {
-                        setSelectedMarket(item);
-                        setEditModalVisible(true);
-                    }}
-                >
-                    <Text style={styles.buttonText}>Düzenle</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteMarket(item.id)}
-                >
-                    <Text style={styles.buttonText}>Sil</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
+        );
+    };
 
     const renderInputField = (
         placeholder,
@@ -134,137 +214,59 @@ export default function MarketListScreen() {
         secure = false,
         keyboardType = 'default',
         maxLength,
-        extraProps = {}
+        required = false
     ) => (
-        <TextInput
-            placeholder={placeholder}
-            placeholderTextColor="#999"
-            style={styles.input}
-            value={value}
-            onChangeText={onChange}
-            secureTextEntry={secure}
-            key={key}
-            keyboardType={keyboardType}
-            maxLength={maxLength}
-        />
+        <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>
+                {placeholder}{required && <Text style={styles.requiredStar}> *</Text>}
+            </Text>
+            <TextInput
+                placeholder={placeholder}
+                placeholderTextColor="#999"
+                style={styles.input}
+                value={value}
+                onChangeText={onChange}
+                secureTextEntry={secure}
+                key={key}
+                keyboardType={keyboardType}
+                maxLength={maxLength}
+            />
+        </View>
     );
 
     return (
         <SafeAreaView style={styles.container}>
-            <Text style={styles.title}>Market Listesi</Text>
+            <View style={styles.header}>
+                <Text style={styles.title}>🏪 Marketler</Text>
+                <View style={styles.statsContainer}>
+                    <Text style={styles.statsText}>Toplam: {markets.length}</Text>
+                </View>
+            </View>
 
-            <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setAddModalVisible(true)}
-            >
-                <Text style={styles.addButtonText}>+ Yeni Market Ekle</Text>
-            </TouchableOpacity>
+
 
             {loading ? (
-                <ActivityIndicator size="large" color="#6200EE" style={styles.loader} />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#6200EE" />
+                    <Text style={styles.loadingText}>Yükleniyor...</Text>
+                </View>
             ) : (
                 <FlatList
                     data={markets}
                     keyExtractor={item => item.id.toString()}
                     renderItem={renderItem}
                     contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
-                        <Text style={styles.emptyText}>Gösterilecek market bulunamadı</Text>
+                        <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyIcon}>🏪</Text>
+                            <Text style={styles.emptyText}>Gösterilecek market bulunamadı</Text>
+                        </View>
                     }
                 />
             )}
 
-            {/* Market Ekle Modalı */}
-            <Modal visible={addModalVisible} animationType="slide" transparent>
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    style={styles.modalContainer}
-                >
-                    <View style={styles.modalContent}>
-                        <ScrollView keyboardShouldPersistTaps="handled">
-                            <Text style={styles.modalTitle}>Yeni Market Ekle</Text>
 
-                            {renderInputField(
-                                "Market Adı *",
-                                newMarket.name,
-                                (text) => setNewMarket({ ...newMarket, name: text }),
-                                "name"
-                            )}
-                            {renderInputField(
-                                "Market Sahibi Adı *",
-                                newMarket.ownerFirstName,
-                                (text) => setNewMarket({ ...newMarket, ownerFirstName: text }),
-                                "ownerFirstName"
-                            )}
-
-                            {renderInputField(
-                                "Market Sahibi Soyadı *",
-                                newMarket.ownerLastName,
-                                (text) => setNewMarket({ ...newMarket, ownerLastName: text }),
-                                "ownerLastName"
-                            )}
-                            {renderInputField(
-                                "Market Sahibi E-posta *",
-                                newMarket.ownerEmail,
-                                (text) => setNewMarket({ ...newMarket, ownerEmail: text }),
-                                "ownerEmail",
-                                false,
-                                "email-address" 
-                            )}
-
-                            {renderInputField(
-                                "Market Sahibi Şifre *",
-                                newMarket.ownerPassword,
-                                (text) => setNewMarket({ ...newMarket, ownerPassword: text }),
-                                "ownerPassword",
-                                true
-                            )}
-
-
-                            {renderInputField(
-                                "Adres",
-                                newMarket.address,
-                                (text) => setNewMarket({ ...newMarket, address: text }),
-                                "address"
-                            )}
-
-                            {renderInputField(
-                                "Telefon *",
-                                newMarket.phone,
-                                (text) => {
-                                    if (text.length <= 10) {
-                                        setNewMarket({ ...newMarket, phone: text });
-                                    }
-                                },
-                                "phone",
-                                false,
-                                "phone-pad", 
-                                10,           
-                                { returnKeyType: 'done' }
-                            )}
-
-                            <View style={styles.modalButtonContainer}>
-                                <TouchableOpacity
-                                    style={[styles.modalButton, styles.saveButton]}
-                                    onPress={handleAddMarket}
-                                >
-                                    <Text style={styles.modalButtonText}>Kaydet</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[styles.modalButton, styles.cancelButton]}
-                                    onPress={() => {
-                                        setAddModalVisible(false);
-                                        setNewMarket({ ...initialMarketState });
-                                    }}
-                                >
-                                    <Text style={styles.modalButtonText}>İptal</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
 
             {/* Market Düzenle Modalı */}
             <Modal visible={editModalVisible} animationType="slide" transparent>
@@ -273,65 +275,36 @@ export default function MarketListScreen() {
                     style={styles.modalContainer}
                 >
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Market Düzenle</Text>
-
-                        {renderInputField(
-                            "Market Adı *",
-                            selectedMarket?.name,
-                            (text) => setSelectedMarket({ ...selectedMarket, name: text }),
-                            "edit-name"
-                        )}
-
-                        {renderInputField(
-                            "Adres",
-                            selectedMarket?.address,
-                            (text) => setSelectedMarket({ ...selectedMarket, address: text }),
-                            "edit-address"
-                        )}
-
-                        {renderInputField(
-                            "Telefon *",
-                            selectedMarket?.phone,
-                            (text) => setSelectedMarket({ ...selectedMarket, phone: text }),
-                            "edit-phone"
-                        )}
-                        {renderInputField(
-                            "E-posta",
-                            selectedMarket?.email,
-                            (text) => setSelectedMarket({ ...selectedMarket, email: text }),
-                            "edit-email",
-                            false,
-                            "email-address" 
-                        )}
-                        {renderInputField(
-                            "Market Sahibi Adı *",
-                            selectedMarket?.ownerFirstName,
-                            (text) => setSelectedMarket({ ...selectedMarket, ownerFirstName: text }),
-                            "ownerFirstName"
-                        )}
-
-                        {renderInputField(
-                            "Market Sahibi Soyadı *",
-                            selectedMarket?.ownerLastName,
-                            (text) => setSelectedMarket({ ...selectedMarket, ownerLastName: text }),
-                            "ownerLastName"
-                        )}
-
-                        <View style={styles.modalButtonContainer}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleEditMarket}
-                            >
-                                <Text style={styles.modalButtonText}>Kaydet</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setEditModalVisible(false)}
-                            >
-                                <Text style={styles.modalButtonText}>İptal</Text>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Market Düzenle</Text>
+                            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                                <Text style={styles.closeButton}>✕</Text>
                             </TouchableOpacity>
                         </View>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {renderInputField("Mağaza Adı", selectedShop?.name, (text) => setSelectedShop({ ...selectedShop, name: text }), "edit-name", false, "default", undefined, true)}
+                            {renderInputField("Adres", selectedShop?.address, (text) => setSelectedShop({ ...selectedShop, address: text }), "edit-address")}
+                            {renderInputField("Telefon", selectedShop?.phone, (text) => setSelectedShop({ ...selectedShop, phone: text }), "edit-phone", false, "phone-pad", 10, true)}
+                            {renderInputField("E-posta", selectedShop?.email, (text) => setSelectedShop({ ...selectedShop, email: text }), "edit-email", false, "email-address")}
+                            {renderInputField("Sahip Adı", selectedShop?.ownerFirstName, (text) => setSelectedShop({ ...selectedShop, ownerFirstName: text }), "edit-ownerFirstName")}
+                            {renderInputField("Sahip Soyadı", selectedShop?.ownerLastName, (text) => setSelectedShop({ ...selectedShop, ownerLastName: text }), "edit-ownerLastName")}
+
+                            <View style={styles.modalButtonContainer}>
+                                <TouchableOpacity
+                                    style={[styles.modalButton, styles.saveButton]}
+                                    onPress={handleEditMarket}
+                                >
+                                    <Text style={styles.modalButtonText}>Kaydet</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.modalButton, styles.cancelButton]}
+                                    onPress={() => setEditModalVisible(false)}
+                                >
+                                    <Text style={styles.modalButtonText}>İptal</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
@@ -342,139 +315,235 @@ export default function MarketListScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F5F5',
-        padding: 16
+        backgroundColor: '#F8F9FA',
     },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 20,
-        color: '#333',
-        textAlign: 'center'
-    },
-    addButton: {
-        backgroundColor: '#6200EE',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
-        alignItems: 'center',
-        elevation: 3
-    },
-    addButtonText: {
-        color: '#FFF',
-        fontWeight: 'bold',
-        fontSize: 16
-    },
-    marketItem: {
-        backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 10,
-        marginBottom: 12,
+    header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        elevation: 2
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        backgroundColor: '#FFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E9ECEF',
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#212529',
+    },
+    statsContainer: {
+        backgroundColor: '#F8F9FA',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    statsText: {
+        fontSize: 12,
+        color: '#6C757D',
+        fontWeight: '500',
+    },
+    addButton: {
+        backgroundColor: '#6200EE',
+        marginHorizontal: 16,
+        marginTop: 16,
+        padding: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    addButtonText: {
+        color: '#FFF',
+        fontWeight: '700',
+        fontSize: 16,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#6C757D',
+    },
+    marketItem: {
+        backgroundColor: '#FFF',
+        marginHorizontal: 16,
+        marginBottom: 12,
+        padding: 16,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     marketInfoContainer: {
-        flex: 1,
-        marginRight: 10
+        marginBottom: 12,
+    },
+    marketHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
     },
     marketName: {
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 4
+        fontWeight: '700',
+        color: '#212529',
+        flex: 1,
+    },
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statusText: {
+        fontSize: 10,
+        fontWeight: '700',
     },
     marketInfo: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 2
+        fontSize: 13,
+        color: '#6C757D',
+        marginBottom: 4,
     },
     buttonContainer: {
-        flexDirection: 'row'
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    approveButton: {
+        backgroundColor: '#4CAF50',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        minWidth: 70,
+        alignItems: 'center',
+    },
+    rejectButton: {
+        backgroundColor: '#F44336',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        minWidth: 70,
+        alignItems: 'center',
     },
     editButton: {
-        backgroundColor: '#FFA000',
-        padding: 8,
-        borderRadius: 6,
-        marginRight: 8,
+        backgroundColor: '#FF9800',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
         minWidth: 70,
-        alignItems: 'center'
+        alignItems: 'center',
     },
     deleteButton: {
-        backgroundColor: '#FF5252',
-        padding: 8,
-        borderRadius: 6,
+        backgroundColor: '#F44336',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
         minWidth: 70,
-        alignItems: 'center'
+        alignItems: 'center',
     },
     buttonText: {
         color: '#FFF',
-        fontWeight: 'bold'
+        fontWeight: '600',
+        fontSize: 12,
+    },
+    inputContainer: {
+        marginBottom: 12,
+    },
+    inputLabel: {
+        fontSize: 13,
+        color: '#495057',
+        marginBottom: 4,
+        fontWeight: '500',
+    },
+    requiredStar: {
+        color: '#F44336',
     },
     input: {
         borderWidth: 1,
-        borderColor: '#CCC',
-        borderRadius: 8,
+        borderColor: '#E9ECEF',
+        borderRadius: 10,
         padding: 12,
-        marginBottom: 12,
         backgroundColor: '#FFF',
-        fontSize: 16,
-        color: '#333'
+        fontSize: 14,
+        color: '#212529',
     },
     modalContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)'
+        backgroundColor: 'rgba(0,0,0,0.5)',
     },
     modalContent: {
         backgroundColor: '#FFF',
-        padding: 20,
-        borderRadius: 10,
+        borderRadius: 20,
         width: '90%',
-        maxHeight: '90%'
+        maxHeight: '85%',
+        padding: 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
     },
     modalTitle: {
         fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 20,
-        color: '#333',
-        textAlign: 'center'
+        fontWeight: '700',
+        color: '#212529',
+    },
+    closeButton: {
+        fontSize: 20,
+        color: '#6C757D',
+        fontWeight: '600',
+        padding: 4,
     },
     modalButtonContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 10
+        gap: 12,
+        marginTop: 20,
+        marginBottom: 10,
     },
     modalButton: {
-        padding: 12,
-        borderRadius: 8,
         flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
         alignItems: 'center',
-        marginHorizontal: 5
     },
     saveButton: {
-        backgroundColor: '#4CAF50'
+        backgroundColor: '#4CAF50',
     },
     cancelButton: {
-        backgroundColor: '#FF5252'
+        backgroundColor: '#F44336',
     },
     modalButtonText: {
         color: '#FFF',
-        fontWeight: 'bold',
-        fontSize: 16
+        fontWeight: '700',
+        fontSize: 14,
     },
     listContent: {
-        paddingBottom: 20
+        paddingTop: 12,
+        paddingBottom: 20,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 50,
+    },
+    emptyIcon: {
+        fontSize: 64,
+        marginBottom: 16,
     },
     emptyText: {
-        textAlign: 'center',
-        marginTop: 20,
         fontSize: 16,
-        color: '#666'
+        color: '#6C757D',
     },
-    loader: {
-        marginTop: 40
-    }
 });

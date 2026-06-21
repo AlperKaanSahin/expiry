@@ -1,5 +1,7 @@
 const { User, Shop } = require('../models');
 const bcrypt = require('bcrypt');
+const auditService = require("./auditService");
+const audit = require("../utils/auditHelper");
 
 // USERS
 exports.getAllUsers = async (page = 1, limit = 10) => {
@@ -11,24 +13,32 @@ exports.getAllUsers = async (page = 1, limit = 10) => {
     offset
   });
 
+
   return users;
 };
 
 exports.deleteUser = async (targetUserId, currentUserId) => {
 
-    if (targetUserId === currentUserId) {
-        throw new Error('You cannot delete your own account');
-    }
+  if (targetUserId === currentUserId) {
+    throw new Error('You cannot delete your own account');
+  }
 
-    const user = await User.findByPk(targetUserId);
+  const user = await User.findByPk(targetUserId);
 
-    if (!user) {
-        throw new Error('User not found');
-    }
+  if (!user) {
+    throw new Error('User not found');
+  }
 
-    await user.destroy();
+  // 1. delete
+  await user.destroy();
 
-    return true;
+  // 2. audit (1 satır!)
+  await audit.userDeleted({
+    actorId: currentUserId,
+    user
+  });
+
+  return true;
 };
 
 exports.getUserById = async (id) => {
@@ -36,7 +46,9 @@ exports.getUserById = async (id) => {
     attributes: { exclude: ['password', 'deletedAt'] }
   });
 };
-exports.updateUserRole = async (userId, role) => {
+
+
+exports.updateUserRole = async (userId, role, currentUserId) => {
 
   const user = await User.findByPk(userId);
 
@@ -44,71 +56,122 @@ exports.updateUserRole = async (userId, role) => {
     throw new Error('User not found');
   }
 
-  user.role = role;
-  await user.save();
+const oldRole = user.role;
+
+user.role = role;
+await user.save();
+
+await audit.roleChanged({
+  actorId: currentUserId,
+  user: {
+    id: user.id,
+    email: user.email,
+    role: user.role
+  },
+  oldRole,
+  newRole: role
+});
 
   return user;
 };
 
 // MARKETS
-exports.getAllMarkets = async () => {
-  return await Shop.findAll();
+exports.getAllShops = async () => {
+  return await Shop.findAll({
+    order: [['createdAt', 'DESC']]
+  });
 };
 
-exports.createMarket = async ({ name, address, phone }) => {
-  return await Shop.create({ name, address, phone });
+exports.createShop = async ({ name, address, phone }, currentUserId) => {
+
+  const shop = await Shop.create({ name, address, phone });
+
+  await audit.shopCreated({
+    actorId: currentUserId,
+    shop
+  });
+
+  return shop;
 };
 
-exports.updateMarket = async (id, data) => {
-  const market = await Shop.findByPk(id);
-  if (!market) return null;
+exports.updateShop = async (id, data, currentUserId) => {
 
-  market.name = data.name;
-  market.address = data.address;
-  market.phone = data.phone;
+  const shop = await Shop.findByPk(id);
+  if (!shop) return null;
 
-  await market.save();
-  return market;
+  // 1. old snapshot
+  const oldShop = { ...shop.dataValues };
+
+  // 2. update
+  shop.name = data.name;
+  shop.address = data.address;
+  shop.phone = data.phone;
+
+  await shop.save();
+
+  // 3. audit
+  await audit.shopUpdated({
+    actorId: currentUserId,
+    oldShop,
+    newShop: shop
+  });
+
+  return shop;
 };
+exports.deleteShop = async (id, currentUserId) => {
 
-exports.deleteMarket = async (id) => {
-  const market = await Shop.findByPk(id);
-  if (!market) return null;
+  const shop = await Shop.findByPk(id);
+  if (!shop) return null;
 
-  await User.destroy({ where: { id: market.ownerId } });
+  // 1. audit BEFORE delete (data lazım olduğu için)
+  const ownerId = shop.ownerId;
+
+  // 2. delete user + shop
+  await User.destroy({ where: { id: ownerId } });
   await Shop.destroy({ where: { id } });
+
+  // 3. audit AFTER delete
+  await audit.shopDeleted({
+    actorId: currentUserId,
+    shop
+  });
+
+  await audit.userDeleted({
+    actorId: currentUserId,
+    user: {
+      id: ownerId,
+      email: null // çünkü user silindi
+    }
+  });
 
   return true;
 };
 
-// COMPLEX LOGIC
-exports.createMarketWithUser = async (data) => {
-  const {
-    ownerEmail,
-    ownerPassword,
-    ownerFirstName,
-    ownerLastName,
-    name,
-    address,
-    phone
-  } = data;
+exports.updateShopStatus = async (id, status) => {
 
-  const hashedPassword = await bcrypt.hash(ownerPassword, 10);
+  const allowed = ['pending', 'active', 'rejected'];
+  if (!allowed.includes(status)) {
+    throw new Error('Invalid status');
+  }
 
-  const user = await User.create({
-    email: ownerEmail,
-    password: hashedPassword,
-    firstName: ownerFirstName,
-    lastName: ownerLastName,
-    role: 'market'
-  });
+  const shop = await Shop.findByPk(id);
+  if (!shop) throw new Error('Shop not found');
 
-  const shop = await Shop.create({
-    name,
-    address,
-    phone,
-    ownerId: user.id
-  });
+  shop.status = status;
+  await shop.save();
 
-  return { user, shop };
+  // 🔥 USER ROLE SYNC
+  const user = await User.findByPk(shop.ownerId);
+
+  if (user) {
+    if (status === 'active') {
+      user.role = 'market';
+    } else {
+      user.role = 'user'; // rejected/pending
+    }
+
+    await user.save();
+  }
+
+  return shop;
 };
