@@ -148,69 +148,116 @@ const ShopPackagesScreen = () => {
     Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket silindi' });
   };
 
-  const handleSubmit = async () => {
+ const handleSubmit = async () => {
+  console.log("🚀 START");
+
+  try {
+    console.log("🧪 BUILDING DATA...");
+
+    // 1. PRODUCTS CLEAN
     const cleanedProducts = selectedProducts.map(p => {
       const productInfo = allProducts.find(prod => prod.id === p.id);
+
       return {
         id: p.id,
-        quantity: p.quantity && parseInt(p.quantity) > 0 ? parseInt(p.quantity) : 1,
+        quantity: p.quantity && parseInt(p.quantity) > 0
+          ? parseInt(p.quantity)
+          : 1,
         price: productInfo ? parseFloat(productInfo.price) : 0,
       };
     });
 
+    // 2. TOTAL PRICE (optional validation için)
     const totalProductsPrice = cleanedProducts.reduce((sum, p) => {
       const productInfo = allProducts.find(prod => prod.id === p.id);
       const price = productInfo ? parseFloat(productInfo.price) : 0;
       return sum + price * p.quantity;
     }, 0);
 
+    // 3. VALIDATION
     if (autoPriceDropEnabled) {
       const minLimit = parseFloat(minPriceDropLimit);
       const packagePrice = formData.price ? parseFloat(formData.price) : null;
 
       if (!minPriceDropLimit || isNaN(minLimit) || minLimit <= 0) {
-        setModalError('Minimum fiyat 0\'dan büyük olmalı!');
+        setModalError("Minimum fiyat 0'dan büyük olmalı!");
         return;
       }
+
       if (packagePrice !== null && minLimit > packagePrice) {
-        setModalError('Minimum fiyat, paket fiyatından fazla olamaz!');
+        setModalError("Minimum fiyat, paket fiyatından fazla olamaz!");
         return;
       }
+
       if (packagePrice === null && minLimit > totalProductsPrice) {
-        setModalError('Minimum fiyat, ürünlerin toplam fiyatından fazla olamaz!');
+        setModalError("Minimum fiyat, ürünlerin toplam fiyatından fazla olamaz!");
         return;
       }
     }
 
-    try {
-      const payload = {
-        name: formData.name,
-        price: formData.price ? parseFloat(formData.price) : null,
-        description: formData.description,
-        quantity: formData.quantity ? parseInt(formData.quantity) : 1,
-        deliveryStart: deliveryStart.toISOString(),
-        deliveryEnd: deliveryEnd.toISOString(),
-        products: cleanedProducts,
-        autoPriceDropEnabled,
-        priceDropAmount: autoPriceDropEnabled ? parseFloat(priceDropAmount) : null,
-        priceDropInterval: autoPriceDropEnabled ? parseInt(priceDropInterval) : null,
-        minPriceDropLimit: autoPriceDropEnabled ? parseFloat(minPriceDropLimit) : null,
-      };
+    // 4. PAYLOAD
+    const payload = {
+      name: formData.name,
+      price: formData.price ? parseFloat(formData.price) : null,
+      description: formData.description,
+      quantity: formData.quantity ? parseInt(formData.quantity) : 1,
+      deliveryStart: deliveryStart.toISOString(),
+      deliveryEnd: deliveryEnd.toISOString(),
+      products: cleanedProducts,
+      autoPriceDropEnabled,
+      priceDropAmount: autoPriceDropEnabled
+        ? parseFloat(priceDropAmount)
+        : null,
+      priceDropInterval: autoPriceDropEnabled
+        ? parseInt(priceDropInterval)
+        : null,
+      minPriceDropLimit: autoPriceDropEnabled
+        ? parseFloat(minPriceDropLimit)
+        : null,
+    };
 
-      if (selectedPackage) {
-        await updateShopPackage(selectedPackage.id, payload);
-        Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Paket başarıyla güncellendi' });
-      } else {
-        await addShopPackage(payload);
-        Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Paket başarıyla eklendi' });
-      }
+    console.log("📦 PAYLOAD READY:", payload);
 
-      closeModal();
-      loadPackages();
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+    // 5. API CALL
+    console.log("📡 CALLING API...");
+
+    if (selectedPackage) {
+      const res = await updateShopPackage(selectedPackage.id, payload);
+      console.log("✅ UPDATED:", res);
+
+      Toast.show({
+        type: "success",
+        text1: "Güncellendi",
+        text2: "Paket başarıyla güncellendi",
+      });
+    } else {
+      const res = await addShopPackage(payload);
+      console.log("✅ CREATED:", res);
+
+      Toast.show({
+        type: "success",
+        text1: "Eklendi",
+        text2: "Paket başarıyla eklendi",
+      });
     }
-  };
+
+    // 6. CLEANUP
+    closeModal();
+    loadPackages();
+
+  } catch (err) {
+    console.log("❌ ERROR:", err);
+    console.log("❌ RESPONSE:", err?.response?.data);
+
+    Toast.show({
+      type: "error",
+      text1: "Hata",
+      text2: err?.response?.data?.error || err.toString(),
+    });
+  }
+
+  console.log("🏁 END");
+};
 
   const renderPackage = ({ item }) => (
     <View style={styles.card}>

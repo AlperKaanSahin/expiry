@@ -1,6 +1,6 @@
 const { Notification } = require('../models');
 
-exports.createNotification = async ({ userId, title, message, type }) => {
+exports.createNotification = async ({ userId, title, message, type, targetId = null, orderId = null }) => {
   if (!userId || !title) {
     throw new Error('Missing required fields');
   }
@@ -10,6 +10,8 @@ exports.createNotification = async ({ userId, title, message, type }) => {
     title,
     message,
     type,
+    targetId,
+    orderId,
     isRead: false
   });
 };

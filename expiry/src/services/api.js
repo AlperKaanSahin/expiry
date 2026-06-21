@@ -57,13 +57,9 @@ export const applyForShop = async (data) => {
   return response.data;
 };
 
-export const rateShop = async (shopId, rating) => {
-  try {
-    const response = await api.post('/shops/rate', { shopId, rating });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Puan gönderilemedi';
-  }
+export const rateShop = async (shopId, rating, orderId) => {
+  const response = await api.post('/shops/rate', { shopId, rating, orderId });
+  return response.data;
 };
 
 export const canRateShop = async (shopId) => {

@@ -4,262 +4,230 @@ import {
   Text,
   FlatList,
   ActivityIndicator,
-  Alert,
-  SafeAreaView,
   TouchableOpacity,
-  StyleSheet
+  StyleSheet,
+  StatusBar,
+  RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import Toast from 'react-native-toast-message';
+import { fetchMyOrders, changeOrderStatus } from '../services/api';
+import { COLORS } from '../theme/colors';
 
-import { api } from '../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchMyOrders } from '../services/api';
+const STATUS_CONFIG = {
+  pending:   { label: 'Sipariş Alındı',     color: '#6B7280' },
+  paid:      { label: 'Ödeme Alındı',       color: '#D97706' },
+  delivered: { label: 'Shop Teslim Etti',   color: '#2563EB' },
+  confirmed: { label: 'Onaylandı',          color: '#7C3AED' },
+  released:  { label: 'Tamamlandı',         color: '#16A34A' },
+};
+
+const TABS = [
+  { key: 'active', label: 'Aktif' },
+  { key: 'past',   label: 'Geçmiş' },
+];
 
 const UserOrdersScreen = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState('active');
 
-const loadOrders = async () => {
-  try {
-    setLoading(true);
-
-    const data = await fetchMyOrders();
-
-    setOrders(data || []);
-
-  } catch (error) {
-    Alert.alert('Hata', error.toString());
-  } finally {
-    setLoading(false);
-  }
-};
-
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-const safeOrders = Array.isArray(orders) ? orders : [];
-
-const activeOrders = safeOrders.filter(o =>
-  ['pending', 'paid', 'delivered'].includes(o.status)
-);
-
-const pastOrders = safeOrders.filter(o =>
-  ['confirmed', 'released'].includes(o.status)
-);
-
-  const handleUserConfirm = async (orderId) => {
+  const loadOrders = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     try {
-      await api.post(`/orders/${orderId}/status`, {
-        status: 'confirmed'
-      });
+      const data = await fetchMyOrders();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-      Alert.alert('Başarılı', 'Sipariş onaylandı');
+  useEffect(() => { loadOrders(); }, []);
+
+  const handleConfirm = async (orderId) => {
+    try {
+      await changeOrderStatus(orderId, 'confirmed');
+      Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Siparişiniz teslim alındı olarak işaretlendi' });
       loadOrders();
-
-    } catch (error) {
-      Alert.alert('Hata', error.toString());
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return '#9E9E9E';
-      case 'paid': return '#FFA000';
-      case 'delivered': return '#2196F3';
-      case 'confirmed': return '#673AB7';
-      case 'released': return '#4CAF50';
-      default: return '#9E9E9E';
-    }
+  const activeOrders = orders.filter(o => ['pending', 'paid', 'delivered'].includes(o.status));
+  const pastOrders = orders.filter(o => ['confirmed', 'released'].includes(o.status));
+  const filteredOrders = tab === 'active' ? activeOrders : pastOrders;
+
+  const renderOrder = ({ item }) => {
+    const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.textMuted };
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.orderId}>Sipariş #{item.id}</Text>
+          <View style={[styles.badge, { backgroundColor: status.color + '18' }]}>
+            <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.price}>{item.totalPrice} ₺</Text>
+
+        {item.status === 'delivered' && (
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={() => handleConfirm(item.id)}
+            activeOpacity={0.8}
+          >
+            <Icon name="check-circle" size={18} color={COLORS.white} />
+            <Text style={styles.confirmText}>Teslim Aldım</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.status === 'pending' && (
+          <Text style={styles.infoText}>Ödeme bekleniyor</Text>
+        )}
+
+        {item.status === 'paid' && (
+          <Text style={styles.infoText}>Siparişiniz hazırlanıyor</Text>
+        )}
+      </View>
+    );
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'pending': return 'Sipariş Alındı';
-      case 'paid': return 'Ödeme Alındı';
-      case 'delivered': return 'Shop Teslim Etti';
-      case 'confirmed': return 'Onaylandı';
-      case 'released': return 'Tamamlandı';
-      default: return status;
-    }
-  };
-  
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-  const renderOrderItem = ({ item }) => (
-    <View style={styles.orderItem}>
-
-      <View style={styles.orderHeader}>
-        <Text style={styles.orderId}>Sipariş #{item.id}</Text>
-
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: getStatusColor(item.status) }
-        ]}>
-          <Text style={styles.statusText}>
-            {getStatusText(item.status)}
-          </Text>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.dot} />
         </View>
       </View>
 
-      <Text style={styles.priceText}>
-        {item.totalPrice} ₺
-      </Text>
+      {/* HERO */}
+      <View style={styles.hero}>
+        <Text style={styles.heroLabel}>Hesabım</Text>
+        <Text style={styles.heroName}>Siparişlerim</Text>
+      </View>
 
-      {/* USER ACTION */}
-      {item.status === 'delivered' && !item.isReceivedByUser && (
-        <TouchableOpacity
-          style={[styles.button, styles.deliveredButton]}
-          onPress={() => handleUserConfirm(item.id)}
-        >
-          <Text style={styles.buttonText}>Teslim Aldım</Text>
-        </TouchableOpacity>
+      {/* TABS */}
+      <View style={styles.tabs}>
+        {TABS.map(t => (
+          <TouchableOpacity
+            key={t.key}
+            style={[styles.tabItem, tab === t.key && styles.tabItemActive]}
+            onPress={() => setTab(t.key)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+      ) : (
+        <FlatList
+          data={filteredOrders}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderOrder}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadOrders(true)}
+              colors={[COLORS.primary]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Icon name="receipt-long" size={48} color={COLORS.border} />
+              <Text style={styles.emptyText}>
+                {tab === 'active' ? 'Aktif sipariş yok' : 'Geçmiş sipariş yok'}
+              </Text>
+            </View>
+          }
+        />
       )}
-
-    </View>
+    </SafeAreaView>
   );
-  const [tab, setTab] = useState('active');
-const filteredOrders =
-  tab === 'active' ? activeOrders : pastOrders;
-
-return (
-  <SafeAreaView style={styles.container}>
-
-    {/* TAB BAR */}
-    <View style={styles.tabContainer}>
-      <TouchableOpacity onPress={() => setTab('active')}>
-        <Text style={[
-          styles.tab,
-          tab === 'active' && styles.activeTab
-        ]}>
-          Aktif
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => setTab('past')}>
-        <Text style={[
-          styles.tab,
-          tab === 'past' && styles.activeTab
-        ]}>
-          Geçmiş
-        </Text>
-      </TouchableOpacity>
-    </View>
-
-    {/* LIST */}
-    {loading ? (
-      <ActivityIndicator />
-    ) : (
-      <FlatList
-        data={filteredOrders}
-        keyExtractor={i => i.id.toString()}
-        renderItem={renderOrderItem}
-        contentContainerStyle={styles.listContent}
-      />
-    )}
-
-  </SafeAreaView>
-);
 };
 
-
 const styles = StyleSheet.create({
-  tabContainer: {
-  flexDirection: 'row',
-  justifyContent: 'space-around',
-  marginBottom: 15,
-},
-tab: {
-  fontSize: 16,
-  color: '#888',
-  padding: 8,
-},
+  safe: { flex: 1, backgroundColor: COLORS.bg },
 
-activeTab: {
-  color: '#6200EE',
-  fontWeight: 'bold',
-  borderBottomWidth: 2,
-  borderBottomColor: '#6200EE',
-},  
-  container: {
-        flex: 1,
-        backgroundColor: '#F5F5F5',
-        padding: 16,
-    },
-    title: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        marginBottom: 20,
-        color: '#333',
-    },
-    loader: {
-        marginTop: 20,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    emptyText: {
-        fontSize: 16,
-        color: '#888',
-    },
-    button: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 6,
-        marginLeft: 8,
-    },
-    deliveredButton: {
-        backgroundColor: '#4CAF50',
-    },
-    buttonText: {
-        color: '#FFF',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    listContent: {
-        paddingBottom: 20,
-    },
-    orderItem: {
-        backgroundColor: '#FFF',
-        borderRadius: 10,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    orderHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    orderId: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-    },
-    statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    statusText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    orderFooter: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-    },
-    priceText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#6200EE',
-    },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  hero: { paddingHorizontal: 20, marginBottom: 16 },
+  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
+  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+
+  tabs: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 8 },
+  tabItem: {
+    flex: 1, paddingVertical: 10,
+    borderRadius: 10, alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  tabItemActive: { backgroundColor: COLORS.primaryLight, borderColor: COLORS.primary },
+  tabText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
+  tabTextActive: { color: COLORS.primary },
+
+  loader: { marginTop: 40 },
+  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
+
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderId: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  price: { fontSize: 18, fontWeight: '800', color: COLORS.primary },
+  infoText: { fontSize: 13, color: COLORS.textMuted },
+
+  confirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  confirmText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
 });
 
 export default UserOrdersScreen;

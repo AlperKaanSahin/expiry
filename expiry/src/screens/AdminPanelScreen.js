@@ -1,157 +1,134 @@
-
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  StatusBar,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
+import { COLORS } from '../theme/colors';
+
+const ADMIN_FEATURES = [
+  { title: 'Kullanıcı Yönetimi', icon: 'people',              screen: 'UserListScreen' },
+  { title: 'Shop Yönetimi',      icon: 'store',               screen: 'ShopListScreen' },
+  { title: 'Raporlar',           icon: 'analytics',           screen: 'AuditLogsScreen' },
+  { title: 'Sistem Ayarları',    icon: 'settings',            screen: 'SystemSettingsScreen' },
+];
 
 export default function AdminPanelScreen({ navigation }) {
-
   const { logout } = useAuth();
 
-  const adminFeatures = [
-    {
-      title: 'Kullanıcı Yönetimi',
-      icon: 'people',
-      screen: 'UserListScreen',
-      color: '#6200EE'
-    },
-    {
-      title: 'Shop Yönetimi',
-      icon: 'store',
-      screen: 'ShopListScreen',
-      color: '#03DAC6'
-    },
-    {
-      title: 'Ürün Onayları',
-      icon: 'check-circle',
-      screen: 'ProductApprovalScreen',
-      color: '#FF9800'
-    },
-    {
-      title: 'Raporlar',
-      icon: 'analytics',
-      screen: 'AuditLogsScreen',
-      color: '#FF5252'
-    },
-    {
-      title: 'Sistem Ayarları',
-      icon: 'settings',
-      screen: 'SystemSettingsScreen',
-      color: '#9C27B0'
-    },
-  ];
-
-  const handleLogout = async () => {
-    await logout();
-  };
-
   return (
-    <SafeAreaView>
-      <ScrollView contentContainerStyle={styles.container}>
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Admin Paneli</Text>
-          <Text style={styles.subtitle}>Yönetim işlemlerinizi gerçekleştirin</Text>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.dot} />
+        </View>
+      </View>
 
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-          >
-            <Icon name="logout" size={24} color="#FFF" />
-            <Text style={styles.logoutText}>Çıkış</Text>
-          </TouchableOpacity>
-
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HERO */}
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel}>Yönetim Paneli</Text>
+          <Text style={styles.heroName}>Admin Panel</Text>
+          <Text style={styles.heroSub}>Ne yapmak istersiniz?</Text>
         </View>
 
-        <View style={styles.gridContainer}>
-          {adminFeatures.map((feature, index) => (
+        {/* FEATURES */}
+        <View style={styles.grid}>
+          {ADMIN_FEATURES.map((feature) => (
             <TouchableOpacity
-              key={index}
-              style={[styles.featureCard, { backgroundColor: feature.color }]}
+              key={feature.screen}
+              style={styles.card}
               onPress={() => navigation.navigate(feature.screen)}
+              activeOpacity={0.8}
             >
-              <Icon name={feature.icon} size={32} color="#FFF" style={styles.icon} />
-              <Text style={styles.featureText}>{feature.title}</Text>
+              <View style={styles.cardIcon}>
+                <Icon name={feature.icon} size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.cardTitle}>{feature.title}</Text>
+              <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
 
+        {/* LOGOUT */}
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={logout}
+          activeOpacity={0.8}
+        >
+          <Icon name="logout" size={18} color={COLORS.red} />
+          <Text style={styles.logoutText}>Çıkış Yap</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: '#F5F5F5',
-    padding: 16,
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
   header: {
-    marginBottom: 24,
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-    logoutButton: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF5252',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    elevation: 2,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
   },
-    logoutText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    marginLeft: 6,
-    fontSize: 14,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
-  gridContainer: {
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  body: { paddingHorizontal: 20, paddingBottom: 40 },
+
+  hero: { marginTop: 8, marginBottom: 28 },
+  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 4 },
+  heroName: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5, marginBottom: 6 },
+  heroSub: { fontSize: 14, color: COLORS.textMuted },
+
+  grid: { gap: 10, marginBottom: 32 },
+  card: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 14,
   },
-  featureCard: {
-    width: '48%',
-    aspectRatio: 1,
+  cardIcon: {
+    width: 46, height: 46,
     borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  icon: {
-    marginBottom: 12,
+  cardTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
+
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: COLORS.redLight,
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
-  featureText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
+  logoutText: { fontSize: 15, fontWeight: '600', color: COLORS.red },
 });

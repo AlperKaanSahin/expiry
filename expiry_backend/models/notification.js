@@ -10,24 +10,20 @@ module.exports = (sequelize, DataTypes) => {
     }
   }
 
-  Notification.init({
-    userId: {
-      type: DataTypes.INTEGER,
-      allowNull: false
-    },
-    type: DataTypes.STRING,
-    title: DataTypes.STRING,
-    message: DataTypes.STRING,
-    isRead: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    }
-  }, {
-    sequelize,
-    modelName: 'Notification',
-    tableName: 'notifications',
-    timestamps: true
-  });
+Notification.init({
+  userId: { type: DataTypes.INTEGER, allowNull: false },
+  type: DataTypes.STRING,
+  title: DataTypes.STRING,
+  message: DataTypes.STRING,
+  isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
+  targetId: { type: DataTypes.INTEGER, allowNull: true },
+  orderId: { type: DataTypes.INTEGER, allowNull: true },
+}, {
+  sequelize,
+  modelName: 'Notification',
+  tableName: 'notifications',
+  timestamps: true
+});
 
   return Notification;
 };

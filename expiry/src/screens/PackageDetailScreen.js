@@ -3,232 +3,218 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
-  Dimensions,
-  Alert
+  StatusBar,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { fetchPackageDetail, createOrder } from '../services/api';
+import { COLORS } from '../theme/colors';
 
-const { width } = Dimensions.get('window');
+const formatDelivery = (start, end) => {
+  if (!start || !end) return 'Teslimat zamanı belirtilmemiş';
+  const s = new Date(start);
+  const e = new Date(end);
+  const date = s.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+  const startTime = s.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const endTime = e.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  return `${date} ${startTime} - ${endTime}`;
+};
 
 const PackageDetailScreen = ({ route, navigation }) => {
   const { packageId } = route.params;
   const [packageData, setPackageData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [ordering, setOrdering] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
-
   useEffect(() => {
-    const loadPackage = async () => {
+    const load = async () => {
       try {
         const data = await fetchPackageDetail(packageId);
-        console.log('PAKET DETAY:', data);
         setPackageData(data);
-      } catch (error) {
-        console.error('Kutu detay yüklenemedi:', error);
-        Alert.alert('Hata', 'Paket bilgileri yüklenirken bir sorun oluştu');
+      } catch {
+        Alert.alert('Hata', 'Paket bilgileri yüklenemedi');
       } finally {
         setLoading(false);
       }
     };
-    loadPackage();
+    load();
   }, [packageId]);
 
   const handleOrder = async () => {
     try {
+      setOrdering(true);
       const order = await createOrder({
         shopId: packageData.shopId,
-        packages: [
-          { packageId: packageData.id, quantity, price: packageData.price }
-        ],
-        totalPrice: packageData.price * quantity
+        packages: [{ packageId: packageData.id, quantity, price: packageData.price }],
+        totalPrice: packageData.price * quantity,
       });
-      // Sipariş sonrası paket detayını güncelle
-      const updatedData = await fetchPackageDetail(packageData.id);
-      setPackageData(updatedData);
-
+      const updated = await fetchPackageDetail(packageData.id);
+      setPackageData(updated);
       navigation.navigate('PaymentScreen', { orderId: order.id });
-    } catch (error) {
-      Alert.alert('Sipariş Hatası', 'Sipariş oluşturulurken bir hata oluştu');
+    } catch {
+      Alert.alert('Hata', 'Sipariş oluşturulurken bir sorun oluştu');
+    } finally {
+      setOrdering(false);
     }
   };
+
   const maxQuantity = packageData?.quantity || 1;
-  const handleIncrease = () => {
-    if (quantity < maxQuantity) setQuantity(quantity + 1);
-  };
-
-  const handleDecrease = () => {
-    setQuantity(Math.max(1, quantity - 1));
-  };
-
-  const totalProductPrice = packageData?.products?.reduce(
-    (sum, product) => sum + (product.price * product.quantity), 0
-  ) || 0;
-
-  const discountPercentage = packageData?.originalPrice
-    ? Math.round(((packageData.originalPrice - packageData.price) / packageData.originalPrice) * 100)
-    : 0;
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B00" />
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
+      </SafeAreaView>
     );
   }
 
   if (!packageData) {
     return (
-      <View style={styles.emptyContainer}>
-        <Icon name="error-outline" size={50} color="#888" />
-        <Text style={styles.emptyText}>Paket bulunamadı</Text>
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Icon name="error-outline" size={48} color={COLORS.border} />
+          <Text style={styles.emptyText}>Paket bulunamadı</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
           style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
         >
-          <Icon name="arrow-back" size={24} color="#333" />
+          <Icon name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.favoriteButton}>
-          <Icon name="favorite-border" size={24} color="#FF6B00" />
-        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.dot} />
+        </View>
+        <View style={{ width: 36 }} />
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
-        {/* Ürün Resmi */}
-        <Image
-          source={packageData.imageUrl ? { uri: packageData.imageUrl } : require('../assets/placeholder_box.jpg')}
-          style={styles.image}
-          resizeMode="cover"
-        />
-
-        {/* Ürün Detayları */}
-        <View style={styles.detailCard}>
-          <Text style={styles.name}>{packageData.name}</Text>
-          <Text style={styles.description}>{packageData.description}</Text>
-
-          {/* Fiyat Bilgileri */}
-          <View style={styles.priceRow}>
-            <View style={styles.priceContainer}>
-              <Text style={styles.price}>{packageData.price} ₺</Text>
-              {packageData.originalPrice && (
-                <Text style={styles.originalPrice}>{packageData.originalPrice} ₺</Text>
-              )}
-            </View>
-
-            {discountPercentage > 0 && (
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountText}>%{discountPercentage}</Text>
-              </View>
-            )}
-          </View>
-          {/* Kalan kutu sayısı */}
-          <Text style={{ fontSize: 15, color: '#4CAF50', fontWeight: 'bold', marginBottom: 8 }}>
-            Kalan kutu: {packageData.quantity ?? '-'}
+        {/* HERO */}
+        <View style={styles.hero}>
+          <Text style={styles.packageName}>{packageData.name}</Text>
+          <Text style={styles.packagePrice}>
+            {packageData.price ?? packageData.totalPrice} ₺
           </Text>
+          {packageData.description ? (
+            <Text style={styles.packageDesc}>{packageData.description}</Text>
+          ) : null}
+        </View>
 
-          {/* Teslimat Bilgisi */}
-          <View style={styles.deliveryCard}>
-            <View style={styles.cardHeader}>
-              <Icon name="hourglass-empty" size={20} color="#4CAF50" />
-              <Text style={styles.cardTitle}>Teslimat Bilgisi</Text>
-            </View>
-            <View style={styles.timeSlot}>
-              <Icon name="schedule" size={16} color="#FF9800" />
-              <Text style={styles.timeRange}>
-                {packageData.deliveryStart ? (
-                  <>
-                    {new Date(packageData.deliveryStart).toLocaleString('tr-TR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                    {' - '}
-                    {new Date(packageData.deliveryEnd).toLocaleString('tr-TR', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </>
-                ) : (
-                  'Teslimat zamanı belirtilmemiş'
-                )}
+        {/* INFO CARDS */}
+        <View style={styles.infoGrid}>
+          <View style={styles.infoCard}>
+            <Icon name="inventory-2" size={20} color={COLORS.primary} />
+            <Text style={styles.infoLabel}>Kalan Kutu</Text>
+            <Text style={styles.infoValue}>{packageData.quantity ?? '-'}</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Icon name="schedule" size={20} color={COLORS.primary} />
+            <Text style={styles.infoLabel}>Teslimat</Text>
+            <Text style={styles.infoValue} numberOfLines={2}>
+              {formatDelivery(packageData.deliveryStart, packageData.deliveryEnd)}
+            </Text>
+          </View>
+        </View>
+
+        {/* PRODUCTS */}
+        {packageData.products?.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Kutu İçeriği</Text>
+            {packageData.products.map((product, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.productRow,
+                  index < packageData.products.length - 1 && styles.productRowBorder
+                ]}
+              >
+                <View style={styles.productLeft}>
+                  <Text style={styles.productName}>{product.name}</Text>
+                  {product.expiryDate && (
+                    <View style={styles.expiryRow}>
+                      <Icon name="event" size={13} color={COLORS.textMuted} />
+                      <Text style={styles.expiryText}>
+                        SKT: {new Date(product.expiryDate).toLocaleDateString('tr-TR')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.productRight}>
+                  <Text style={styles.productQty}>{product.quantity} adet</Text>
+                  <Text style={styles.productPrice}>{product.price} ₺</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* AUTO PRICE DROP */}
+        {packageData.autoPriceDropEnabled && (
+          <View style={styles.section}>
+            <View style={styles.priceDropBadge}>
+              <Icon name="trending-down" size={16} color="#D97706" />
+              <Text style={styles.priceDropText}>
+                Her {packageData.priceDropInterval} saatte {packageData.priceDropAmount}₺ düşüyor
+                · Min: {packageData.minPriceDropLimit}₺
               </Text>
             </View>
           </View>
-        </View>
-
-        {/* Ürün İçeriği */}
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionTitle}>Kutu İçeriği</Text>
-
-          {packageData.products?.map((product, index) => (
-            <View key={index} style={styles.productItem}>
-              <Image
-                source={product.imageUrl ? { uri: product.imageUrl } : require('../assets/placeholder.png')}
-                style={styles.productImage}
-              />
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <View style={styles.productMeta}>
-                  <Text style={styles.productQuantity}>{product.quantity} adet</Text>
-                  <Text style={styles.productPrice}>{product.price} ₺</Text>
-                </View>
-                {product.expiryDate && (
-                  <View style={styles.expiryRow}>
-                    <Icon name="event" size={16} color="#666" />
-                    <Text style={styles.productExpiry}>
-                      SKT: {new Date(product.expiryDate).toLocaleDateString('tr-TR')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          ))}
-        </View>
+        )}
       </ScrollView>
 
-      {/* Sepet Butonu */}
+      {/* FOOTER */}
       <View style={styles.footer}>
-        <View style={styles.quantityContainer}>
+        <View style={styles.quantityBox}>
           <TouchableOpacity
-            onPress={handleDecrease}
-            style={styles.quantityButton}
+            onPress={() => setQuantity(q => Math.max(1, q - 1))}
+            style={styles.qtyBtn}
           >
-            <Icon name="remove" size={24} color="#FF6B00" />
+            <Icon name="remove" size={20} color={COLORS.primary} />
           </TouchableOpacity>
-          <Text style={styles.quantityText}>{quantity}</Text>
+          <Text style={styles.qtyText}>{quantity}</Text>
           <TouchableOpacity
-            onPress={handleIncrease}
-            style={styles.quantityButton}
+            onPress={() => setQuantity(q => Math.min(maxQuantity, q + 1))}
+            style={styles.qtyBtn}
           >
-            <Icon name="add" size={24} color="#FF6B00" />
+            <Icon name="add" size={20} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
           style={styles.orderButton}
           onPress={handleOrder}
+          disabled={ordering}
+          activeOpacity={0.8}
         >
-          <Text style={styles.orderButtonText}>Sipariş Ver</Text>
-          <Text style={styles.orderTotal}>
-            {(packageData.price * quantity).toFixed(2)} ₺
-          </Text>
+          {ordering ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <>
+              <Text style={styles.orderButtonText}>Sipariş Ver</Text>
+              <Text style={styles.orderTotal}>
+                {(packageData.price * quantity).toFixed(2)} ₺
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -236,264 +222,120 @@ const PackageDetailScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F8F8',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    color: '#888',
-    marginTop: 16,
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#FFF',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
   },
   backButton: {
-    padding: 5,
-  },
-  favoriteButton: {
-    padding: 5,
-  },
-  scrollContent: {
-    paddingBottom: 90,
-  },
-  image: {
-    width: '100%',
-    height: width * 0.6,
-  },
-  detailCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 20,
-    margin: 15,
-    marginTop: -30,
-    elevation: 3,
-  },
-  name: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  description: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 15,
-    lineHeight: 22,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  price: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FF6B00',
-  },
-  originalPrice: {
-    fontSize: 18,
-    color: '#999',
-    textDecorationLine: 'line-through',
-    marginLeft: 10,
-  },
-  discountBadge: {
-    backgroundColor: '#FF6B00',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  discountText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  totalValueText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
-    fontStyle: 'italic',
-  },
-  deliveryInfo: {
-    marginTop: 15,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 10,
-    flex: 1,
-  },
-  contentSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 20,
-    marginHorizontal: 15,
-    marginBottom: 15,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-  },
-  productItem: {
-    flexDirection: 'row',
-    marginBottom: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-  },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 15,
-  },
-  productInfo: {
-    flex: 1,
+    width: 36, height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     justifyContent: 'center',
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 5,
-  },
-  productMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 5,
-  },
-  productQuantity: {
-    fontSize: 14,
-    color: '#666',
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FF6B00',
-  },
-  expiryRow: {
-    flexDirection: 'row',
     alignItems: 'center',
   },
-  productExpiry: {
-    fontSize: 13,
-    color: '#666',
-    marginLeft: 5,
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  body: { paddingHorizontal: 20, paddingBottom: 100 },
+
+  hero: { marginBottom: 20 },
+  packageName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5, marginBottom: 6 },
+  packagePrice: { fontSize: 28, fontWeight: '800', color: COLORS.primary, marginBottom: 8 },
+  packageDesc: { fontSize: 14, color: COLORS.textMuted, lineHeight: 20 },
+
+  infoGrid: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  infoCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 4,
   },
+  infoLabel: { fontSize: 12, color: COLORS.textMuted, fontWeight: '500' },
+  infoValue: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+
+  section: { marginBottom: 20 },
+  sectionTitle: {
+    fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 12,
+  },
+  productRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    borderRadius: 0,
+  },
+  productRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  productLeft: { flex: 1 },
+  productName: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 4 },
+  expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  expiryText: { fontSize: 12, color: COLORS.textMuted },
+  productRight: { alignItems: 'flex-end', gap: 2 },
+  productQty: { fontSize: 12, color: COLORS.textMuted },
+  productPrice: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+
+  priceDropBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  priceDropText: { fontSize: 13, color: '#D97706', fontWeight: '500', flex: 1 },
+
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
+
+  // FOOTER
   footer: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 0, left: 0, right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    padding: 15,
+    gap: 12,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#EEE',
-    elevation: 5,
+    borderTopColor: COLORS.border,
   },
-  quantityContainer: {
+  quantityBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF8E1',
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 4,
   },
-  quantityButton: {
-    padding: 8,
-  },
-  quantityText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginHorizontal: 10,
-    minWidth: 20,
-    textAlign: 'center',
-  },
+  qtyBtn: { padding: 10 },
+  qtyText: { fontSize: 16, fontWeight: '700', color: COLORS.text, minWidth: 24, textAlign: 'center' },
   orderButton: {
     flex: 1,
-    backgroundColor: '#FF6B00',
-    borderRadius: 8,
-    padding: 15,
-    marginLeft: 15,
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
-  orderButtonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  orderTotal: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  deliveryCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 10,
-    padding: 12,
-    marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cardTitle: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  timeSlot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  timeRange: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#555',
-  },
+  orderButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 15 },
+  orderTotal: { color: COLORS.white, fontWeight: '800', fontSize: 15 },
 });
 
 export default PackageDetailScreen;

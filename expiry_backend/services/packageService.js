@@ -22,11 +22,22 @@ exports.getPackageById = async (id) => {
 };
 
 exports.getShopPackages = async (shopId) => {
-  return await Package.findAll({
+  const packages = await Package.findAll({
     where: { shopId },
     include: [{
       model: PackageProduct,
       include: [{ model: ShopProduct }]
     }]
   });
+
+  const result = [];
+  for (const pkg of packages) {
+    const remaining = await PackageUnit.count({
+      where: { packageId: pkg.id, isSold: false }
+    });
+    if (remaining > 0) {
+      result.push({ ...pkg.toJSON(), quantity: remaining });
+    }
+  }
+  return result;
 };

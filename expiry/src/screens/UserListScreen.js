@@ -1,371 +1,296 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, ActivityIndicator, Alert, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
-import { fetchAllUsers, deleteUser } from '../services/api';
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
+  Alert,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
-import { TextInput } from 'react-native-gesture-handler';
+import { fetchAllUsers, deleteUser } from '../services/api';
+import { COLORS } from '../theme/colors';
+
+const ROLE_CONFIG = {
+  admin:  { label: 'Admin',  color: '#D97706', bg: '#FEF3C7' },
+  market: { label: 'Market', color: '#2563EB', bg: '#EFF6FF' },
+  user:   { label: 'Üye',    color: '#16A34A', bg: '#F0FDF4' },
+};
+
+const LIMIT = 10;
+
 export default function UserListScreen({ navigation }) {
-    const [users, setUsers] = useState([]);
-    const [page, setPage] = useState(1);
-    const [limit] = useState(10);
-    const [total, setTotal] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const roleStyles = {
-  admin: styles.adminBadge,
-  user: styles.userBadge,
-  market: styles.marketBadge,
-};
-const [search, setSearch] = useState('');
-const [filteredUsers, setFilteredUsers] = useState([]); // Bunu da ekle
+  const [users, setUsers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
-const loadUsers = async (pageNumber = 1) => {
+  const loadUsers = async (pageNumber = 1) => {
     try {
-        setLoading(true);
-        const data = await fetchAllUsers(pageNumber, limit);
-        setUsers(data.users);
-        setFilteredUsers(data.users); // BURASI ÖNEMLİ - filtreli listeyi de güncelle
-        setTotal(data.total);
-        setPage(data.page);
-    } catch (error) {
-        Alert.alert('Hata', error.toString());
+      setLoading(true);
+      const data = await fetchAllUsers(pageNumber, LIMIT);
+      setUsers(data.users);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (err) {
+      Alert.alert('Hata', err.toString());
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
-useEffect(() => {
-    if (search.trim() === '') {
-        setFilteredUsers(users);
-    } else {
-        const filtered = users.filter(user => 
-            user.email.toLowerCase().includes(search.toLowerCase())
-        );
-        setFilteredUsers(filtered);
-    }
-}, [search, users]);
-
-useFocusEffect(
-    React.useCallback(() => {
-        loadUsers();
-        setSearch(''); // Sayfa her açıldığında aramayı temizle (isteğe bağlı)
+  useFocusEffect(
+    useCallback(() => {
+      loadUsers();
+      setSearch('');
     }, [])
-);
+  );
 
-    const handleDelete = async (userId) => {
-        Alert.alert(
-            'Silme Onayı',
-            'Bu kullanıcıyı silmek istediğinizden emin misiniz?',
-            [
-                { text: 'İptal', style: 'cancel' },
-                {
-                    text: 'Sil',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await deleteUser(userId);
-                            loadUsers();
-                            Alert.alert('Başarılı', 'Kullanıcı silindi');
-                        } catch (error) {
-                            Alert.alert('Hata', error.toString());
-                        }
-                    }
-                }
-            ]
-        );
-    };
+  const filteredUsers = search.trim()
+    ? users.filter(u =>
+        u.email.toLowerCase().includes(search.toLowerCase()) ||
+        `${u.firstName} ${u.lastName}`.toLowerCase().includes(search.toLowerCase())
+      )
+    : users;
 
-    const nextPage = () => {
-        const maxPage = Math.ceil(total / limit);
-        if (page < maxPage) {
-            loadUsers(page + 1);
-        }
-    };
-
-    const prevPage = () => {
-        if (page > 1) {
-            loadUsers(page - 1);
-        }
-    };
-
-    const renderItem = ({ item }) => (
-        <TouchableOpacity
-            style={styles.userItem}
-            onPress={() =>
-                navigation.navigate('UserDetailsScreen', {
-                    userId: item.id
-                })
+  const handleDelete = (userId) => {
+    Alert.alert(
+      'Kullanıcıyı Sil',
+      'Bu kullanıcıyı silmek istediğinizden emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteUser(userId);
+              loadUsers(page);
+            } catch (err) {
+              Alert.alert('Hata', err.toString());
             }
-            activeOpacity={0.7}
-        >
-            <View style={styles.userContent}>
-                <View style={styles.userHeader}>
-                    <View style={styles.userIdContainer}>
-                        <Text style={styles.userId}>#{item.id}</Text>
-                    </View>
-                    <TouchableOpacity
-                        onPress={() => handleDelete(item.id)}
-                        style={styles.deleteButton}
-                    >
-                        <Text style={styles.deleteText}>🗑️</Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.userInfoContainer}>
-                    <Text style={styles.emailLabel}>📧 Email:</Text>
-                    <Text style={styles.userEmail}>{item.email}</Text>
-                </View>
-                <View style={styles.userInfoContainer}>
-                    <Text style={styles.roleLabel}>👤 Rol:</Text>
-<View style={[
-  styles.roleBadge,
-  roleStyles[item.role] || styles.userBadge
-]}>
-  <Text style={styles.roleText}>{item.role}</Text>
-</View>
-                </View>
-            </View>
-        </TouchableOpacity>
+          }
+        }
+      ]
     );
+  };
 
-    const maxPage = Math.ceil(total / limit);
+  const maxPage = Math.ceil(total / LIMIT);
 
-return (
-    <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-            <Text style={styles.title}>👥 Kullanıcılar</Text>
-            <View style={styles.statsContainer}>
-                <Text style={styles.statsText}>Toplam: {total} kullanıcı</Text>
-            </View>
+  const renderUser = ({ item }) => {
+    const role = ROLE_CONFIG[item.role] || { label: item.role, color: COLORS.textMuted, bg: COLORS.bg };
+
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('UserDetailsScreen', { userId: item.id })}
+        activeOpacity={0.8}
+      >
+        <View style={styles.cardLeft}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {item.firstName?.charAt(0)?.toUpperCase() || '#'}
+            </Text>
+          </View>
         </View>
-        
-        {loading ? (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#6200EE" />
-                <Text style={styles.loadingText}>Yükleniyor...</Text>
+
+        <View style={styles.cardBody}>
+          <Text style={styles.userName}>{item.firstName} {item.lastName}</Text>
+          <Text style={styles.userEmail}>{item.email}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.userId}>ID: {item.id}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: role.bg }]}>
+              <Text style={[styles.roleText, { color: role.color }]}>{role.label}</Text>
             </View>
-        ) : (
-            <>
-                <TextInput
-                    placeholder="Email ile ara..."
-                    value={search}
-                    onChangeText={(text) => setSearch(text)}
-                    style={styles.searchInput}
-                    placeholderTextColor="#999"
-                />
-                <FlatList
-                    data={filteredUsers}
-                    keyExtractor={item => item.id.toString()}
-                    renderItem={renderItem}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.listContainer}
-                />
-                
-                {total > 0 && (
-                    <View style={styles.paginationContainer}>
-                        <TouchableOpacity 
-                            onPress={prevPage} 
-                            style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
-                            disabled={page === 1}
-                        >
-                            <Text style={styles.pageBtnText}>◀ Geri</Text>
-                        </TouchableOpacity>
-                        
-                        <View style={styles.pageInfo}>
-                            <Text style={styles.pageNumber}>{page}</Text>
-                            <Text style={styles.pageSeparator}>/</Text>
-                            <Text style={styles.totalPages}>{maxPage}</Text>
-                        </View>
-                        
-                        <TouchableOpacity 
-                            onPress={nextPage} 
-                            style={[styles.pageBtn, page >= maxPage && styles.pageBtnDisabled]}
-                            disabled={page >= maxPage}
-                        >
-                            <Text style={styles.pageBtnText}>İleri ▶</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => handleDelete(item.id)}
+          style={styles.deleteButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Icon name="delete" size={18} color={COLORS.red} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.dot} />
+        </View>
+      </View>
+
+      {/* HERO */}
+      <View style={styles.hero}>
+        <Text style={styles.heroLabel}>Admin Panel</Text>
+        <Text style={styles.heroName}>Kullanıcılar</Text>
+        <Text style={styles.heroSub}>Toplam {total} kullanıcı</Text>
+      </View>
+
+      {/* SEARCH */}
+      <View style={styles.searchBox}>
+        <Icon name="search" size={18} color={COLORS.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="İsim veya email ile ara..."
+          placeholderTextColor={COLORS.textMuted}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Icon name="close" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
         )}
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+      ) : (
+        <>
+          <FlatList
+            data={filteredUsers}
+            keyExtractor={item => item.id.toString()}
+            renderItem={renderUser}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Icon name="people" size={48} color={COLORS.border} />
+                <Text style={styles.emptyText}>Kullanıcı bulunamadı</Text>
+              </View>
+            }
+          />
+
+          {/* PAGINATION */}
+          {total > LIMIT && (
+            <View style={styles.pagination}>
+              <TouchableOpacity
+                style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+                onPress={() => loadUsers(page - 1)}
+                disabled={page === 1}
+              >
+                <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+              </TouchableOpacity>
+
+              <Text style={styles.pageInfo}>{page} / {maxPage}</Text>
+
+              <TouchableOpacity
+                style={[styles.pageBtn, page >= maxPage && styles.pageBtnDisabled]}
+                onPress={() => loadUsers(page + 1)}
+                disabled={page >= maxPage}
+              >
+                <Icon name="chevron-right" size={20} color={page >= maxPage ? COLORS.textMuted : COLORS.white} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
     </SafeAreaView>
-);
+  );
 }
 
 const styles = StyleSheet.create({
-    container: { 
-        flex: 1, 
-        backgroundColor: '#F8F9FA'
-    },
-    header: {
-        padding: 20,
-        backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E9ECEF',
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    title: { 
-        fontSize: 24, 
-        fontWeight: '700',
-        color: '#212529',
-    },
-    searchInput: {
-    backgroundColor: '#FFF',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  hero: { paddingHorizontal: 20, marginBottom: 16 },
+  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
+  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+  heroSub: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
+
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
     borderRadius: 12,
-    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E9ECEF',
-},
-    statsContainer: {
-        backgroundColor: '#F8F9FA',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    statsText: {
-        fontSize: 12,
-        color: '#6C757D',
-        fontWeight: '500',
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 16,
-        color: '#6C757D',
-    },
-    listContainer: {
-        padding: 16,
-    },
-    userItem: { 
-        backgroundColor: '#FFFFFF', 
-        borderRadius: 12, 
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    userContent: {
-        padding: 16,
-    },
-    userHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    userIdContainer: {
-        backgroundColor: '#E7F3FF',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    userId: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#0066CC',
-    },
-    userInfoContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    emailLabel: {
-        fontSize: 14,
-        color: '#6C757D',
-        width: 45,
-    },
-    userEmail: {
-        fontSize: 14,
-        color: '#212529',
-        flex: 1,
-    },
-    roleLabel: {
-        fontSize: 14,
-        color: '#6C757D',
-        width: 45,
-    },
-    roleBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    adminBadge: {
-        backgroundColor: '#FFF3E0',
-    },
-    userBadge: {
-        backgroundColor: '#E8F5E9',
-    },
-    marketBadge: {
-  backgroundColor: '#4caf50',
-},
-    roleText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    deleteButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#FEE',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    deleteText: { 
-        fontSize: 18,
-    },
-    paginationContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: '#FFFFFF',
-        borderTopWidth: 1,
-        borderTopColor: '#E9ECEF',
-    },
-    pageBtn: {
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        backgroundColor: '#6200EE',
-        borderRadius: 8,
-        minWidth: 100,
-        alignItems: 'center',
-    },
-    pageBtnDisabled: {
-        backgroundColor: '#D3D3D3',
-        opacity: 0.6,
-    },
-    pageBtnText: {
-        color: '#FFFFFF',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    pageInfo: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-    },
-    pageNumber: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#6200EE',
-    },
-    pageSeparator: {
-        fontSize: 16,
-        color: '#6C757D',
-        marginHorizontal: 4,
-    },
-    totalPages: {
-        fontSize: 14,
-        color: '#6C757D',
-    },
+    borderColor: COLORS.border,
+    gap: 8,
+  },
+  searchInput: { flex: 1, fontSize: 15, color: COLORS.text },
+
+  loader: { marginTop: 40 },
+  list: { paddingHorizontal: 20, paddingBottom: 20, gap: 10 },
+
+  // CARD
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
+  },
+  cardLeft: {},
+  avatar: {
+    width: 44, height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: { fontSize: 18, fontWeight: '800', color: COLORS.primary },
+  cardBody: { flex: 1, gap: 3 },
+  userName: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  userEmail: { fontSize: 12, color: COLORS.textMuted },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  userId: { fontSize: 11, color: COLORS.textMuted },
+  roleBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  roleText: { fontSize: 11, fontWeight: '700' },
+  deleteButton: { padding: 4 },
+
+  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
+
+  // PAGINATION
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  pageBtn: {
+    width: 40, height: 40,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnDisabled: { backgroundColor: COLORS.border },
+  pageInfo: { fontSize: 15, fontWeight: '700', color: COLORS.text },
 });

@@ -1,119 +1,115 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  StatusBar,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../context/AuthContext';
-import{useState} from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { fetchNotifications } from '../services/api';
+import { COLORS } from '../theme/colors';
+
+const ROLE_ACTION = {
+  user:   { title: 'Market Ol',   icon: 'store',                screen: 'ShopApply'  },
+  market: { title: 'Shop Panel',  icon: 'dashboard',            screen: 'ShopStack'  },
+  admin:  { title: 'Admin Panel', icon: 'admin-panel-settings', screen: 'AdminStack' },
+};
+
+const QUICK_ACTIONS = [
+  { title: 'Marketler',  icon: 'storefront',   screen: 'Shops'      },
+  { title: 'Siparişlerim', icon: 'receipt-long', screen: 'UserOrders' },
+  { title: 'Profilim',  icon: 'person-outline', screen: 'UserProfile' },
+];
 
 const HomeScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
-    const loadUnread = async () => {
-    try {
-      const res = await fetchNotifications();
-      const data = res.data || [];
-
-      const unread = data.filter(n => !n.isRead).length;
-      setUnreadCount(unread);
-
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
-  // 👇 BURASI
   useFocusEffect(
     useCallback(() => {
+      const loadUnread = async () => {
+        try {
+          const res = await fetchNotifications();
+          const data = res.data || [];
+          setUnreadCount(data.filter(n => !n.isRead).length);
+        } catch {
+          //
+        }
+      };
       loadUnread();
     }, [])
   );
-  const handleLogout = async () => {
-    await logout();
-  };
 
-
-
-  // Rol bazlı buton yapılandırması
-  const getRoleAction = () => {
-    if (user?.role === 'user') {
-      return { title: 'Shop Ol', icon: 'store', screen: 'ShopApply', color: '#4CAF50' };
-    }
-    if (user?.role === 'market') {
-      return { title: 'Shop Panel', icon: 'dashboard', screen: 'ShopStack', color: '#4CAF50' };
-    }
-    if (user?.role === 'admin') {
-      return { title: 'Admin Panel', icon: 'admin-panel-settings', screen: 'AdminStack', color: '#4CAF50' };
-    }
-    return null;
-  };
-
-  const quickActions = [
-    { title: 'Shoplar', icon: 'storefront', screen: 'Shops', color: '#009688' },
-    { title: 'Siparişler', icon: 'receipt', screen: 'UserOrders', color: '#FF9800' },
-    { title: 'Profil', icon: 'person', screen: 'UserProfile', color: '#6200EE' }
-  ];
-
-  const roleAction = getRoleAction();
-  const allActions = roleAction ? [...quickActions, roleAction] : quickActions;
+  const roleAction = ROLE_ACTION[user?.role];
+  const actions = roleAction ? [...QUICK_ACTIONS, roleAction] : QUICK_ACTIONS;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* HEADER WITH NOTIFICATION */}
-      <View style={styles.headerWrapper}>
-        <View style={styles.headerLeft} />
-        <TouchableOpacity 
-          style={styles.notificationButton}
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.dot} />
+        </View>
+        <TouchableOpacity
+          style={styles.notifButton}
           onPress={() => navigation.navigate('Notifications')}
           activeOpacity={0.7}
         >
-          <Icon name="notifications-none" size={24} color="#333" />
-{unreadCount > 0 && (
-  <View style={styles.notificationBadge}>
-    <Text style={styles.badgeText}>{unreadCount}</Text>
-  </View>
-)}
+          <Icon name="notifications-none" size={22} color={COLORS.text} />
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* LOGO & WELCOME */}
-        <View style={styles.header}>
-          <Image
-            source={require('../assets/label.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.welcomeText}>Hoş Geldiniz</Text>
-          <Text style={styles.subtitle}>Hızlı erişim menüsü</Text>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HERO */}
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel}>Hoş geldin 👋</Text>
+          <Text style={styles.heroName}>{user?.firstName || 'Kullanıcı'}</Text>
+          <Text style={styles.heroSub}>Bugün ne yapmak istersin?</Text>
         </View>
 
-        {/* QUICK ACTIONS + ROL BUTONU */}
-        <View style={styles.quickActionsContainer}>
-          {allActions.map((action, index) => (
+        {/* ACTIONS */}
+        <View style={styles.grid}>
+          {actions.map((action) => (
             <TouchableOpacity
-              key={index}
-              style={[styles.actionCard, { backgroundColor: action.color }]}
+              key={action.screen}
+              style={styles.card}
               onPress={() => navigation.navigate(action.screen)}
+              activeOpacity={0.75}
             >
-              <View style={styles.actionIconContainer}>
-                <Icon name={action.icon} size={28} color="#FFF" />
+              <View style={styles.cardIcon}>
+                <Icon name={action.icon} size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.actionTitle}>{action.title}</Text>
+              <Text style={styles.cardTitle}>{action.title}</Text>
+              <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ÇIKIŞ BUTONU */}
+        {/* LOGOUT */}
         <TouchableOpacity
           style={styles.logoutButton}
-          onPress={handleLogout}
+          onPress={logout}
           activeOpacity={0.8}
         >
-          <Icon name="logout" size={20} color="#FFF" />
+          <Icon name="logout" size={18} color={COLORS.red} />
           <Text style={styles.logoutText}>Çıkış Yap</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -122,128 +118,80 @@ const HomeScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  headerWrapper: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: '#F5F5F5',
-  },
-  headerLeft: {
-    width: 40,
-  },
-  notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#F44336',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  container: {
-    flexGrow: 1,
-    padding: 20,
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
   header: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 15,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 5,
-  },
-  quickActionsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
   },
-  actionCard: {
-    width: '48%',
-    height: 120,
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+  notifButton: {
+    width: 42, height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  badge: {
+    position: 'absolute',
+    top: 6, right: 6,
+    backgroundColor: COLORS.red,
+    borderRadius: 8,
+    minWidth: 16, height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: COLORS.white, fontSize: 9, fontWeight: '800' },
+
+  body: { paddingHorizontal: 20, paddingBottom: 40 },
+
+  hero: { marginTop: 8, marginBottom: 28 },
+  heroLabel: { fontSize: 14, color: COLORS.textMuted, marginBottom: 4 },
+  heroName: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5, marginBottom: 6 },
+  heroSub: { fontSize: 14, color: COLORS.textMuted },
+
+  grid: { gap: 10, marginBottom: 32 },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 14,
+  },
+  cardIcon: {
+    width: 46, height: 46,
     borderRadius: 12,
-    marginBottom: 15,
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  actionIconContainer: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  actionTitle: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  cardTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.text },
+
   logoutButton: {
     flexDirection: 'row',
-    backgroundColor: '#F44336',
-    padding: 15,
-    borderRadius: 8,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: COLORS.redLight,
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
-  logoutText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 10,
-  },
+  logoutText: { fontSize: 15, fontWeight: '600', color: COLORS.red },
 });
 
 export default HomeScreen;

@@ -1,337 +1,271 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  StatusBar,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { fetchNotifications, markNotificationAsRead } from '../services/api';
-import { MaterialIcons } from '@expo/vector-icons';
-import{ fetchShopProfile } from '../services/api';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
-import { CommonActions } from '@react-navigation/native';
+import { COLORS } from '../theme/colors';
 
+const TYPE_CONFIG = {
+  SHOP_APPROVED:   { icon: 'check-circle',   color: '#16A34A' },
+  SHOP_REJECTED:   { icon: 'cancel',         color: '#DC2626' },
+  SHOP_APPLY:      { icon: 'store',          color: COLORS.primary },
+  SHOP_REAPPLY:    { icon: 'store',          color: '#D97706' },
+  RATE_SHOP:       { icon: 'star',           color: '#F59E0B' },
+  ORDER_PAID:      { icon: 'payment',        color: '#16A34A' },
+  ORDER_NEW:       { icon: 'shopping-bag',   color: '#2563EB' },
+  ORDER_DELIVERED: { icon: 'local-shipping', color: '#7C3AED' },
+  ORDER_CONFIRMED: { icon: 'check-circle',   color: '#16A34A' },
+  ORDER_RELEASED:  { icon: 'account-balance',color: '#16A34A' },
+};
 
+const DEFAULT_TYPE = { icon: 'notifications', color: COLORS.primary };
+
+const formatDate = (dateString) => {
+  const diff = Date.now() - new Date(dateString);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return 'Şimdi';
+  if (minutes < 60) return `${minutes} dk önce`;
+  if (hours < 24) return `${hours} sa önce`;
+  if (days < 7) return `${days} gün önce`;
+  return new Date(dateString).toLocaleDateString('tr-TR');
+};
 
 const NotificationScreen = ({ navigation }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [])
+  );
 
-useFocusEffect(
-  useCallback(() => {
-    setLoading(true);
-    loadNotifications();
-  }, [])
-);
   const loadNotifications = async () => {
+    setLoading(true);
     try {
       const res = await fetchNotifications();
-      console.log('Bildirimler yanıtı:', res); // Debug için
       setNotifications(res.data || []);
-    } catch (err) {
-      console.log('Bildirim yükleme hatası:', err);
+    } catch {
+      //
     } finally {
       setLoading(false);
     }
   };
 
-const getNavigationScreen = (item) => {
-  switch (item.type) {
-
-    case 'SHOP_APPLY':
-      return {
-        stack: 'ShopStack',
-        screen: 'ShopListScreen'
-      };
-
-    case 'SHOP_REAPPLY':
-      return {
-        stack: 'ShopStack',
-        screen: 'ShopListScreen'
-      };
-
-    case 'SHOP_APPROVED':
-      return {
-        stack: 'ShopStack',
-        screen: 'ShopPanel'
-      };
-
-    case 'SHOP_REJECTED':
-      return {
-        stack: 'ShopStack',
-        screen: 'ShopApply'
-      };
-
-    default:
-      return null;
-  }
-};
-
-const handlePress = async (item) => {
-  try {
-    console.log("NOTIFICATION TYPE:", item.type);
-
-    // 1) mark as read
-    await markNotificationAsRead(item.id);
-
-    setNotifications(prev =>
-      prev.map(n =>
-        n.id === item.id ? { ...n, isRead: true } : n
-      )
-    );
-
-    // 2) ADMIN FLOW
-if (user.role === 'admin') {
-  switch (item.type) {
-    case 'SHOP_APPLY':
-    case 'SHOP_REAPPLY':
-      navigation.dispatch(
-        CommonActions.navigate({
-          name: 'AdminStack',
-          params: { screen: 'ShopListScreen' },
-        })
+  const handlePress = async (item) => {
+    try {
+      await markNotificationAsRead(item.id);
+      setNotifications(prev =>
+        prev.map(n => n.id === item.id ? { ...n, isRead: true } : n)
       );
-      break;
-    default:
-      navigation.navigate('AdminStack');
-  }
-  return;
+
+      if (user.role === 'admin') {
+        switch (item.type) {
+          case 'SHOP_APPLY':
+          case 'SHOP_REAPPLY':
+            navigation.navigate('AdminStack', { screen: 'ShopListScreen' });
+            break;
+          default:
+            navigation.navigate('AdminStack');
+        }
+        return;
+      }
+
+switch (item.type) {
+  case 'SHOP_APPROVED':
+    navigation.navigate('ShopStack', { screen: 'ShopPanel' });
+    break;
+  case 'SHOP_REJECTED':
+    navigation.navigate('ShopStack', { screen: 'ShopApply' });
+    break;
+  case 'RATE_SHOP':
+    navigation.navigate('ShopStack', { screen: 'RateShopScreen', params: { shopId: item.targetId, orderId: item.orderId } });
+    break;
+
+  // Market'e gelen yeni sipariş bildirimi
+  case 'ORDER_NEW':
+    navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+    break;
+
+  // Market'e gelen sipariş tamamlandı bildirimi
+  case 'ORDER_CONFIRMED':
+    navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+    break;
+
+  // Market'e gelen ödeme aktarıldı bildirimi
+  case 'ORDER_RELEASED':
+    navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+    break;
+
+  // Kullanıcıya gelen ödeme alındı bildirimi
+  case 'ORDER_PAID':
+    navigation.navigate('UserOrders');
+    break;
+
+  // Kullanıcıya gelen teslim aldıysanız onaylayın bildirimi
+  case 'ORDER_DELIVERED':
+    navigation.navigate('UserOrders');
+    break;
+
+  default:
+    break;
 }
-
-    // 3) USER FLOW
-    const shop = await fetchShopProfile();
-
-    switch (item.type) {
-      case 'SHOP_APPROVED':
-        navigation.navigate('ShopStack', {
-          screen: 'ShopPanel'
-        });
-        break;
-
-      case 'SHOP_REJECTED':
-        navigation.navigate('ShopStack', {
-          screen: 'ShopApply'
-        });
-        break;
-
-      default:
-        navigation.navigate('ShopStack', {
-          screen: shop.status === 'active'
-            ? 'ShopPanel'
-            : 'ShopApply'
-        });
+    } 
+    catch {
+      //
     }
-
-  } catch (err) {
-    console.log("HANDLE PRESS ERROR:", err);
-  }
-};
-  const getIconName = (type) => {
-    if (type === 'SHOP_APPROVED') return 'check-circle';
-    if (type === 'SHOP_REJECTED') return 'cancel';
-    if (type === 'ORDER_CREATED') return 'shopping-cart';
-    return 'notifications';
   };
 
-  const getIconColor = (type) => {
-    if (type === 'SHOP_APPROVED') return '#4CAF50';
-    if (type === 'SHOP_REJECTED') return '#F44336';
-    if (type === 'ORDER_CREATED') return '#FF9800';
-    return '#6200EE';
-  };  
+  const renderItem = ({ item }) => {
+    const config = TYPE_CONFIG[item.type] || DEFAULT_TYPE;
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now - date;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (minutes < 1) return 'Şimdi';
-    if (minutes < 60) return `${minutes} dakika önce`;
-    if (hours < 24) return `${hours} saat önce`;
-    if (days < 7) return `${days} gün önce`;
-    return date.toLocaleDateString('tr-TR');
-  };
-
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.item, item.isRead ? styles.readItem : styles.unreadItem]}
-      onPress={() => handlePress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconBox, { backgroundColor: getIconColor(item.type) }]}>
-        <MaterialIcons name={getIconName(item.type)} size={22} color="#FFF" />
-      </View>
-
-      <View style={styles.contentContainer}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.message}>{item.message}</Text>
-        <View style={styles.footer}>
-          <MaterialIcons name="access-time" size={12} color="#999" />
-          <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
-        </View>
-      </View>
-
-      {!item.isRead && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
-
-  if (loading) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#6200EE" />
-        <Text style={styles.loadingText}>Bildirimler yükleniyor...</Text>
-      </SafeAreaView>
+      <TouchableOpacity
+        style={[styles.item, !item.isRead && styles.itemUnread]}
+        onPress={() => handlePress(item)}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.iconBox, { backgroundColor: config.color + '18' }]}>
+          <Icon name={config.icon} size={22} color={config.color} />
+        </View>
+
+        <View style={styles.content}>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.message}>{item.message}</Text>
+          <View style={styles.meta}>
+            <Icon name="access-time" size={11} color={COLORS.textMuted} />
+            <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+          </View>
+        </View>
+
+        {!item.isRead && <View style={styles.dot} />}
+      </TouchableOpacity>
     );
-  }
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <TouchableOpacity
+          style={styles.backButton}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <MaterialIcons name="arrow-back" size={24} color="#333" />
+          <Icon name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Bildirimler</Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerCenter}>
+          <Text style={styles.appName}>expiry</Text>
+          <View style={styles.headerDot} />
+        </View>
+        <View style={{ width: 36 }} />
       </View>
 
-      <FlatList
-        data={notifications}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="notifications-none" size={64} color="#CCC" />
-            <Text style={styles.emptyText}>Henüz bildiriminiz yok</Text>
-          </View>
-        }
-      />
+      {/* HERO */}
+      <View style={styles.hero}>
+        <Text style={styles.heroName}>Bildirimler</Text>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Icon name="notifications-none" size={48} color={COLORS.border} />
+              <Text style={styles.emptyText}>Henüz bildirim yok</Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.bg,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36, height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  headerRight: {
-    width: 40,
-  },
-  listContent: {
-    padding: 16,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-  },
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  headerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+
+  hero: { paddingHorizontal: 20, marginBottom: 16 },
+  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+
+  loader: { marginTop: 40 },
+  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
+
   item: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
   },
-  unreadItem: {
+  itemUnread: {
     borderLeftWidth: 3,
-    borderLeftColor: '#6200EE',
-  },
-  readItem: {
-    opacity: 0.85,
+    borderLeftColor: COLORS.primary,
   },
   iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46, height: 46,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
   },
-  contentContainer: {
-    flex: 1,
+  content: { flex: 1 },
+  title: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 3 },
+  message: { fontSize: 13, color: COLORS.textMuted, lineHeight: 18, marginBottom: 6 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  date: { fontSize: 11, color: COLORS.textMuted },
+  dot: {
+    width: 8, height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
   },
-  title: {
-    fontWeight: 'bold',
-    fontSize: 15,
-    color: '#333',
-    marginBottom: 4,
-  },
-  message: {
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  date: {
-    fontSize: 11,
-    color: '#999',
-    marginLeft: 4,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#6200EE',
-    marginLeft: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-  },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: '#666',
-  },
+
+  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyText: { fontSize: 14, color: COLORS.textMuted },
 });
 
 export default NotificationScreen;
