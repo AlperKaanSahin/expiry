@@ -74,18 +74,9 @@ exports.getAllShops = async (req, res) => {
   }
 };
 
-exports.createShop = async (req, res) => {
-  try {
-    const shop = await adminService.createShop(req.body);
-    res.status(201).json(shop);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
 exports.updateShop = async (req, res) => {
   try {
-    const updated = await adminService.updateShop(req.params.id, req.body);
+    const updated = await adminService.updateShop(req.params.id, req.body, req.user.id);
 
     if (!updated) {
       return res.status(404).json({ error: 'Market bulunamadı' });
@@ -99,7 +90,7 @@ exports.updateShop = async (req, res) => {
 
 exports.deleteShop = async (req, res) => {
   try {
-    const result = await adminService.deleteShop(req.params.id);
+    const result = await adminService.deleteShop(req.params.id, req.user.id);
 
     if (!result) {
       return res.status(404).json({ error: 'Market bulunamadı' });

@@ -8,9 +8,11 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from '@expo/vector-icons/MaterialIcons';
 import { getProfile } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 const ROLE_LABELS = {
   user: 'Kullanıcı',
@@ -22,7 +24,8 @@ export default function UserProfileScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+useFocusEffect(
+  useCallback(() => {
     const load = async () => {
       try {
         const data = await getProfile();
@@ -34,7 +37,8 @@ export default function UserProfileScreen({ navigation }) {
       }
     };
     load();
-  }, []);
+  }, [])
+);
 
   if (loading) {
     return (

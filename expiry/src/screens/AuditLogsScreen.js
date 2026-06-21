@@ -8,7 +8,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from '@expo/vector-icons/MaterialIcons';
 import { fetchAuditLogs } from '../services/api';
 import { COLORS } from '../theme/colors';
 
@@ -35,8 +35,10 @@ const formatDate = (dateString) => {
 const LogCard = ({ item }) => {
   const [expanded, setExpanded] = useState(false);
 
-  const actor = item.actor
-    ? `${item.actor.firstName} ${item.actor.lastName}`
+const actor = item.actor
+  ? `${item.actor.firstName} ${item.actor.lastName}`
+  : item.actorSnapshot
+    ? `${item.actorSnapshot.name} (silinmiş kullanıcı)`
     : `ID: ${item.actorId}`;
 
   const actionColor = ACTION_COLORS[item.action] || COLORS.primary;

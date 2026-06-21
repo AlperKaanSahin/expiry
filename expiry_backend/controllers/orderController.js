@@ -23,7 +23,8 @@ async function changeOrderStatus(req, res) {
     const order = await orderService.changeStatus(
       req.params.id,
       req.body.status,
-      req.user?.role || 'user'
+      req.user.role,
+      req.user.id
     );
     res.json(order);
   } catch (err) {
@@ -33,7 +34,7 @@ async function changeOrderStatus(req, res) {
 
 async function markDelivered(req, res) {
   try {
-    const order = await orderService.changeStatus(req.params.id, 'delivered', 'market');
+    const order = await orderService.changeStatus(req.params.id, 'delivered', 'market', req.user.id);
     res.json(order);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -42,7 +43,7 @@ async function markDelivered(req, res) {
 
 async function confirmOrder(req, res) {
   try {
-    const order = await orderService.changeStatus(req.params.id, 'confirmed', 'user');
+    const order = await orderService.changeStatus(req.params.id, 'confirmed', 'user', req.user.id);
     res.json(order);
   } catch (err) {
     res.status(400).json({ error: err.message });

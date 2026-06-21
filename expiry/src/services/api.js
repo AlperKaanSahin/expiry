@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authEvents } from '../events/authEvents';
 
 const api = axios.create({
   baseURL: process.env.EXPO_PUBLIC_API_URL + '/api',
@@ -11,12 +12,44 @@ api.interceptors.request.use(async (config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = await AsyncStorage.getItem('@refreshToken');
+        if (!refreshToken) throw new Error('No refresh token');
+
+        const res = await axios.post(
+          `${process.env.EXPO_PUBLIC_API_URL}/api/users/refresh`,
+          { refreshToken }
+        );
+
+        await AsyncStorage.setItem('@token', res.data.accessToken);
+        originalRequest.headers.Authorization = `Bearer ${res.data.accessToken}`;
+
+        return api(originalRequest);
+      } catch (refreshError) {
+        await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
+        authEvents.emit('LOGOUT'); // ← AuthContext'e haber ver
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // ─── AUTH ────────────────────────────────────────────────
 export const registerUser = async (userData) => {
   try {
     const response = await api.post('/users/register', userData);
-    await AsyncStorage.setItem('@token', response.data.token);
+    await AsyncStorage.setItem('@token', response.data.accessToken);
+    await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
     return response.data.user;
   } catch (error) {
     throw error.response?.data?.error || 'Kayıt başarısız';
@@ -26,6 +59,8 @@ export const registerUser = async (userData) => {
 export const loginUser = async ({ email, password }) => {
   try {
     const response = await api.post('/users/login', { email, password });
+    await AsyncStorage.setItem('@token', response.data.accessToken);
+    await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
     return response.data;
   } catch (error) {
     throw error.response?.data?.error || 'Giriş başarısız';
@@ -34,6 +69,10 @@ export const loginUser = async ({ email, password }) => {
 
 export const getProfile = async () => {
   const res = await api.get('/users/profile');
+  return res.data;
+};
+export const updateProfile = async (data) => {
+  const res = await api.put('/users/profile', data);
   return res.data;
 };
 

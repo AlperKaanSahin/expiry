@@ -5,10 +5,18 @@ module.exports = (sequelize, DataTypes) => {
     entityType: DataTypes.STRING,
     entityId: DataTypes.INTEGER,
     description: DataTypes.STRING,
-    metadata: DataTypes.JSON
+    metadata: DataTypes.JSON,
+    actorSnapshot: DataTypes.JSON,
   }, {
     timestamps: true
   });
+
+  AuditLog.associate = (models) => {
+    AuditLog.belongsTo(models.User, {
+      foreignKey: 'actorId',
+      as: 'actor'
+    });
+  };
 
   return AuditLog;
 };

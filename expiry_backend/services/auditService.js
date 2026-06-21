@@ -1,14 +1,7 @@
 const { AuditLog, User } = require('../models');
 
 class AuditService {
-  async log({
-    actorId,
-    action,
-    entityType,
-    entityId = null,
-    description,
-    metadata = null
-  }) {
+  async log({ actorId, action, entityType, entityId = null, description, metadata = null }) {
     const actor = await User.findByPk(actorId, {
       attributes: ['id', 'firstName', 'lastName', 'email', 'role']
     });
@@ -32,6 +25,11 @@ class AuditService {
   async getLogs(page = 1, limit = 20) {
     const offset = (page - 1) * limit;
     return await AuditLog.findAndCountAll({
+      include: [{
+        model: User,
+        as: 'actor',
+        attributes: ['id', 'firstName', 'lastName', 'email']
+      }],
       order: [['createdAt', 'DESC']],
       limit,
       offset
