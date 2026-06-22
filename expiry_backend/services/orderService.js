@@ -152,21 +152,31 @@ async function createOrder(userId, data) {
   }
 }
 
-async function simulatePayment(orderId) {
-  const t = await sequelize.transaction();
-  try {
-    const order = await Order.findByPk(orderId, { transaction: t });
-    if (!order) throw new Error('Order not found');
+exports.simulatePayment = async (userId, orderId) => {
+  const order = await Order.findOne({
+    where: {
+      id: orderId,
+      userId: userId, // 🔒 ownership check
+    },
+  });
 
-    await changeStatusInternal(order, 'paid', 'system', t);
-
-    await t.commit();
-    return { success: true };
-  } catch (err) {
-    await t.rollback();
-    throw err;
+  if (!order) {
+    throw new Error('Sipariş bulunamadı veya erişim yetkiniz yok');
   }
-}
+
+  if (order.status !== 'pending') {
+    throw new Error('Bu sipariş zaten işlenmiş');
+  }
+
+  order.status = 'paid';
+  await order.save();
+
+  return {
+    success: true,
+    message: 'Ödeme başarılı (simulate)',
+    order,
+  };
+};
 
 async function changeStatus(orderId, newStatus, actor = 'user', userId = null) {
   const t = await sequelize.transaction();
