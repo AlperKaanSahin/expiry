@@ -11,7 +11,11 @@ async function createOrder(req, res) {
 
 async function simulatePayment(req, res) {
   try {
-    const result = await orderService.simulatePayment(req.body.orderId);
+    const result = await orderService.simulatePayment(
+      req.user.id,
+      req.body.orderId
+    );
+
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
