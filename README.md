@@ -1,20 +1,22 @@
-# Expiry 🛒
+# Expiry
 
-> A mobile platform connecting consumers with local markets to purchase discounted products nearing their expiration date — reducing food waste while saving money.
+> A mobile platform connecting consumers with local markets to purchase discounted products nearing their expiration date, reducing food waste while helping users save money.
 
-> ⚠️ **Work in Progress – Active Development**
+> Status: Work in progress - active development
 
 ---
 
-## What is Expiry?
+## What Is Expiry?
 
-Expiry allows markets to list discounted product packages that are close to their expiration date. Consumers can browse nearby markets, purchase packages at reduced prices, and pick up their order in person — with a secure escrow-style order flow that requires confirmation from both sides before the transaction is complete.
+Expiry allows local markets to list discounted product packages that are close to their expiration date. Users can browse markets, purchase available packages, and pick up their orders in person.
 
-The platform supports three roles:
+The application supports three main roles:
 
-- **User** — browse markets, purchase packages, track orders, rate markets
-- **Market** — a role that owns a Shop; manages products, packages, and incoming orders
-- **Admin** — approves/rejects market applications, manages users, views audit logs
+- **User**: browses markets, purchases packages, tracks orders, and rates markets
+- **Market**: owns a shop, manages products/packages, and handles incoming orders
+- **Admin**: approves or rejects market applications, manages users, and reviews audit logs
+
+The project is being developed both as a portfolio project and as a product candidate.
 
 ---
 
@@ -22,63 +24,72 @@ The platform supports three roles:
 
 | Layer | Technologies |
 |---|---|
-| Mobile | React Native (Expo), React Navigation, Axios |
+| Mobile | React Native, Expo, React Navigation, Axios |
 | Backend | Node.js, Express.js, Sequelize ORM |
 | Database | MySQL |
-| Auth & Security | JWT (access + refresh tokens), bcrypt, helmet, cors, express-rate-limit, express-validator |
+| Auth & Security | JWT access/refresh tokens, bcrypt, helmet, cors, express-rate-limit, express-validator |
 
 ---
 
 ## Architecture Highlights
 
-**Escrow-style order lifecycle**
-Orders follow a strict state machine to ensure safe transactions:
+### Role-Based Access Control
+
+The backend uses authentication and role-based middleware such as `auth`, `isAdmin`, and `onlyMarket` to protect API routes. Service-layer ownership checks are used for sensitive actions such as managing shop resources and order status changes.
+
+### Order Lifecycle
+
+Orders follow an escrow-style lifecycle:
+
+```text
+pending -> paid -> delivered -> confirmed -> released
 ```
-pending → paid → delivered → confirmed → released
-```
-Each transition is validated server-side, requires the correct role/ownership, and runs inside a database transaction.
 
-**Event-driven notifications & audit logging**
-A custom EventBus decouples business logic from side effects. Order status changes, shop approvals, and role changes emit events that trigger notifications and audit log entries — without coupling the core logic to either concern.
+Most order transitions are validated server-side with role and ownership checks. Payment is currently simulated during development and is planned to be replaced with a real payment provider.
 
-**Role-based access control (RBAC)**
-Middleware guards (`auth`, `isAdmin`, `onlyMarket`) protect every route based on the authenticated user's role. Ownership is also validated at the service layer (e.g. a market can only edit its own products/packages; a user can only confirm their own orders).
+### Event-Driven Notifications And Audit Logs
 
-**Refresh token authentication**
-Short-lived access tokens (15 min) paired with long-lived refresh tokens (7 days). The mobile client automatically refreshes expired tokens via an Axios interceptor, with an event-driven logout flow if the refresh token is invalid.
+The backend includes a custom event flow for side effects such as notifications and audit logs. This keeps core business logic separate from notification and logging concerns.
 
-**Server-side price integrity**
-Order totals are calculated from the database at order-creation time, not trusted from client input — preventing price manipulation.
+### Server-Side Price Integrity
 
-**Relational data model**
-12+ tables with Sequelize ORM, soft deletes (paranoid mode), and a full migration history. Audit logs preserve an `actorSnapshot` so historical records remain meaningful even if the acting user is later deleted.
+Order totals are calculated from database values instead of trusting client-provided prices. This helps prevent price manipulation from the mobile client.
+
+### Relational Data Model
+
+The backend uses Sequelize models, migrations, and relational tables for users, shops, products, packages, package units, orders, notifications, ratings, and audit logs.
 
 ---
 
 ## Project Structure
 
-```
+```text
 expiry/
-├── expiry_backend/
-│   ├── controllers/      # Request handlers
-│   ├── services/         # Business logic
-│   ├── models/           # Sequelize models
-│   ├── routes/           # Express routers
-│   ├── middlewares/      # Auth, role guards, validation
-│   ├── validators/       # express-validator schemas
-│   ├── events/           # EventBus & event definitions
-│   ├── handlers/         # Event listeners (audit, notification)
-│   ├── domain/           # State machine logic
-│   ├── migrations/       # Database migrations
-│   └── app.js
-└── expiry/                # React Native mobile app
-    └── src/
-        ├── screens/
-        ├── navigation/
-        ├── services/
-        ├── events/
-        ├── theme/
-        └── context/
+├── expiry/                  # React Native mobile app
+│   ├── src/
+│   │   ├── screens/
+│   │   ├── navigation/
+│   │   ├── services/
+│   │   ├── events/
+│   │   ├── theme/
+│   │   └── context/
+│   ├── App.js
+│   └── package.json
+│
+└── expiry_backend/          # Express backend API
+    ├── controllers/         # Request handlers
+    ├── services/            # Business logic
+    ├── models/              # Sequelize models
+    ├── routes/              # Express routes
+    ├── middlewares/         # Auth, role guards, validation
+    ├── validators/          # express-validator schemas
+    ├── events/              # Event definitions and event bus
+    ├── handlers/            # Event listeners
+    ├── migrations/          # Database migrations
+    ├── seeders/             # Seed data
+    ├── config/              # Sequelize config examples
+    ├── app.js
+    └── package.json
 ```
 
 ---
@@ -86,65 +97,191 @@ expiry/
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - MySQL
-- Expo CLI
+- Expo CLI or Expo Go
+- npm
 
-### Backend Setup
+---
+
+## Backend Setup
 
 ```bash
 cd expiry_backend
 npm install
-cp .env.example .env   # fill in DB credentials, JWT_SECRET, JWT_REFRESH_SECRET
+```
+
+Create local environment files:
+
+```bash
+cp .env.example .env
+cp config/config.example.json config/config.json
+```
+
+Update `.env` with your local values:
+
+```env
+DB_HOST=127.0.0.1
+DB_USER=root
+DB_PASS=
+DB_NAME=expiry_dev
+DB_DIALECT=mysql
+
+NODE_ENV=development
+PORT=5000
+
+JWT_SECRET=change_me
+JWT_REFRESH_SECRET=change_me
+```
+
+Run database migrations and seeders:
+
+```bash
 npx sequelize-cli db:migrate
 npx sequelize-cli db:seed:all
+```
+
+Start the backend:
+
+```bash
 npm start
 ```
 
-### Mobile Setup
+By default, the backend runs on:
+
+```text
+http://localhost:5000
+```
+
+---
+
+## Mobile Setup
 
 ```bash
 cd expiry
 npm install
+```
+
+Create the local mobile environment file:
+
+```bash
+cp .env.example .env
+```
+
+Example frontend environment:
+
+```env
+EXPO_PUBLIC_API_URL=http://localhost:5000
+```
+
+Start the Expo app:
+
+```bash
 npx expo start
 ```
 
 ---
 
+## Environment And Git Notes
+
+Local environment and configuration files are ignored by Git:
+
+```text
+.env
+expiry/.env
+expiry_backend/.env
+expiry_backend/config/config.json
+```
+
+Example files are committed so the project can be configured locally:
+
+```text
+expiry/.env.example
+expiry_backend/.env.example
+expiry_backend/config/config.example.json
+```
+
+---
+
+## Current Features
+
+- User registration and login
+- JWT-based authentication
+- Role-based user, market, and admin flows
+- Market application flow
+- Admin approval/rejection for market applications
+- Shop product and package management
+- Order creation and order lifecycle tracking
+- In-app notifications
+- Shop rating system
+- Audit log foundation for admin actions
+- Server-side price calculation for orders
+
+---
+
 ## Roadmap
 
-### Security & Validation
-- [x] Input validation with express-validator on all endpoints
-- [x] Rate limiting on auth endpoints (login, register)
-- [x] Refresh token mechanism (access token expires in 15min)
-- [x] Order ownership verification (users/markets can only act on their own orders)
-- [x] Server-side price validation on order creation
-- [x] Security audit (mass assignment, password leakage, ownership checks)
+### Security And Auth
+
+- [x] JWT access token authentication
+- [x] Refresh token flow on the mobile client
+- [x] Password hashing with bcrypt
+- [x] Basic rate limiting on auth routes
+- [x] Server-side price validation
+- [x] Core ownership checks for sensitive order/shop actions
+- [ ] Persist, rotate, and revoke refresh tokens server-side
+- [ ] Complete security audit for ownership checks and mass assignment risks
+- [ ] Improve production error handling and logging
 
 ### Testing
-- [ ] Unit tests for state machine logic (order & shop transitions)
-- [ ] Integration tests for order lifecycle flow
-- [ ] API endpoint tests with supertest
 
-### Features
-- [x] In-app notifications (order status updates, shop approval/rejection)
+- [ ] Unit tests for order state transitions
+- [ ] Unit tests for shop application/status transitions
+- [ ] Integration tests for authentication flow
+- [ ] Integration tests for order lifecycle
+- [ ] API endpoint tests with Supertest
+
+### Product Features
+
+- [x] In-app notifications
 - [x] Shop rating system
-- [ ] Push notifications (order status updates)
-- [ ] Auto price drop scheduler for packages nearing expiry
-- [ ] Payment gateway integration (replacing simulate-payment)
+- [x] Admin audit log foundation
+- [ ] Push notifications
+- [ ] Real payment provider integration
+- [ ] Auto price-drop scheduler
 - [ ] Map integration for shop locations
-- [ ] Market search & filtering by location/category
+- [ ] Market search and filtering
+- [ ] Order cancellation/refund flow
 
 ### Code Quality
-- [x] Consistent error handling across all controllers
-- [x] Controller → Service layer separation
-- [x] Consistent naming convention (market = role, shop = entity)
-- [ ] Centralized logging (replace console.log with a logger like winston)
-- [ ] API documentation with Postman collection
+
+- [x] Controller-service-model separation in the backend
+- [x] Sequelize migrations for database schema changes
+- [x] Environment example files for local setup
+- [ ] API documentation with Postman or OpenAPI
+- [ ] Centralized logger
+- [ ] Consistent response/error format
+- [ ] CI checks for linting and tests
+
+---
+
+## Development Status
+
+This project is actively being improved with a focus on:
+
+- production-readiness
+- backend security
+- clean Git workflow
+- small pull requests
+- readable project documentation
+- test coverage for critical business logic
 
 ---
 
 ## Author
 
-**Alper Kaan Şahin**
-[LinkedIn](https://www.linkedin.com/in/alper-kaan-%C5%9Fahin-3341a228a) · [GitHub](https://github.com/AlperKaanSahin)
+**Alper Kaan Sahin**
+
+- GitHub: [AlperKaanSahin](https://github.com/AlperKaanSahin)
+- LinkedIn: [Alper Kaan Sahin](https://www.linkedin.com/in/alper-kaan-%C5%9Fahin-3341a228a)
