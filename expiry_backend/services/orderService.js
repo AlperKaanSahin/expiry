@@ -152,31 +152,26 @@ async function createOrder(userId, data) {
   }
 }
 
-exports.simulatePayment = async (userId, orderId) => {
-  const order = await Order.findOne({
-    where: {
-      id: orderId,
-      userId: userId, // 🔒 ownership check
-    },
-  });
+async function simulatePayment(userId, orderId) {
+  const t = await sequelize.transaction();
+  try {
+    const order = await Order.findOne({
+      where: { id: orderId, userId }, // ownership kontrolü korunuyor
+      transaction: t
+    });
 
-  if (!order) {
-    throw new Error('Sipariş bulunamadı veya erişim yetkiniz yok');
+    if (!order) throw new Error('Sipariş bulunamadı veya erişim yetkiniz yok');
+    if (order.status !== 'pending') throw new Error('Bu sipariş zaten işlenmiş');
+
+    await changeStatusInternal(order, 'paid', 'system', t); // stok + event emit geri geldi
+
+    await t.commit();
+    return { success: true, order };
+  } catch (err) {
+    await t.rollback();
+    throw err;
   }
-
-  if (order.status !== 'pending') {
-    throw new Error('Bu sipariş zaten işlenmiş');
-  }
-
-  order.status = 'paid';
-  await order.save();
-
-  return {
-    success: true,
-    message: 'Ödeme başarılı (simulate)',
-    order,
-  };
-};
+}
 
 async function changeStatus(orderId, newStatus, actor = 'user', userId = null) {
   const t = await sequelize.transaction();
@@ -189,10 +184,19 @@ async function changeStatus(orderId, newStatus, actor = 'user', userId = null) {
       throw new Error('Bu siparişe erişim yetkiniz yok');
     }
 
-    if (actor === 'market') {
-      const shop = await Shop.findOne({ where: { id: order.shopId, ownerId: userId }, transaction: t });
-      if (!shop) throw new Error('Bu siparişe erişim yetkiniz yok');
-    }
+if (actor === 'market') {
+  const shop = await Shop.findOne({
+    where: {
+      id: order.shopId,
+      ownerId: userId // sadece shop owner
+    },
+    transaction: t
+  });
+
+  if (!shop) {
+    throw new Error('Bu siparişe erişim yetkiniz yok');
+  }
+}
     // admin her şeye erişebilir, kontrol yok
 
     await changeStatusInternal(order, newStatus, actor, t);

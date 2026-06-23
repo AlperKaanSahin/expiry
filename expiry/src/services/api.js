@@ -214,6 +214,15 @@ export const simulatePayment = async (orderId) => {
   const response = await api.post('/orders/simulate-payment', { orderId });
   return response.data;
 };
+export const confirmOrder = async (orderId) => {
+  const response = await api.post(`/orders/${orderId}/confirm`);
+  return response.data;
+};
+
+export const markOrderDelivered = async (orderId) => {
+  const response = await api.post(`/orders/${orderId}/deliver`);
+  return response.data;
+};
 
 // ─── NOTIFICATIONS ───────────────────────────────────────
 export const fetchNotifications = async () => {
