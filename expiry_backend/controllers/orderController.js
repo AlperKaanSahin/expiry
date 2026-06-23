@@ -24,21 +24,15 @@ async function simulatePayment(req, res) {
 
 async function changeOrderStatus(req, res) {
   try {
+    const isMarket = req.user.role === 'market';
+
     const order = await orderService.changeStatus(
       req.params.id,
       req.body.status,
-      req.user.role,
+      isMarket ? 'market' : 'user',
       req.user.id
     );
-    res.json(order);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-}
 
-async function markDelivered(req, res) {
-  try {
-    const order = await orderService.changeStatus(req.params.id, 'delivered', 'market', req.user.id);
     res.json(order);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -48,6 +42,15 @@ async function markDelivered(req, res) {
 async function confirmOrder(req, res) {
   try {
     const order = await orderService.changeStatus(req.params.id, 'confirmed', 'user', req.user.id);
+    res.json(order);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+async function markDelivered(req, res) {
+  try {
+    const order = await orderService.changeStatus(req.params.id, 'delivered', 'market', req.user.id);
     res.json(order);
   } catch (err) {
     res.status(400).json({ error: err.message });

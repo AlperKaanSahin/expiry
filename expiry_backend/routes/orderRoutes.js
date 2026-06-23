@@ -10,5 +10,7 @@ router.get('/shop/me', auth, orderController.getMyShopOrders);
 router.post('/', auth, orderValidator.createOrder, validate, orderController.createOrder);
 router.post('/simulate-payment', auth, orderController.simulatePayment);
 router.post('/:id/status', auth, orderValidator.changeOrderStatus, validate, orderController.changeOrderStatus);
+router.post('/:id/confirm', auth, orderController.confirmOrder);
+router.post('/:id/deliver', auth, orderController.markDelivered);
 
 module.exports = router;

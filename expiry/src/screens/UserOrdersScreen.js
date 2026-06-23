@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
-import { fetchMyOrders, changeOrderStatus } from '../services/api';
+import { fetchMyOrders, changeOrderStatus, confirmOrder } from '../services/api';
 import { COLORS } from '../theme/colors';
 
 const STATUS_CONFIG = {
@@ -50,15 +50,17 @@ const UserOrdersScreen = () => {
 
   useEffect(() => { loadOrders(); }, []);
 
-  const handleConfirm = async (orderId) => {
-    try {
-      await changeOrderStatus(orderId, 'confirmed');
-      Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Siparişiniz teslim alındı olarak işaretlendi' });
-      loadOrders();
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    }
-  };
+
+
+const handleConfirm = async (orderId) => {
+  try {
+    await confirmOrder(orderId);
+    Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Siparişiniz teslim alındı olarak işaretlendi' });
+    loadOrders();
+  } catch (err) {
+    Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+  }
+};
 
   const activeOrders = orders.filter(o => ['pending', 'paid', 'delivered'].includes(o.status));
   const pastOrders = orders.filter(o => ['confirmed', 'released'].includes(o.status));

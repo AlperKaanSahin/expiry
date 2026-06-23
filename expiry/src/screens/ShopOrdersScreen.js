@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
-import { fetchShopOrders, changeOrderStatus } from '../services/api';
+import { fetchShopOrders, changeOrderStatus, markOrderDelivered } from '../services/api';
 import { COLORS } from '../theme/colors';
 
 const STATUS_CONFIG = {
@@ -50,14 +50,15 @@ const ShopOrdersScreen = () => {
 
   useEffect(() => { loadOrders(); }, []);
 
-  const handleDeliver = async (orderId) => {
-    try {
-      await changeOrderStatus(orderId, 'delivered');
-      loadOrders();
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    }
-  };
+
+const handleDeliver = async (orderId) => {
+  try {
+    await markOrderDelivered(orderId);
+    loadOrders();
+  } catch (err) {
+    Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+  }
+};
 
   const activeOrders = orders.filter(o => ['pending', 'paid', 'delivered'].includes(o.status));
   const pastOrders = orders.filter(o => ['confirmed', 'released'].includes(o.status));
