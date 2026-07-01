@@ -5,8 +5,8 @@ exports.register = [
     .isEmail()
     .withMessage('Geçerli bir email giriniz'),
   body('password')
-    .isLength({ min: 6 })
-    .withMessage('Şifre en az 6 karakter olmalı'),
+    .isLength({ min: 4 })
+    .withMessage('Şifre en az 4 karakter olmalı'),
   body('firstName')
     .notEmpty()
     .withMessage('İsim zorunlu'),

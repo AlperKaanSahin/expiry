@@ -48,11 +48,18 @@ api.interceptors.response.use(
 export const registerUser = async (userData) => {
   try {
     const response = await api.post('/users/register', userData);
+
     await AsyncStorage.setItem('@token', response.data.accessToken);
     await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
+
     return response.data.user;
   } catch (error) {
-    throw error.response?.data?.error || 'Kayıt başarısız';
+    const backendError =
+      error.response?.data?.errors?.[0]?.message ||  // validator errors
+      error.response?.data?.error ||                 // custom errors
+      'Kayıt başarısız';
+
+    throw new Error(backendError);
   }
 };
 
