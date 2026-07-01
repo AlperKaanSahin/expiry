@@ -13,9 +13,7 @@ exports.createOrder = [
   body('packages.*.quantity')
     .isInt({ min: 1 })
     .withMessage('Miktar en az 1 olmalı'),
-  body('packages.*.price')
-    .isFloat({ min: 0 })
-    .withMessage('Geçerli bir fiyat giriniz'),
+  // price kaldırıldı — artık server-side hesaplanıyor
 ];
 
 exports.changeOrderStatus = [
