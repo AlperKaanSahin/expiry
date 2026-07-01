@@ -1,6 +1,7 @@
 const { User } = require('../models');
 const jwt = require('jsonwebtoken');
 
+
 const generateAccessToken = (user) => {
   return jwt.sign(
     { id: user.id, role: user.role },
@@ -34,6 +35,8 @@ exports.login = async (email, password) => {
   return { user: safeUser, accessToken, refreshToken };
 };
 
+const emailService = require('./emailService');
+
 exports.register = async (data) => {
   const { email, password, firstName, lastName, phone, address, birthDate, gender } = data;
 
@@ -44,6 +47,11 @@ exports.register = async (data) => {
 
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
+
+  // Email gönder — hata olursa kayıt işlemini etkilemesin
+  emailService.sendWelcomeEmail(user.email, user.firstName)
+  .then(res => console.log("EMAIL OK:", res))
+  .catch(err => console.log("EMAIL FAIL:", err));
 
   const safeUser = user.toJSON();
   delete safeUser.password;
