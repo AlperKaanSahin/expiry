@@ -45,7 +45,7 @@ Orders follow an escrow-style lifecycle:
 pending -> paid -> delivered -> confirmed -> released
 ```
 
-Most order transitions are validated server-side with role and ownership checks. Payment is currently simulated during development and is planned to be replaced with a real payment provider.
+Each transition is validated server-side with role and ownership checks. The `confirm` and `deliver` actions use separate endpoints to ensure actor intent is determined by the operation, not the caller's general role. Payment is currently simulated during development and is planned to be replaced with a real payment provider.
 
 ### Event-Driven Notifications And Audit Logs
 
@@ -53,11 +53,15 @@ The backend includes a custom event flow for side effects such as notifications 
 
 ### Server-Side Price Integrity
 
-Order totals are calculated from database values instead of trusting client-provided prices. This helps prevent price manipulation from the mobile client.
+Order totals are calculated from database values instead of trusting client-provided prices. This prevents price manipulation from the mobile client.
+
+### Refresh Token Authentication
+
+The backend issues short-lived access tokens (15 minutes) and long-lived refresh tokens (7 days). The mobile client automatically refreshes expired tokens via an Axios response interceptor. If the refresh token is invalid, an event-driven logout flow clears the session.
 
 ### Relational Data Model
 
-The backend uses Sequelize models, migrations, and relational tables for users, shops, products, packages, package units, orders, notifications, ratings, and audit logs.
+The backend uses Sequelize models, migrations, and relational tables for users, shops, products, packages, package units, orders, notifications, ratings, and audit logs. Audit logs preserve an `actorSnapshot` so historical records remain meaningful even if the acting user is later deleted.
 
 ---
 
@@ -76,20 +80,24 @@ expiry/
 │   ├── App.js
 │   └── package.json
 │
-└── expiry_backend/          # Express backend API
-    ├── controllers/         # Request handlers
-    ├── services/            # Business logic
-    ├── models/              # Sequelize models
-    ├── routes/              # Express routes
-    ├── middlewares/         # Auth, role guards, validation
-    ├── validators/          # express-validator schemas
-    ├── events/              # Event definitions and event bus
-    ├── handlers/            # Event listeners
-    ├── migrations/          # Database migrations
-    ├── seeders/             # Seed data
-    ├── config/              # Sequelize config examples
-    ├── app.js
-    └── package.json
+├── expiry_backend/          # Express backend API
+│   ├── controllers/         # Request handlers
+│   ├── services/            # Business logic
+│   ├── models/              # Sequelize models
+│   ├── routes/              # Express routes
+│   ├── middlewares/         # Auth, role guards, validation
+│   ├── validators/          # express-validator schemas
+│   ├── events/              # Event definitions and event bus
+│   ├── handlers/            # Event listeners
+│   ├── migrations/          # Database migrations
+│   ├── seeders/             # Seed data
+│   ├── config/              # Sequelize config examples
+│   ├── app.js
+│   └── package.json
+│
+└── postman/                 # API test collection
+    ├── expiry-collection.json
+    └── README.md
 ```
 
 ---
@@ -183,6 +191,23 @@ npx expo start
 
 ---
 
+## API Testing
+
+A Postman collection covering the full end-to-end flow is included in the `postman/` directory. See `postman/README.md` for setup instructions.
+
+The collection covers:
+
+- Auth (register, login, refresh token, profile)
+- Shop setup and admin approval flow
+- Seller flow (products, packages, shop profile)
+- Buyer flow (browse, order, payment simulation)
+- Order lifecycle (deliver, confirm, release)
+- Notifications
+- Shop rating
+- Cleanup
+
+---
+
 ## Environment And Git Notes
 
 Local environment and configuration files are ignored by Git:
@@ -206,17 +231,16 @@ expiry_backend/config/config.example.json
 
 ## Current Features
 
-- User registration and login
-- JWT-based authentication
-- Role-based user, market, and admin flows
-- Market application flow
-- Admin approval/rejection for market applications
+- User registration and login with JWT access and refresh tokens
+- Role-based flows for users, markets, and admins
+- Market application and admin approval/rejection flow
 - Shop product and package management
-- Order creation and order lifecycle tracking
-- In-app notifications
+- Order creation and full lifecycle tracking
+- In-app notifications for order and shop events
 - Shop rating system
-- Audit log foundation for admin actions
+- Audit log with actor snapshots
 - Server-side price calculation for orders
+- Full Postman e2e test collection
 
 ---
 
@@ -225,43 +249,48 @@ expiry_backend/config/config.example.json
 ### Security And Auth
 
 - [x] JWT access token authentication
-- [x] Refresh token flow on the mobile client
+- [x] Refresh token flow with auto-renewal on the mobile client
+- [x] Event-driven logout when refresh token is invalid
 - [x] Password hashing with bcrypt
-- [x] Basic rate limiting on auth routes
-- [x] Server-side price validation
-- [x] Core ownership checks for sensitive order/shop actions
+- [x] Rate limiting on auth routes
+- [x] Server-side price validation on order creation
+- [x] Ownership checks for orders, shop products, and packages
+- [x] Security audit (mass assignment, password leakage, actor validation)
 - [ ] Persist, rotate, and revoke refresh tokens server-side
-- [ ] Complete security audit for ownership checks and mass assignment risks
-- [ ] Improve production error handling and logging
+- [ ] Improve production error handling and centralized logging
 
 ### Testing
 
+- [x] Postman e2e collection covering full user, market, and admin flows
 - [ ] Unit tests for order state transitions
 - [ ] Unit tests for shop application/status transitions
 - [ ] Integration tests for authentication flow
 - [ ] Integration tests for order lifecycle
-- [ ] API endpoint tests with Supertest
 
 ### Product Features
 
 - [x] In-app notifications
 - [x] Shop rating system
-- [x] Admin audit log foundation
-- [ ] Push notifications
-- [ ] Real payment provider integration
-- [ ] Auto price-drop scheduler
+- [x] Admin audit log with actor snapshots
+- [ ] Push notifications (Firebase FCM, planned after development build)
+- [ ] Real payment provider integration (replacing simulate-payment)
+- [ ] Automatic order release scheduler — auto-transition confirmed to released after a configurable grace period, replacing manual admin trigger
+- [ ] Auto price-drop scheduler for packages nearing expiry
 - [ ] Map integration for shop locations
-- [ ] Market search and filtering
-- [ ] Order cancellation/refund flow
+- [ ] Market search and filtering by location or category
+- [ ] Password reset flow
+- [ ] Account deletion (required for store publishing)
+- [ ] Email verification on registration
 
 ### Code Quality
 
 - [x] Controller-service-model separation in the backend
-- [x] Sequelize migrations for database schema changes
+- [x] Sequelize migrations for all schema changes
 - [x] Environment example files for local setup
-- [ ] API documentation with Postman or OpenAPI
-- [ ] Centralized logger
-- [ ] Consistent response/error format
+- [x] Postman collection as API documentation
+- [ ] OpenAPI/Swagger documentation
+- [ ] Centralized logger (replace console.log)
+- [ ] Consistent response and error format across all endpoints
 - [ ] CI checks for linting and tests
 
 ---
