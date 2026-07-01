@@ -90,13 +90,16 @@ exports.updateShopProfile = async (userId, data) => {
 
 exports.canRateShop = async (userId, shopId) => {
   // Kullanıcının o marketten tamamlanmış siparişi var mı?
+exports.canRateShop = async (userId, shopId) => {
   const completedOrder = await Order.findOne({
     where: {
       userId,
       shopId,
-      status: 'confirmed'
+      status: ['confirmed', 'released']
     }
   });
+  // ...
+};
 
   if (!completedOrder) {
     return { canRate: false, reason: 'Henüz tamamlanmış siparişiniz yok' };
@@ -124,14 +127,14 @@ exports.rateShop = async (userId, shopId, rating, orderId) => {
   if (!shop) throw new Error('Market bulunamadı');
 
   // Sipariş kontrolü (bu user + shop + order uyumlu mu?)
-  const order = await Order.findOne({
-    where: {
-      id: orderId,
-      userId,
-      shopId,
-      status: 'confirmed'
-    }
-  });
+const order = await Order.findOne({
+  where: {
+    id: orderId,
+    userId,
+    shopId,
+    status: ['confirmed', 'released']
+  }
+});
 
   if (!order) {
     throw new Error('Geçersiz sipariş');
