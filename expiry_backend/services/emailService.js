@@ -64,3 +64,26 @@ html: `
     console.error("RESEND ERROR:", err);
   }
 };
+exports.sendPasswordResetEmail = async (to, firstName, resetToken) => {
+  try {
+    await resend.emails.send({
+      from: 'Expiry <onboarding@resend.dev>',
+      to,
+      subject: 'Şifre Sıfırlama Kodu',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1B8A5A;">Merhaba, ${firstName}!</h2>
+          <p>Şifre sıfırlama talebinde bulundunuz.</p>
+          <p>Aşağıdaki kodu uygulamaya girin:</p>
+          <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <h1 style="color: #1B8A5A; letter-spacing: 8px; font-size: 36px;">${resetToken}</h1>
+          </div>
+          <p>Bu kod <strong>15 dakika</strong> geçerlidir.</p>
+          <p>Eğer bu talebi siz yapmadıysanız, bu emaili görmezden gelebilirsiniz.</p>
+        </div>
+      `
+    });
+  } catch (err) {
+    console.error('Reset email gönderilemedi:', err.message);
+  }
+};

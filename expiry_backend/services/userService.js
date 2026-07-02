@@ -113,3 +113,40 @@ exports.updateProfile = async (userId, data) => {
   delete safeUser.password;
   return safeUser;
 };
+const crypto = require('crypto');
+
+exports.forgotPassword = async (email) => {
+  const user = await User.findOne({ where: { email } });
+  if (!user) throw new Error('Bu email ile kayıtlı kullanıcı bulunamadı');
+
+  // 6 haneli kod üret
+  const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+  const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 dakika
+
+  user.resetToken = resetToken;
+  user.resetTokenExpiry = resetTokenExpiry;
+  await user.save();
+
+  await emailService.sendPasswordResetEmail(user.email, user.firstName, resetToken);
+
+  return { message: 'Şifre sıfırlama kodu emailinize gönderildi' };
+};
+exports.resetPassword = async (email, token, newPassword) => {
+  const user = await User.findOne({ where: { email } });
+  if (!user) throw new Error('Kullanıcı bulunamadı');
+
+  if (!user.resetToken || user.resetToken !== token) {
+    throw new Error('Geçersiz kod');
+  }
+
+  if (new Date() > user.resetTokenExpiry) {
+    throw new Error('Kodun süresi dolmuş, tekrar talep edin');
+  }
+
+  user.password = newPassword;
+  user.resetToken = null;
+  user.resetTokenExpiry = null;
+  await user.save();
+
+  return { message: 'Şifreniz başarıyla güncellendi' };
+};

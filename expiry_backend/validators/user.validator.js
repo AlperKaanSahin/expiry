@@ -27,3 +27,20 @@ exports.login = [
     .notEmpty()
     .withMessage('Şifre zorunlu'),
 ];
+exports.forgotPassword = [
+  body('email')
+    .isEmail()
+    .withMessage('Geçerli bir email giriniz'),
+];
+
+exports.resetPassword = [
+  body('email')
+    .isEmail()
+    .withMessage('Geçerli bir email giriniz'),
+  body('token')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('Geçerli bir kod giriniz'),
+  body('newPassword')
+    .isLength({ min: 4 })
+    .withMessage('Şifre en az 4 karakter olmalı'),
+];

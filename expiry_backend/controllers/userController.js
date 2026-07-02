@@ -54,6 +54,25 @@ async updateProfile(req, res) {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+},
+async forgotPassword(req, res) {
+  try {
+    const { email } = req.body;
+    const result = await userService.forgotPassword(email);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+},
+
+async resetPassword(req, res) {
+  try {
+    const { email, token, newPassword } = req.body;
+    const result = await userService.resetPassword(email, token, newPassword);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 }
   
 };
