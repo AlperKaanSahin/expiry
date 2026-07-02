@@ -58,7 +58,15 @@ module.exports = (sequelize, DataTypes) => {
     gender: {
       type: DataTypes.ENUM('Erkek', 'Kadın', 'Diğer'),
       allowNull: true
-    }
+    },
+    resetToken: {
+  type: DataTypes.STRING,
+  allowNull: true
+},
+resetTokenExpiry: {
+  type: DataTypes.DATE,
+  allowNull: true
+}
   }, {
     sequelize,
     modelName: 'User',

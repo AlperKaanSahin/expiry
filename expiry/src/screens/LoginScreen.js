@@ -119,6 +119,7 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.submitText}>Giriş Yap</Text>
             )}
           </TouchableOpacity>
+          
 
           {/* REGISTER LINK */}
           <TouchableOpacity
@@ -131,6 +132,15 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.registerTextBold}>Kayıt Ol</Text>
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+  onPress={() => navigation.navigate('ForgotPassword')}
+  activeOpacity={0.7}
+  style={{ alignItems: 'flex-end', marginBottom: 8 }}
+>
+  <Text style={{ fontSize: 13, color: COLORS.primary, fontWeight: '500' }}>
+    Şifremi Unuttum
+  </Text>
+</TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

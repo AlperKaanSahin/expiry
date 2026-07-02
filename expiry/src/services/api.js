@@ -82,6 +82,15 @@ export const updateProfile = async (data) => {
   const res = await api.put('/users/profile', data);
   return res.data;
 };
+export const forgotPassword = async (email) => {
+  const res = await api.post('/users/forgot-password', { email });
+  return res.data;
+};
+
+export const resetPassword = async (email, token, newPassword) => {
+  const res = await api.post('/users/reset-password', { email, token, newPassword });
+  return res.data;
+};
 
 // ─── SHOPS ───────────────────────────────────────────────
 export const fetchShops = async () => {
