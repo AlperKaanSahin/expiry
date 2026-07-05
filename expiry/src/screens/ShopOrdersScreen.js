@@ -14,6 +14,7 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { fetchShopOrders, changeOrderStatus, markOrderDelivered } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Bekliyor',          color: '#6B7280' },
@@ -34,19 +35,19 @@ const ShopOrdersScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('active');
 
-  const loadOrders = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const data = await fetchShopOrders();
-      setOrders(Array.isArray(data) ? data : []);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.message });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const loadOrders = async (isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+  else setLoading(true);
+  try {
+    const data = await fetchShopOrders();
+    setOrders(Array.isArray(data) ? data : []);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => { loadOrders(); }, []);
 
@@ -56,7 +57,7 @@ const handleDeliver = async (orderId) => {
     await markOrderDelivered(orderId);
     loadOrders();
   } catch (err) {
-    Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+    showErrorToast(err, Toast);
   }
 };
 

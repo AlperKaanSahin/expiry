@@ -14,6 +14,7 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { fetchMyOrders, changeOrderStatus, confirmOrder } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Sipariş Alındı',     color: '#6B7280' },
@@ -34,19 +35,19 @@ const UserOrdersScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('active');
 
-  const loadOrders = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const data = await fetchMyOrders();
-      setOrders(Array.isArray(data) ? data : []);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const loadOrders = async (isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+  else setLoading(true);
+  try {
+    const data = await fetchMyOrders();
+    setOrders(Array.isArray(data) ? data : []);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => { loadOrders(); }, []);
 
@@ -58,7 +59,7 @@ const handleConfirm = async (orderId) => {
     Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Siparişiniz teslim alındı olarak işaretlendi' });
     loadOrders();
   } catch (err) {
-    Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+    showErrorToast(err, Toast);
   }
 };
 

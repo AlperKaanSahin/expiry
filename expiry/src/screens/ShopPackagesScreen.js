@@ -26,6 +26,7 @@ import {
   fetchShopProducts,
 } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const EMPTY_FORM = { name: '', price: '', description: '', quantity: '1' };
 
@@ -64,53 +65,53 @@ const ShopPackagesScreen = () => {
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [modalError, setModalError] = useState('');
 
-  const loadPackages = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await fetchShopOwnPackages();
-      setPackages(data);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const loadPackages = async (isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+  try {
+    const data = await fetchShopOwnPackages();
+    setPackages(data);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => { loadPackages(); }, []);
 
   const openModal = async (pkg = null) => {
-    try {
-      const products = await fetchShopProducts();
-      setAllProducts(products);
-      setSelectedPackage(pkg);
-      setFormData(pkg ? {
-        name: pkg.name || '',
-        price: pkg.price != null ? pkg.price.toString() : '',
-        description: pkg.description || '',
-        quantity: pkg.quantity != null ? pkg.quantity.toString() : '1',
-      } : EMPTY_FORM);
+  try {
+    const products = await fetchShopProducts();
+    setAllProducts(products);
+    setSelectedPackage(pkg);
+    setFormData(pkg ? {
+      name: pkg.name || '',
+      price: pkg.price != null ? pkg.price.toString() : '',
+      description: pkg.description || '',
+      quantity: pkg.quantity != null ? pkg.quantity.toString() : '1',
+    } : EMPTY_FORM);
 
-      const isAutoDrop = pkg && (
-        pkg.autoPriceDropEnabled === true ||
-        pkg.autoPriceDropEnabled === 1 ||
-        pkg.autoPriceDropEnabled === '1' ||
-        pkg.autoPriceDropEnabled === 'true'
-      );
+    const isAutoDrop = pkg && (
+      pkg.autoPriceDropEnabled === true ||
+      pkg.autoPriceDropEnabled === 1 ||
+      pkg.autoPriceDropEnabled === '1' ||
+      pkg.autoPriceDropEnabled === 'true'
+    );
 
-      setAutoPriceDropEnabled(!!isAutoDrop);
-      setPriceDropInterval(isAutoDrop && pkg.priceDropInterval != null ? pkg.priceDropInterval.toString() : '');
-      setPriceDropAmount(isAutoDrop && pkg.priceDropAmount != null ? pkg.priceDropAmount.toString() : '');
-      setMinPriceDropLimit(pkg?.minPriceDropLimit != null ? pkg.minPriceDropLimit.toString() : '');
-      setDeliveryStart(pkg?.deliveryStart ? new Date(pkg.deliveryStart) : new Date());
-      setDeliveryEnd(pkg?.deliveryEnd ? new Date(pkg.deliveryEnd) : new Date());
-      setSelectedProducts(pkg?.products ? pkg.products.map(p => ({ id: p.id, quantity: p.quantity })) : []);
-      setModalError('');
-      setModalVisible(true);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    }
-  };
+    setAutoPriceDropEnabled(!!isAutoDrop);
+    setPriceDropInterval(isAutoDrop && pkg.priceDropInterval != null ? pkg.priceDropInterval.toString() : '');
+    setPriceDropAmount(isAutoDrop && pkg.priceDropAmount != null ? pkg.priceDropAmount.toString() : '');
+    setMinPriceDropLimit(pkg?.minPriceDropLimit != null ? pkg.minPriceDropLimit.toString() : '');
+    setDeliveryStart(pkg?.deliveryStart ? new Date(pkg.deliveryStart) : new Date());
+    setDeliveryEnd(pkg?.deliveryEnd ? new Date(pkg.deliveryEnd) : new Date());
+    setSelectedProducts(pkg?.products ? pkg.products.map(p => ({ id: p.id, quantity: p.quantity })) : []);
+    setModalError('');
+    setModalVisible(true);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  }
+};
 
   const closeModal = () => {
     setModalVisible(false);
@@ -149,32 +150,22 @@ const ShopPackagesScreen = () => {
   };
 
  const handleSubmit = async () => {
-  console.log("🚀 START");
-
   try {
-    console.log("🧪 BUILDING DATA...");
-
-    // 1. PRODUCTS CLEAN
     const cleanedProducts = selectedProducts.map(p => {
       const productInfo = allProducts.find(prod => prod.id === p.id);
-
       return {
         id: p.id,
-        quantity: p.quantity && parseInt(p.quantity) > 0
-          ? parseInt(p.quantity)
-          : 1,
+        quantity: p.quantity && parseInt(p.quantity) > 0 ? parseInt(p.quantity) : 1,
         price: productInfo ? parseFloat(productInfo.price) : 0,
       };
     });
 
-    // 2. TOTAL PRICE (optional validation için)
     const totalProductsPrice = cleanedProducts.reduce((sum, p) => {
       const productInfo = allProducts.find(prod => prod.id === p.id);
       const price = productInfo ? parseFloat(productInfo.price) : 0;
       return sum + price * p.quantity;
     }, 0);
 
-    // 3. VALIDATION
     if (autoPriceDropEnabled) {
       const minLimit = parseFloat(minPriceDropLimit);
       const packagePrice = formData.price ? parseFloat(formData.price) : null;
@@ -195,7 +186,6 @@ const ShopPackagesScreen = () => {
       }
     }
 
-    // 4. PAYLOAD
     const payload = {
       name: formData.name,
       price: formData.price ? parseFloat(formData.price) : null,
@@ -205,58 +195,24 @@ const ShopPackagesScreen = () => {
       deliveryEnd: deliveryEnd.toISOString(),
       products: cleanedProducts,
       autoPriceDropEnabled,
-      priceDropAmount: autoPriceDropEnabled
-        ? parseFloat(priceDropAmount)
-        : null,
-      priceDropInterval: autoPriceDropEnabled
-        ? parseInt(priceDropInterval)
-        : null,
-      minPriceDropLimit: autoPriceDropEnabled
-        ? parseFloat(minPriceDropLimit)
-        : null,
+      priceDropAmount: autoPriceDropEnabled ? parseFloat(priceDropAmount) : null,
+      priceDropInterval: autoPriceDropEnabled ? parseInt(priceDropInterval) : null,
+      minPriceDropLimit: autoPriceDropEnabled ? parseFloat(minPriceDropLimit) : null,
     };
 
-    console.log("📦 PAYLOAD READY:", payload);
-
-    // 5. API CALL
-    console.log("📡 CALLING API...");
-
     if (selectedPackage) {
-      const res = await updateShopPackage(selectedPackage.id, payload);
-      console.log("✅ UPDATED:", res);
-
-      Toast.show({
-        type: "success",
-        text1: "Güncellendi",
-        text2: "Paket başarıyla güncellendi",
-      });
+      await updateShopPackage(selectedPackage.id, payload);
+      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Paket başarıyla güncellendi' });
     } else {
-      const res = await addShopPackage(payload);
-      console.log("✅ CREATED:", res);
-
-      Toast.show({
-        type: "success",
-        text1: "Eklendi",
-        text2: "Paket başarıyla eklendi",
-      });
+      await addShopPackage(payload);
+      Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Paket başarıyla eklendi' });
     }
 
-    // 6. CLEANUP
     closeModal();
     loadPackages();
-
   } catch (err) {
-    console.log("❌ ERROR:", err);
-    console.log("❌ RESPONSE:", err?.response?.data);
-
-    Toast.show({
-      type: "error",
-      text1: "Hata",
-      text2: err?.response?.data?.error || err.toString(),
-    });
+    showErrorToast(err, Toast);
   }
-
-  console.log("🏁 END");
 };
 
   const renderPackage = ({ item }) => (

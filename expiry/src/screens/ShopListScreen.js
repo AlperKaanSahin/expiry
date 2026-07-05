@@ -14,6 +14,8 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import { fetchAllShopsAdmin, updateShopStatus, deleteShop } from '../services/api';
 import { actionsByStatus, actionToStatus, actionLabels, actionColors } from '../constants/shopWorkflow';
 import { COLORS } from '../theme/colors';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
 
 const STATUS_CONFIG = {
   active:   { label: 'Aktif',      color: '#16A34A' },
@@ -28,48 +30,48 @@ const ShopListScreen = () => {
 
   useEffect(() => { loadShops(); }, []);
 
-  const loadShops = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchAllShopsAdmin();
-      setShops(data);
-    } catch (err) {
-      Alert.alert('Hata', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadShops = async () => {
+  setLoading(true);
+  try {
+    const data = await fetchAllShopsAdmin();
+    setShops(data);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handleStatus = async (id, status) => {
-    try {
-      await updateShopStatus(id, status);
-      loadShops();
-    } catch (err) {
-      Alert.alert('Hata', err.message);
-    }
-  };
+const handleStatus = async (id, status) => {
+  try {
+    await updateShopStatus(id, status);
+    loadShops();
+  } catch (err) {
+    showErrorToast(err, Toast);
+  }
+};
 
-  const handleDelete = (id) => {
-    Alert.alert(
-      'Shop\'u Sil',
-      'Bu shop\'u silmek istediğinize emin misiniz?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteShop(id);
-              loadShops();
-            } catch (err) {
-              Alert.alert('Hata', err.message);
-            }
+const handleDelete = (id) => {
+  Alert.alert(
+    'Shop\'u Sil',
+    'Bu shop\'u silmek istediğinize emin misiniz?',
+    [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteShop(id);
+            loadShops();
+          } catch (err) {
+            showErrorToast(err, Toast);
           }
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
 
   const renderShop = ({ item }) => {
     const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.primary };

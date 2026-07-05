@@ -12,23 +12,24 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { simulatePayment } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const PaymentScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
   const [loading, setLoading] = useState(false);
   const [paid, setPaid] = useState(false);
 
-  const handlePayment = async () => {
-    try {
-      setLoading(true);
-      await simulatePayment(orderId);
-      setPaid(true);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Ödeme Hatası', text2: err.toString() });
-    } finally {
-      setLoading(false);
-    }
-  };
+const handlePayment = async () => {
+  try {
+    setLoading(true);
+    await simulatePayment(orderId);
+    setPaid(true);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.safe}>

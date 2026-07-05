@@ -26,18 +26,18 @@ const ShopScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
 
-  const loadShops = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await fetchShops();
-      setShops(data);
-    } catch {
-      //
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const loadShops = async (isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+  try {
+    const data = await fetchShops();
+    setShops(data);
+  } catch (err) {
+    console.log('Marketler yüklenemedi:', err.message);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useFocusEffect(
     useCallback(() => { loadShops(); }, [])

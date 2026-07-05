@@ -12,28 +12,29 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { rateShop } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const RateShopScreen = ({ route, navigation }) => {
   const { shopId, orderId } = route.params;
   const [rating, setRating] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const handleRate = async () => {
-    if (rating === 0) {
-      Toast.show({ type: 'error', text1: 'Uyarı', text2: 'Lütfen bir puan seçin' });
-      return;
-    }
-    try {
-      setLoading(true);
-      await rateShop(shopId, rating, orderId);
-      Toast.show({ type: 'success', text1: 'Teşekkürler!', text2: 'Puanınız kaydedildi' });
-      navigation.goBack();
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.response?.data?.error || 'Puan gönderilemedi' });
-    } finally {
-      setLoading(false);
-    }
-  };
+const handleRate = async () => {
+  if (rating === 0) {
+    Toast.show({ type: 'error', text1: 'Uyarı', text2: 'Lütfen bir puan seçin' });
+    return;
+  }
+  try {
+    setLoading(true);
+    await rateShop(shopId, rating, orderId);
+    Toast.show({ type: 'success', text1: 'Teşekkürler!', text2: 'Puanınız kaydedildi' });
+    navigation.goBack();
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.safe}>

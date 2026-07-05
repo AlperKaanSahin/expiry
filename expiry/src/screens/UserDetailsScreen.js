@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -16,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { getUserById, updateUserRole, deleteUser } from '../services/api';
 import { COLORS } from '../theme/colors';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
 
 const ROLES = [
   { key: 'user',   label: 'Kullanıcı', desc: 'Standart kullanıcı yetkileri', icon: 'person' },
@@ -51,41 +52,41 @@ const UserDetailsScreen = ({ route, navigation }) => {
     })
   ).current;
 
-  const fetchUser = async () => {
-    try {
-      setLoading(true);
-      const res = await getUserById(userId);
-      setUser(res);
-      setRole(res.role);
-    } catch (err) {
-      Alert.alert('Hata', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchUser = async () => {
+  try {
+    setLoading(true);
+    const res = await getUserById(userId);
+    setUser(res);
+    setRole(res.role);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => { fetchUser(); }, []);
 
-  const handleRoleChange = async (newRole) => {
-    try {
-      await updateUserRole(user.id, newRole);
-      setRole(newRole);
-      setRoleModal(false);
-      fetchUser();
-    } catch (err) {
-      Alert.alert('Hata', err.message);
-    }
-  };
+const handleRoleChange = async (newRole) => {
+  try {
+    await updateUserRole(user.id, newRole);
+    setRole(newRole);
+    setRoleModal(false);
+    fetchUser();
+  } catch (err) {
+    showErrorToast(err, Toast);
+  }
+};
 
-  const handleDelete = async () => {
-    try {
-      await deleteUser(user.id);
-      setDeleteModal(false);
-      navigation.goBack();
-    } catch (err) {
-      Alert.alert('Hata', err.message);
-    }
-  };
+const handleDelete = async () => {
+  try {
+    await deleteUser(user.id);
+    setDeleteModal(false);
+    navigation.goBack();
+  } catch (err) {
+    showErrorToast(err, Toast);
+  }
+};
 
   if (loading) {
     return (

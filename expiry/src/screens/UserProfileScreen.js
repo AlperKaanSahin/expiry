@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  Modal,
+  TextInput,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
-import { getProfile } from '../services/api';
+import Toast from 'react-native-toast-message';
+import { getProfile, deleteAccount } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { showErrorToast } from '../utils/errorHandler';
 
 const ROLE_LABELS = {
   user: 'Kullanıcı',
@@ -21,8 +26,13 @@ const ROLE_LABELS = {
 };
 
 export default function UserProfileScreen({ navigation }) {
+  const { logout } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [password, setPassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
 useFocusEffect(
   useCallback(() => {
@@ -30,8 +40,8 @@ useFocusEffect(
       try {
         const data = await getProfile();
         setUser(data);
-      } catch {
-        //
+      } catch (err) {
+        console.log('Profil yüklenemedi:', err.message);
       } finally {
         setLoading(false);
       }
@@ -39,6 +49,24 @@ useFocusEffect(
     load();
   }, [])
 );
+
+const handleDeleteAccount = async () => {
+  if (!password) {
+    Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifrenizi girin' });
+    return;
+  }
+  try {
+    setDeleting(true);
+    await deleteAccount(password);
+    setDeleteModal(false);
+    Toast.show({ type: 'success', text1: 'Hesabınız silindi' });
+    await logout();
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setDeleting(false);
+  }
+};
 
   if (loading) {
     return (
@@ -104,7 +132,7 @@ useFocusEffect(
         )}
 
         {user?.address && (
-          <View style={styles.infoRow}>
+          <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
             <View style={styles.infoIcon}>
               <Icon name="location-on" size={18} color={COLORS.primary} />
             </View>
@@ -116,7 +144,7 @@ useFocusEffect(
         )}
       </View>
 
-      {/* EDIT BUTTON */}
+      {/* FOOTER */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.editButton}
@@ -126,7 +154,79 @@ useFocusEffect(
           <Icon name="edit" size={18} color={COLORS.white} />
           <Text style={styles.editText}>Profili Düzenle</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => setDeleteModal(true)}
+          activeOpacity={0.8}
+        >
+          <Icon name="delete-forever" size={18} color={COLORS.red} />
+          <Text style={styles.deleteText}>Hesabı Sil</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* DELETE MODAL */}
+      <Modal
+        transparent
+        visible={deleteModal}
+        animationType="fade"
+        onRequestClose={() => setDeleteModal(false)}
+      >
+        <Pressable style={styles.overlay} onPress={() => setDeleteModal(false)}>
+          <Pressable style={styles.modalBox} onPress={() => {}}>
+            <View style={styles.warningIcon}>
+              <Icon name="warning" size={32} color="#D97706" />
+            </View>
+            <Text style={styles.modalTitle}>Hesabı Sil</Text>
+            <Text style={styles.modalMessage}>
+              Bu işlem geri alınamaz. Tüm verileriniz silinecektir. Devam etmek için şifrenizi girin.
+            </Text>
+
+            <View style={styles.modalInputBox}>
+              <Icon name="lock" size={16} color={COLORS.textMuted} />
+              <TextInput
+                style={styles.modalInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Şifreniz"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
+                <Icon
+                  name={showPassword ? 'visibility' : 'visibility-off'}
+                  size={16}
+                  color={COLORS.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setDeleteModal(false);
+                  setPassword('');
+                }}
+              >
+                <Text style={styles.cancelBtnText}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmBtn}
+                onPress={handleDeleteAccount}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                ) : (
+                  <Text style={styles.confirmBtnText}>Sil</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -196,7 +296,13 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 12, color: COLORS.textMuted, marginBottom: 2 },
   infoValue: { fontSize: 14, fontWeight: '600', color: COLORS.text },
 
-  footer: { paddingHorizontal: 20, marginTop: 'auto', paddingBottom: 24, paddingTop: 24 },
+  footer: {
+    paddingHorizontal: 20,
+    marginTop: 'auto',
+    paddingBottom: 24,
+    paddingTop: 24,
+    gap: 10,
+  },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -207,4 +313,80 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   editText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: COLORS.redLight,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  deleteText: { fontSize: 15, fontWeight: '600', color: COLORS.red },
+
+  // MODAL
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    alignItems: 'center',
+  },
+  warningIcon: {
+    width: 64, height: 64,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  modalMessage: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalInputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.bg,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+    width: '100%',
+    marginBottom: 20,
+  },
+  modalInput: { flex: 1, fontSize: 15, color: COLORS.text },
+  modalActions: { flexDirection: 'row', gap: 10, width: '100%' },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.bg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
+  confirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.red,
+    alignItems: 'center',
+  },
+  confirmBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 });

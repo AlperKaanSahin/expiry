@@ -26,20 +26,20 @@ const ShopPanelScreen = ({ navigation }) => {
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadShopProfile = async () => {
-      try {
-        const data = await fetchShopProfile();
-        setStatus(data.status);
-        setShop(data.shop);
-      } catch {
-        //
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadShopProfile();
-  }, []);
+useEffect(() => {
+  const loadShopProfile = async () => {
+    try {
+      const data = await fetchShopProfile();
+      setStatus(data.status);
+      setShop(data.shop);
+    } catch (err) {
+      console.log('Shop profile yüklenemedi:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  loadShopProfile();
+}, []);
 
   if (loading) {
     return (

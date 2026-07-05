@@ -18,6 +18,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import { fetchShopProducts, addShopProduct, updateShopProduct, deleteShopProduct } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const EMPTY_FORM = { name: '', price: '', quantity: '' };
 
@@ -35,18 +36,18 @@ const ShopProductsScreen = () => {
   const [expiryDate, setExpiryDate] = useState(new Date());
   const [formData, setFormData] = useState(EMPTY_FORM);
 
-  const loadProducts = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await fetchShopProducts();
-      setProducts(data);
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: error.toString() });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const loadProducts = async (isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+  try {
+    const data = await fetchShopProducts();
+    setProducts(data);
+  } catch (error) {
+    showErrorToast(error, Toast);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => { loadProducts(); }, []);
 
@@ -67,39 +68,39 @@ const ShopProductsScreen = () => {
     setFormData(EMPTY_FORM);
   };
 
-  const handleSubmit = async () => {
-    try {
-      const payload = {
-        name: formData.name,
-        price: parseFloat(formData.price),
-        quantity: parseInt(formData.quantity),
-        expiryDate: expiryDate.toISOString(),
-      };
+const handleSubmit = async () => {
+  try {
+    const payload = {
+      name: formData.name,
+      price: parseFloat(formData.price),
+      quantity: parseInt(formData.quantity),
+      expiryDate: expiryDate.toISOString(),
+    };
 
-      if (selectedProduct) {
-        await updateShopProduct(selectedProduct.id, payload);
-        Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Ürün başarıyla güncellendi' });
-      } else {
-        await addShopProduct(payload);
-        Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Ürün başarıyla eklendi' });
-      }
-
-      closeModal();
-      loadProducts();
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: error.toString() });
+    if (selectedProduct) {
+      await updateShopProduct(selectedProduct.id, payload);
+      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Ürün başarıyla güncellendi' });
+    } else {
+      await addShopProduct(payload);
+      Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Ürün başarıyla eklendi' });
     }
-  };
 
-  const handleDelete = async (id) => {
-    try {
-      await deleteShopProduct(id);
-      Toast.show({ type: 'success', text1: 'Silindi', text2: 'Ürün başarıyla silindi' });
-      loadProducts();
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: error.toString() });
-    }
-  };
+    closeModal();
+    loadProducts();
+  } catch (error) {
+    showErrorToast(error, Toast);
+  }
+};
+
+const handleDelete = async (id) => {
+  try {
+    await deleteShopProduct(id);
+    Toast.show({ type: 'success', text1: 'Silindi', text2: 'Ürün başarıyla silindi' });
+    loadProducts();
+  } catch (error) {
+    showErrorToast(error, Toast);
+  }
+};
 
   const renderProduct = ({ item }) => (
     <View style={styles.card}>

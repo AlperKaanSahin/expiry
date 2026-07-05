@@ -12,12 +12,17 @@ api.interceptors.request.use(async (config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const skipRefresh = originalRequest.url?.includes('/login') ||
+                         originalRequest.url?.includes('/register') ||
+                         originalRequest.url?.includes('/refresh');
+
+    if (error.response?.status === 401 && !originalRequest._retry && !skipRefresh) {
       originalRequest._retry = true;
 
       try {
@@ -35,7 +40,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
-        authEvents.emit('LOGOUT'); // ← AuthContext'e haber ver
+        authEvents.emit('LOGOUT');
         return Promise.reject(refreshError);
       }
     }
@@ -46,42 +51,29 @@ api.interceptors.response.use(
 
 // ─── AUTH ────────────────────────────────────────────────
 export const registerUser = async (userData) => {
-  try {
-    const response = await api.post('/users/register', userData);
-
-    await AsyncStorage.setItem('@token', response.data.accessToken);
-    await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
-
-    return response.data.user;
-  } catch (error) {
-    const backendError =
-      error.response?.data?.errors?.[0]?.message ||  // validator errors
-      error.response?.data?.error ||                 // custom errors
-      'Kayıt başarısız';
-
-    throw new Error(backendError);
-  }
+  const response = await api.post('/users/register', userData);
+  await AsyncStorage.setItem('@token', response.data.accessToken);
+  await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
+  return response.data.user;
 };
 
 export const loginUser = async ({ email, password }) => {
-  try {
-    const response = await api.post('/users/login', { email, password });
-    await AsyncStorage.setItem('@token', response.data.accessToken);
-    await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Giriş başarısız';
-  }
+  const response = await api.post('/users/login', { email, password });
+  await AsyncStorage.setItem('@token', response.data.accessToken);
+  await AsyncStorage.setItem('@refreshToken', response.data.refreshToken);
+  return response.data;
 };
 
 export const getProfile = async () => {
   const res = await api.get('/users/profile');
   return res.data;
 };
+
 export const updateProfile = async (data) => {
   const res = await api.put('/users/profile', data);
   return res.data;
 };
+
 export const forgotPassword = async (email) => {
   const res = await api.post('/users/forgot-password', { email });
   return res.data;
@@ -92,14 +84,15 @@ export const resetPassword = async (email, token, newPassword) => {
   return res.data;
 };
 
+export const deleteAccount = async (password) => {
+  const res = await api.delete('/users/account', { data: { password } });
+  return res.data;
+};
+
 // ─── SHOPS ───────────────────────────────────────────────
 export const fetchShops = async () => {
-  try {
-    const response = await api.get('/shops');
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Marketler yüklenemedi';
-  }
+  const response = await api.get('/shops');
+  return response.data;
 };
 
 export const fetchShopProfile = async () => {
@@ -121,12 +114,19 @@ export const canRateShop = async (shopId) => {
   const res = await api.get(`/shops/${shopId}/can-rate`);
   return res.data;
 };
+
 export const updateShopProfile = async (data) => {
   const res = await api.put('/shops/profile', data);
   return res.data;
 };
+
 export const changeShopPassword = async (data) => {
   const res = await api.put('/users/change-password', data);
+  return res.data;
+};
+
+export const deleteShop = async (id) => {
+  const res = await api.delete(`/admin/shops/${id}`);
   return res.data;
 };
 
@@ -137,49 +137,29 @@ export const fetchShopPackages = async (shopId) => {
 };
 
 export const fetchPackageDetail = async (packageId) => {
-  try {
-    const response = await api.get(`/packages/${packageId}`);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Kutu detayları yüklenemedi';
-  }
+  const response = await api.get(`/packages/${packageId}`);
+  return response.data;
 };
 
 // ─── SHOP PRODUCTS ───────────────────────────────────────
 export const fetchShopProducts = async () => {
-  try {
-    const response = await api.get('/shop/products');
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Ürünler yüklenemedi';
-  }
+  const response = await api.get('/shop/products');
+  return response.data;
 };
 
 export const addShopProduct = async (product) => {
-  try {
-    const response = await api.post('/shop/products', product);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Ürün eklenemedi';
-  }
+  const response = await api.post('/shop/products', product);
+  return response.data;
 };
 
 export const updateShopProduct = async (id, product) => {
-  try {
-    const response = await api.put(`/shop/products/${id}`, product);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || 'Ürün güncellenemedi';
-  }
+  const response = await api.put(`/shop/products/${id}`, product);
+  return response.data;
 };
 
 export const deleteShopProduct = async (id) => {
-  try {
-    await api.delete(`/shop/products/${id}`);
-    return true;
-  } catch (error) {
-    throw error.response?.data?.error || 'Ürün silinemedi';
-  }
+  await api.delete(`/shop/products/${id}`);
+  return true;
 };
 
 // ─── SHOP PACKAGES ───────────────────────────────────────
@@ -206,8 +186,7 @@ export const deleteShopPackage = async (id, count) => {
 
 // ─── ORDERS ──────────────────────────────────────────────
 export const createOrder = async ({ shopId, packages }) => {
-  const totalPrice = packages.reduce((sum, pkg) => sum + pkg.price * pkg.quantity, 0);
-  const response = await api.post('/orders', { shopId, packages, totalPrice });
+  const response = await api.post('/orders', { shopId, packages });
   return response.data;
 };
 
@@ -230,6 +209,7 @@ export const simulatePayment = async (orderId) => {
   const response = await api.post('/orders/simulate-payment', { orderId });
   return response.data;
 };
+
 export const confirmOrder = async (orderId) => {
   const response = await api.post(`/orders/${orderId}/confirm`);
   return response.data;

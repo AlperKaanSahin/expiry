@@ -13,6 +13,7 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { COLORS } from '../theme/colors';
 import { resetPassword } from '../services/api';
+import { showErrorToast } from '../utils/errorHandler';
 
 const ResetPasswordScreen = ({ route, navigation }) => {
   const { email } = route.params;
@@ -31,14 +32,14 @@ const ResetPasswordScreen = ({ route, navigation }) => {
       return;
     }
 
-    try {
-      setLoading(true);
-      await resetPassword(email, token, newPassword);
-      Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Şifreniz güncellendi' });
-      navigation.navigate('Login');
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    } finally {
+try {
+  setLoading(true);
+  await resetPassword(email, token, newPassword);
+  Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Şifreniz güncellendi' });
+  navigation.navigate('Login');
+} catch (err) {
+  showErrorToast(err, Toast);
+}finally {
       setLoading(false);
     }
   };

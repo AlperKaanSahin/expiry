@@ -19,6 +19,7 @@ import Toast from 'react-native-toast-message';
 import { registerUser } from '../services/api';
 import { ROUTES } from '../navigation/routes';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const GENDERS = [
   { value: 'Erkek', label: 'Erkek', icon: 'male' },
@@ -45,6 +46,7 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   const handleRegister = async () => {
+    console.log('KAYIT BAŞLADI')
     const { firstName, lastName, email, password, phone, birthDate, gender } = formData;
 
     if (!firstName || !lastName || !email || !password || !phone || !birthDate || !gender) {
@@ -66,9 +68,10 @@ const RegisterScreen = ({ navigation }) => {
           routes: [{ name: ROUTES.WELCOME, params: { registered: true } }],
         })
       );
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.message || 'Kayıt sırasında bir hata oluştu' });
-    } finally {
+} catch (err) {
+  console.log('HATA YAKALANDI:', err);
+  showErrorToast(err, Toast);
+} finally {
       setLoading(false);
     }
   };

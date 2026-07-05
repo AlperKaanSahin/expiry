@@ -11,6 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { fetchAuditLogs } from '../services/api';
 import { COLORS } from '../theme/colors';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
 
 const ACTION_COLORS = {
   CREATE: '#16A34A',
@@ -101,18 +103,18 @@ const actor = item.actor
 const AuditLogsScreen = () => {
   const [logs, setLogs] = useState([]);
 
-  useEffect(() => {
-    const loadLogs = async () => {
-      try {
-        const res = await fetchAuditLogs();
-        const data = res.data?.logs || [];
-        setLogs([...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-      } catch {
-        //
-      }
-    };
-    loadLogs();
-  }, []);
+useEffect(() => {
+  const loadLogs = async () => {
+    try {
+      const res = await fetchAuditLogs();
+      const data = res.data?.logs || [];
+      setLogs([...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    } catch (err) {
+      showErrorToast(err, Toast);
+    }
+  };
+  loadLogs();
+}, []);
 
   return (
     <SafeAreaView style={styles.safe}>

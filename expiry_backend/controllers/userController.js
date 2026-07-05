@@ -73,6 +73,15 @@ async resetPassword(req, res) {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+},
+async deleteAccount(req, res) {
+  try {
+    const { password } = req.body;
+    const result = await userService.deleteAccount(req.user.id, password);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 }
   
 };

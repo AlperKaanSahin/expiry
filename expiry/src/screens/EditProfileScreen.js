@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { getProfile, updateProfile } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const EditProfileScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -24,24 +25,24 @@ const EditProfileScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const user = await getProfile();
-        setFormData({
-          firstName: user.firstName || '',
-          lastName: user.lastName || '',
-          phone: user.phone || '',
-          address: user.address || '',
-        });
-      } catch (err) {
-        Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+useEffect(() => {
+  const load = async () => {
+    try {
+      const user = await getProfile();
+      setFormData({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        phone: user.phone || '',
+        address: user.address || '',
+      });
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+    }
+  };
+  load();
+}, []);
 
   const handleChange = (key, value) => setFormData(prev => ({ ...prev, [key]: value }));
 
@@ -50,16 +51,16 @@ const EditProfileScreen = ({ navigation }) => {
       Toast.show({ type: 'error', text1: 'Hata', text2: 'Ad ve soyad zorunlu' });
       return;
     }
-    try {
-      setSaving(true);
-      await updateProfile(formData);
-      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profiliniz güncellendi' });
-      navigation.goBack();
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    } finally {
-      setSaving(false);
-    }
+try {
+  setSaving(true);
+  await updateProfile(formData);
+  Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profiliniz güncellendi' });
+  navigation.goBack();
+} catch (err) {
+  showErrorToast(err, Toast);
+} finally {
+  setSaving(false);
+}
   };
 
   if (loading) {

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { fetchShopProfile, updateShopProfile, changeShopPassword } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const TABS = [
   { key: 'profile', label: 'Bilgilerim' },
@@ -30,60 +31,60 @@ const ShopProfileScreen = () => {
   const [formData, setFormData] = useState({ name: '', address: '', phone: '', email: '' });
   const [passwordData, setPasswordData] = useState(EMPTY_PASSWORD);
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const data = await fetchShopProfile();
-        setFormData({
-          name: data.shop?.name || '',
-          address: data.shop?.address || '',
-          phone: data.shop?.phone || '',
-          email: data.shop?.email || '',
-        });
-      } catch (err) {
-        Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadProfile();
-  }, []);
-
-  const handleProfileUpdate = async () => {
+useEffect(() => {
+  const loadProfile = async () => {
     try {
-      setSaving(true);
-      await updateShopProfile(formData);
-      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profil bilgileri güncellendi' });
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePasswordChange = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Yeni şifreler eşleşmiyor' });
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre en az 6 karakter olmalı' });
-      return;
-    }
-    try {
-      setSaving(true);
-      await changeShopPassword({
-        password: passwordData.currentPassword,
-        newPassword: passwordData.newPassword,
+      const data = await fetchShopProfile();
+      setFormData({
+        name: data.shop?.name || '',
+        address: data.shop?.address || '',
+        phone: data.shop?.phone || '',
+        email: data.shop?.email || '',
       });
-      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Şifre başarıyla değiştirildi' });
-      setPasswordData(EMPTY_PASSWORD);
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
+      showErrorToast(err, Toast);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
+  loadProfile();
+}, []);
+
+const handleProfileUpdate = async () => {
+  try {
+    setSaving(true);
+    await updateShopProfile(formData);
+    Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profil bilgileri güncellendi' });
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setSaving(false);
+  }
+};
+
+const handlePasswordChange = async () => {
+  if (passwordData.newPassword !== passwordData.confirmPassword) {
+    Toast.show({ type: 'error', text1: 'Hata', text2: 'Yeni şifreler eşleşmiyor' });
+    return;
+  }
+  if (passwordData.newPassword.length < 6) {
+    Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre en az 6 karakter olmalı' });
+    return;
+  }
+  try {
+    setSaving(true);
+    await changeShopPassword({
+      password: passwordData.currentPassword,
+      newPassword: passwordData.newPassword,
+    });
+    Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Şifre başarıyla değiştirildi' });
+    setPasswordData(EMPTY_PASSWORD);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (
