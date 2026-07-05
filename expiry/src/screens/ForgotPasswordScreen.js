@@ -13,6 +13,7 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { COLORS } from '../theme/colors';
 import { forgotPassword } from '../services/api';
+import { showErrorToast } from '../utils/errorHandler';
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -24,14 +25,14 @@ const ForgotPasswordScreen = ({ navigation }) => {
       return;
     }
 
-    try {
-      setLoading(true);
-      await forgotPassword(email);
-      Toast.show({ type: 'success', text1: 'Kod Gönderildi', text2: 'Emailinizi kontrol edin' });
-      navigation.navigate('ResetPassword', { email });
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.toString() });
-    } finally {
+try {
+  setLoading(true);
+  await forgotPassword(email);
+  Toast.show({ type: 'success', text1: 'Kod Gönderildi', text2: 'Emailinizi kontrol edin' });
+  navigation.navigate('ResetPassword', { email });
+} catch (err) {
+  showErrorToast(err, Toast);
+} finally {
       setLoading(false);
     }
   };

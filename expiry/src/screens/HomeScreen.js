@@ -33,13 +33,13 @@ const HomeScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       const loadUnread = async () => {
-        try {
-          const res = await fetchNotifications();
-          const data = res.data || [];
-          setUnreadCount(data.filter(n => !n.isRead).length);
-        } catch {
-          //
-        }
+try {
+  const res = await fetchNotifications();
+  const data = res.data || [];
+  setUnreadCount(data.filter(n => !n.isRead).length);
+} catch (err) {
+  console.log('Bildirim sayısı yüklenemedi:', err.message);
+}
       };
       loadUnread();
     }, [])

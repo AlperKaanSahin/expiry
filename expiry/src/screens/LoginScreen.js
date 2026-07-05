@@ -16,6 +16,7 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const LoginScreen = ({ navigation }) => {
   const { login } = useAuth();
@@ -32,9 +33,9 @@ const LoginScreen = ({ navigation }) => {
     try {
       setLoading(true);
       await login(email, password);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Giriş Başarısız', text2: err.toString() });
-    } finally {
+} catch (err) {
+  showErrorToast(err, Toast);
+} finally {
       setLoading(false);
     }
   };

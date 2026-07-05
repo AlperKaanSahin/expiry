@@ -15,6 +15,8 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchAllUsers, deleteUser } from '../services/api';
 import { COLORS } from '../theme/colors';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
 
 const ROLE_CONFIG = {
   admin:  { label: 'Admin',  color: '#D97706', bg: '#FEF3C7' },
@@ -31,19 +33,19 @@ export default function UserListScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const loadUsers = async (pageNumber = 1) => {
-    try {
-      setLoading(true);
-      const data = await fetchAllUsers(pageNumber, LIMIT);
-      setUsers(data.users);
-      setTotal(data.total);
-      setPage(data.page);
-    } catch (err) {
-      Alert.alert('Hata', err.toString());
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadUsers = async (pageNumber = 1) => {
+  try {
+    setLoading(true);
+    const data = await fetchAllUsers(pageNumber, LIMIT);
+    setUsers(data.users);
+    setTotal(data.total);
+    setPage(data.page);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useFocusEffect(
     useCallback(() => {
@@ -59,27 +61,27 @@ export default function UserListScreen({ navigation }) {
       )
     : users;
 
-  const handleDelete = (userId) => {
-    Alert.alert(
-      'Kullanıcıyı Sil',
-      'Bu kullanıcıyı silmek istediğinizden emin misiniz?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteUser(userId);
-              loadUsers(page);
-            } catch (err) {
-              Alert.alert('Hata', err.toString());
-            }
+const handleDelete = (userId) => {
+  Alert.alert(
+    'Kullanıcıyı Sil',
+    'Bu kullanıcıyı silmek istediğinizden emin misiniz?',
+    [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteUser(userId);
+            loadUsers(page);
+          } catch (err) {
+            showErrorToast(err, Toast);
           }
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
 
   const maxPage = Math.ceil(total / LIMIT);
 

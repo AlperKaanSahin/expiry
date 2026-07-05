@@ -14,6 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { fetchNotifications, markNotificationAsRead } from '../services/api';
 import { COLORS } from '../theme/colors';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
 
 const TYPE_CONFIG = {
   SHOP_APPROVED:   { icon: 'check-circle',   color: '#16A34A' },
@@ -54,81 +56,69 @@ const NotificationScreen = ({ navigation }) => {
     }, [])
   );
 
-  const loadNotifications = async () => {
-    setLoading(true);
-    try {
-      const res = await fetchNotifications();
-      setNotifications(res.data || []);
-    } catch {
-      //
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadNotifications = async () => {
+  setLoading(true);
+  try {
+    const res = await fetchNotifications();
+    setNotifications(res.data || []);
+  } catch (err) {
+    console.log('Bildirimler yüklenemedi:', err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handlePress = async (item) => {
-    try {
-      await markNotificationAsRead(item.id);
-      setNotifications(prev =>
-        prev.map(n => n.id === item.id ? { ...n, isRead: true } : n)
-      );
+ const handlePress = async (item) => {
+  try {
+    await markNotificationAsRead(item.id);
+    setNotifications(prev =>
+      prev.map(n => n.id === item.id ? { ...n, isRead: true } : n)
+    );
 
-      if (user.role === 'admin') {
-        switch (item.type) {
-          case 'SHOP_APPLY':
-          case 'SHOP_REAPPLY':
-            navigation.navigate('AdminStack', { screen: 'ShopListScreen' });
-            break;
-          default:
-            navigation.navigate('AdminStack');
-        }
-        return;
+    if (user.role === 'admin') {
+      switch (item.type) {
+        case 'SHOP_APPLY':
+        case 'SHOP_REAPPLY':
+          navigation.navigate('AdminStack', { screen: 'ShopListScreen' });
+          break;
+        default:
+          navigation.navigate('AdminStack');
       }
-
-switch (item.type) {
-  case 'SHOP_APPROVED':
-    navigation.navigate('ShopStack', { screen: 'ShopPanel' });
-    break;
-  case 'SHOP_REJECTED':
-    navigation.navigate('ShopStack', { screen: 'ShopApply' });
-    break;
-  case 'RATE_SHOP':
-    navigation.navigate('ShopStack', { screen: 'RateShopScreen', params: { shopId: item.targetId, orderId: item.orderId } });
-    break;
-
-  // Market'e gelen yeni sipariş bildirimi
-  case 'ORDER_NEW':
-    navigation.navigate('ShopStack', { screen: 'ShopOrders' });
-    break;
-
-  // Market'e gelen sipariş tamamlandı bildirimi
-  case 'ORDER_CONFIRMED':
-    navigation.navigate('ShopStack', { screen: 'ShopOrders' });
-    break;
-
-  // Market'e gelen ödeme aktarıldı bildirimi
-  case 'ORDER_RELEASED':
-    navigation.navigate('ShopStack', { screen: 'ShopOrders' });
-    break;
-
-  // Kullanıcıya gelen ödeme alındı bildirimi
-  case 'ORDER_PAID':
-    navigation.navigate('UserOrders');
-    break;
-
-  // Kullanıcıya gelen teslim aldıysanız onaylayın bildirimi
-  case 'ORDER_DELIVERED':
-    navigation.navigate('UserOrders');
-    break;
-
-  default:
-    break;
-}
-    } 
-    catch {
-      //
+      return;
     }
-  };
+
+    switch (item.type) {
+      case 'SHOP_APPROVED':
+        navigation.navigate('ShopStack', { screen: 'ShopPanel' });
+        break;
+      case 'SHOP_REJECTED':
+        navigation.navigate('ShopStack', { screen: 'ShopApply' });
+        break;
+      case 'RATE_SHOP':
+        navigation.navigate('ShopStack', { screen: 'RateShopScreen', params: { shopId: item.targetId, orderId: item.orderId } });
+        break;
+      case 'ORDER_NEW':
+        navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+        break;
+      case 'ORDER_CONFIRMED':
+        navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+        break;
+      case 'ORDER_RELEASED':
+        navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+        break;
+      case 'ORDER_PAID':
+        navigation.navigate('UserOrders');
+        break;
+      case 'ORDER_DELIVERED':
+        navigation.navigate('UserOrders');
+        break;
+      default:
+        break;
+    }
+  } catch (err) {
+    showErrorToast(err, Toast);
+  }
+};
 
   const renderItem = ({ item }) => {
     const config = TYPE_CONFIG[item.type] || DEFAULT_TYPE;

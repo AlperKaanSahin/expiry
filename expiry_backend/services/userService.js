@@ -1,4 +1,4 @@
-const { User } = require('../models');
+const { User, Order } = require('../models');
 const jwt = require('jsonwebtoken');
 
 
@@ -149,4 +149,38 @@ exports.resetPassword = async (email, token, newPassword) => {
   await user.save();
 
   return { message: 'Şifreniz başarıyla güncellendi' };
+};
+exports.deleteAccount = async (userId, password) => {
+  const user = await User.findByPk(userId);
+  if (!user) throw new Error('Kullanıcı bulunamadı');
+
+  // Şifre doğrulama
+  if (!user.validPassword(password)) {
+    throw new Error('Şifre hatalı');
+  }
+
+  // Aktif sipariş kontrolü
+  const activeOrders = await Order.findAll({
+    where: {
+      userId,
+      status: ['pending', 'paid', 'delivered']
+    }
+  });
+
+  if (activeOrders.length > 0) {
+    throw new Error('Aktif siparişleriniz tamamlanmadan hesabınızı silemezsiniz');
+  }
+
+  // Anonimleştir
+  user.email = `deleted_user_${userId}@deleted.com`;
+  user.firstName = 'Silinmiş';
+  user.lastName = 'Kullanıcı';
+  user.phone = null;
+  user.address = null;
+  user.password = Math.random().toString(36);
+  user.deletedAt = new Date();
+
+  await user.save({ paranoid: false });
+
+  return { message: 'Hesabınız başarıyla silindi' };
 };

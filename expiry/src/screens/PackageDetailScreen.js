@@ -6,13 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  StatusBar,
-  Alert,
+  StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { fetchPackageDetail, createOrder } from '../services/api';
 import { COLORS } from '../theme/colors';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
 
 const formatDelivery = (start, end) => {
   if (!start || !end) return 'Teslimat zamanı belirtilmemiş';
@@ -31,37 +32,34 @@ const PackageDetailScreen = ({ route, navigation }) => {
   const [ordering, setOrdering] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await fetchPackageDetail(packageId);
-        setPackageData(data);
-      } catch {
-        Alert.alert('Hata', 'Paket bilgileri yüklenemedi');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [packageId]);
-
-  const handleOrder = async () => {
+useEffect(() => {
+  const load = async () => {
     try {
-      setOrdering(true);
-      const order = await createOrder({
-        shopId: packageData.shopId,
-        packages: [{ packageId: packageData.id, quantity, price: packageData.price }],
-        totalPrice: packageData.price * quantity,
-      });
-      const updated = await fetchPackageDetail(packageData.id);
-      setPackageData(updated);
-      navigation.navigate('PaymentScreen', { orderId: order.id });
-    } catch {
-      Alert.alert('Hata', 'Sipariş oluşturulurken bir sorun oluştu');
+      const data = await fetchPackageDetail(packageId);
+      setPackageData(data);
+    } catch (err) {
+      showErrorToast(err, Toast);
     } finally {
-      setOrdering(false);
+      setLoading(false);
     }
   };
+  load();
+}, [packageId]);
+
+const handleOrder = async () => {
+  try {
+    setOrdering(true);
+    const order = await createOrder({
+      shopId: packageData.shopId,
+      packages: [{ packageId: packageData.id, quantity }],
+    });
+    navigation.navigate('PaymentScreen', { orderId: order.id });
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setOrdering(false);
+  }
+};
 
   const maxQuantity = packageData?.quantity || 1;
 

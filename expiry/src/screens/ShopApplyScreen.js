@@ -16,6 +16,7 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { applyForShop, fetchShopProfile } from '../services/api';
 import { COLORS } from '../theme/colors';
+import { showErrorToast } from '../utils/errorHandler';
 
 const EMPTY_FORM = { name: '', address: '', phone: '' };
 
@@ -25,39 +26,39 @@ const ShopApplyScreen = ({ navigation }) => {
   const [shopStatus, setShopStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
-  useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const data = await fetchShopProfile();
-        setShopStatus(data?.shop?.status || null);
-      } catch {
-        setShopStatus(null);
-      } finally {
-        setStatusLoading(false);
-      }
-    };
-    checkStatus();
-  }, []);
+useEffect(() => {
+  const checkStatus = async () => {
+    try {
+      const data = await fetchShopProfile();
+      setShopStatus(data?.shop?.status || null);
+    } catch (err) {
+      setShopStatus(null);
+      console.log('Shop status kontrolü:', err.message);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+  checkStatus();
+}, []);
 
   const handleChange = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
-  const handleSubmit = async () => {
-    if (!form.name || !form.phone) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Market adı ve telefon zorunlu' });
-      return;
-    }
-    try {
-      setLoading(true);
-      await applyForShop(form);
-      Toast.show({ type: 'success', text1: 'Başvuru Alındı', text2: 'Admin onayı bekleniyor' });
-      navigation.navigate('Home');
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: err.message || 'Başvuru başarısız' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+const handleSubmit = async () => {
+  if (!form.name || !form.phone) {
+    Toast.show({ type: 'error', text1: 'Hata', text2: 'Market adı ve telefon zorunlu' });
+    return;
+  }
+  try {
+    setLoading(true);
+    await applyForShop(form);
+    Toast.show({ type: 'success', text1: 'Başvuru Alındı', text2: 'Admin onayı bekleniyor' });
+    navigation.navigate('Home');
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
   if (statusLoading) {
     return (
       <SafeAreaView style={styles.safe}>
