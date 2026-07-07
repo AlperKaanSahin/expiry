@@ -27,16 +27,54 @@ const GENDERS = [
   { value: 'Diğer', label: 'Diğer', icon: 'transgender' },
 ];
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const RegisterScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', email: '',
     phone: '', birthDate: '', gender: '', password: ''
   });
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const handleChange = (name, value) => setFormData(prev => ({ ...prev, [name]: value }));
+  const handleChange = (name, value) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
+  };
+
+  const validateField = (name, value) => {
+    switch (name) {
+      case 'firstName':
+        return !value.trim() ? 'Ad zorunlu' : null;
+      case 'lastName':
+        return !value.trim() ? 'Soyad zorunlu' : null;
+      case 'email':
+        if (!value.trim()) return 'Email zorunlu';
+        if (!EMAIL_REGEX.test(value)) return 'Geçerli bir email girin';
+        return null;
+      case 'phone':
+        if (!value.trim()) return 'Telefon zorunlu';
+        if (value.length !== 10) return 'Telefon 10 hane olmalı';
+        return null;
+      case 'birthDate':
+        return !value ? 'Doğum tarihi zorunlu' : null;
+      case 'gender':
+        return !value ? 'Cinsiyet seçimi zorunlu' : null;
+      case 'password':
+        if (!value) return 'Şifre zorunlu';
+        if (value.length < 6) return 'Şifre en az 6 karakter olmalı';
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  const handleBlur = (name) => {
+    const error = validateField(name, formData[name]);
+    setErrors(prev => ({ ...prev, [name]: error }));
+  };
 
   const handleDateChange = (_, selectedDate) => {
     setShowDatePicker(Platform.OS === 'ios');
@@ -45,17 +83,19 @@ const RegisterScreen = ({ navigation }) => {
     }
   };
 
+  const validateAll = () => {
+    const newErrors = {};
+    Object.keys(formData).forEach(key => {
+      const error = validateField(key, formData[key]);
+      if (error) newErrors[key] = error;
+    });
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleRegister = async () => {
-    console.log('KAYIT BAŞLADI')
-    const { firstName, lastName, email, password, phone, birthDate, gender } = formData;
-
-    if (!firstName || !lastName || !email || !password || !phone || !birthDate || !gender) {
-      Toast.show({ type: 'error', text1: 'Eksik Bilgi', text2: 'Lütfen tüm zorunlu alanları doldurun' });
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      Toast.show({ type: 'error', text1: 'Geçersiz Email', text2: 'Lütfen geçerli bir email adresi girin' });
+    if (!validateAll()) {
+      Toast.show({ type: 'error', text1: 'Eksik Bilgi', text2: 'Lütfen formu kontrol edin' });
       return;
     }
 
@@ -68,10 +108,9 @@ const RegisterScreen = ({ navigation }) => {
           routes: [{ name: ROUTES.WELCOME, params: { registered: true } }],
         })
       );
-} catch (err) {
-  console.log('HATA YAKALANDI:', err);
-  showErrorToast(err, Toast);
-} finally {
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
       setLoading(false);
     }
   };
@@ -100,43 +139,48 @@ const RegisterScreen = ({ navigation }) => {
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
               <Text style={styles.inputLabel}>Ad *</Text>
-              <View style={styles.inputBox}>
+              <View style={[styles.inputBox, errors.firstName && styles.inputBoxError]}>
                 <TextInput
                   style={styles.input}
                   value={formData.firstName}
                   onChangeText={t => handleChange('firstName', t)}
+                  onBlur={() => handleBlur('firstName')}
                   placeholder="Adınız"
                   placeholderTextColor={COLORS.textMuted}
                   autoCapitalize="words"
                   returnKeyType="next"
                 />
               </View>
+              {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
             </View>
             <View style={[styles.inputGroup, { flex: 1 }]}>
               <Text style={styles.inputLabel}>Soyad *</Text>
-              <View style={styles.inputBox}>
+              <View style={[styles.inputBox, errors.lastName && styles.inputBoxError]}>
                 <TextInput
                   style={styles.input}
                   value={formData.lastName}
                   onChangeText={t => handleChange('lastName', t)}
+                  onBlur={() => handleBlur('lastName')}
                   placeholder="Soyadınız"
                   placeholderTextColor={COLORS.textMuted}
                   autoCapitalize="words"
                   returnKeyType="next"
                 />
               </View>
+              {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
             </View>
           </View>
 
           {/* EMAIL */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Email *</Text>
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, errors.email && styles.inputBoxError]}>
               <Icon name="email" size={18} color={COLORS.textMuted} />
               <TextInput
                 style={styles.input}
                 value={formData.email}
                 onChangeText={t => handleChange('email', t)}
+                onBlur={() => handleBlur('email')}
                 placeholder="ornek@email.com"
                 placeholderTextColor={COLORS.textMuted}
                 keyboardType="email-address"
@@ -145,17 +189,19 @@ const RegisterScreen = ({ navigation }) => {
                 returnKeyType="next"
               />
             </View>
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
 
           {/* TELEFON */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Telefon *</Text>
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, errors.phone && styles.inputBoxError]}>
               <Icon name="phone" size={18} color={COLORS.textMuted} />
               <TextInput
                 style={styles.input}
                 value={formData.phone}
-                onChangeText={t => { if (t.length <= 10) handleChange('phone', t); }}
+                onChangeText={t => { if (t.length <= 10) handleChange('phone', t.replace(/[^0-9]/g, '')); }}
+                onBlur={() => handleBlur('phone')}
                 placeholder="05XX XXX XX XX"
                 placeholderTextColor={COLORS.textMuted}
                 keyboardType="phone-pad"
@@ -163,13 +209,14 @@ const RegisterScreen = ({ navigation }) => {
                 returnKeyType="next"
               />
             </View>
+            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
           </View>
 
           {/* DOĞUM TARİHİ */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Doğum Tarihi *</Text>
             <TouchableOpacity
-              style={styles.inputBox}
+              style={[styles.inputBox, errors.birthDate && styles.inputBoxError]}
               onPress={() => setShowDatePicker(true)}
               activeOpacity={0.8}
             >
@@ -178,6 +225,7 @@ const RegisterScreen = ({ navigation }) => {
                 {formData.birthDate || 'GG-AA-YYYY'}
               </Text>
             </TouchableOpacity>
+            {errors.birthDate && <Text style={styles.errorText}>{errors.birthDate}</Text>}
             {showDatePicker && (
               <View style={styles.datePicker}>
                 <DateTimePicker
@@ -194,7 +242,7 @@ const RegisterScreen = ({ navigation }) => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.datePickerConfirm}
-                      onPress={() => setShowDatePicker(false)}
+                      onPress={() => { setShowDatePicker(false); handleBlur('birthDate'); }}
                     >
                       <Text style={styles.datePickerConfirmText}>Tamam</Text>
                     </TouchableOpacity>
@@ -212,7 +260,7 @@ const RegisterScreen = ({ navigation }) => {
                 <TouchableOpacity
                   key={g.value}
                   style={[styles.genderOption, formData.gender === g.value && styles.genderOptionActive]}
-                  onPress={() => handleChange('gender', g.value)}
+                  onPress={() => { handleChange('gender', g.value); setErrors(prev => ({ ...prev, gender: null })); }}
                   activeOpacity={0.8}
                 >
                   <Icon
@@ -229,17 +277,19 @@ const RegisterScreen = ({ navigation }) => {
                 </TouchableOpacity>
               ))}
             </View>
+            {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
           </View>
 
           {/* ŞİFRE */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Şifre *</Text>
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, errors.password && styles.inputBoxError]}>
               <Icon name="lock" size={18} color={COLORS.textMuted} />
               <TextInput
                 style={styles.input}
                 value={formData.password}
                 onChangeText={t => handleChange('password', t)}
+                onBlur={() => handleBlur('password')}
                 placeholder="En az 6 karakter"
                 placeholderTextColor={COLORS.textMuted}
                 secureTextEntry={!showPassword}
@@ -250,6 +300,7 @@ const RegisterScreen = ({ navigation }) => {
                 <Icon name={showPassword ? 'visibility' : 'visibility-off'} size={18} color={COLORS.textMuted} />
               </TouchableOpacity>
             </View>
+            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
           </View>
 
           {/* SUBMIT */}
@@ -308,7 +359,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     gap: 10,
   },
+  inputBoxError: { borderColor: COLORS.red },
   input: { flex: 1, fontSize: 15, color: COLORS.text },
+  errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
 
   datePicker: {
     backgroundColor: COLORS.white,

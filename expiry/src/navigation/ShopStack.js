@@ -13,12 +13,12 @@ const Stack = createStackNavigator();
 export default function ShopStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="ShopPanel" component={ShopPanelScreen} />
-      <Stack.Screen name="ShopProducts" component={ShopProductsScreen} />
-      <Stack.Screen name="ShopPackages" component={ShopPackagesScreen} />
-      <Stack.Screen name="ShopOrders" component={ShopOrdersScreen} />
-      <Stack.Screen name="ShopProfile" component={ShopProfileScreen} />
-      <Stack.Screen name="ShopApply" component={ShopApplyScreen} />
+      <Stack.Screen name="ShopPanel" component={ShopPanelScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ShopProducts" component={ShopProductsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ShopPackages" component={ShopPackagesScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ShopOrders" component={ShopOrdersScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ShopProfile" component={ShopProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ShopApply" component={ShopApplyScreen} options={{ headerShown: false }} />
       <Stack.Screen name="RateShopScreen"component={RateShopScreen}options={{ headerShown: false }}/>
     </Stack.Navigator>
   );

@@ -147,6 +147,15 @@ const handleDeleteAccount = async () => {
       {/* FOOTER */}
       <View style={styles.footer}>
         <TouchableOpacity
+  style={styles.settingsButton}
+  onPress={() => navigation.navigate('Settings')}
+  activeOpacity={0.8}
+>
+  <Icon name="settings" size={18} color={COLORS.text} />
+  <Text style={styles.settingsText}>Ayarlar</Text>
+  <Icon name="chevron-right" size={18} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+</TouchableOpacity>
+        <TouchableOpacity
           style={styles.editButton}
           onPress={() => navigation.navigate('EditProfile')}
           activeOpacity={0.8}
@@ -380,6 +389,19 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: 'center',
   },
+  settingsButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+  backgroundColor: COLORS.white,
+  paddingVertical: 14,
+  paddingHorizontal: 16,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  marginBottom: 12,
+},
+settingsText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
   confirmBtn: {
     flex: 1,

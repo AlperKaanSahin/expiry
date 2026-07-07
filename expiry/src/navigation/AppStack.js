@@ -24,6 +24,8 @@ import NotificationScreen from '../screens/NotificationScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 
 
+
+
 const Stack = createStackNavigator();
 
 const AppStack = () => (
@@ -35,9 +37,9 @@ const AppStack = () => (
     <Stack.Screen name="PackageDetail" component={PackageDetailScreen} options={{ headerShown: false }} />
     <Stack.Screen name="PaymentScreen" component={PaymentScreen} options={{ headerShown: false }} />
     <Stack.Screen name="UserOrders" component={UserOrdersScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-    <Stack.Screen name="Settings" component={SettingsScreen}/>
-    <Stack.Screen name="ShopApply" component={ShopApplyScreen} />
+    <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="ShopApply" component={ShopApplyScreen} options={{ headerShown: false }} />
     <Stack.Screen name="AdminStack" component={AdminStack} options={{ headerShown: false }} />
     <Stack.Screen name="ShopStack" component={ShopStack} options={{ headerShown: false }} />
     <Stack.Screen name="Notifications" component={NotificationScreen} options={{ headerShown: false }} />

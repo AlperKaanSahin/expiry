@@ -12,11 +12,11 @@ const Stack = createStackNavigator();
 export default function AdminStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
-      <Stack.Screen name="UserListScreen" component={UserListScreen} />
-      <Stack.Screen name="ShopListScreen" component={ShopListScreen} />
-      <Stack.Screen name="AuditLogsScreen" component={AuditLogsScreen} />
-      <Stack.Screen name ="UserDetailsScreen" component={UserDetailsScreen} />
+      <Stack.Screen name="AdminPanel" component={AdminPanelScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="UserListScreen" component={UserListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ShopListScreen" component={ShopListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AuditLogsScreen" component={AuditLogsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name ="UserDetailsScreen" component={UserDetailsScreen} options={{ headerShown: false }} />
 
     </Stack.Navigator>
   );
