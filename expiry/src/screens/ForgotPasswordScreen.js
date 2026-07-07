@@ -18,24 +18,38 @@ import { showErrorToast } from '../utils/errorHandler';
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
-  const handleSubmit = async () => {
-    if (!email) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Email zorunlu' });
-      return;
-    }
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-try {
-  setLoading(true);
-  await forgotPassword(email);
-  Toast.show({ type: 'success', text1: 'Kod Gönderildi', text2: 'Emailinizi kontrol edin' });
-  navigation.navigate('ResetPassword', { email });
-} catch (err) {
-  showErrorToast(err, Toast);
-} finally {
-      setLoading(false);
-    }
-  };
+const validateEmail = (value) => {
+  if (!value.trim()) return 'Email zorunlu';
+  if (!EMAIL_REGEX.test(value)) return 'Geçerli bir email girin';
+  return null;
+};
+
+const handleBlur = () => {
+  setErrors({ email: validateEmail(email) });
+};
+
+const handleSubmit = async () => {
+  const emailError = validateEmail(email);
+  if (emailError) {
+    setErrors({ email: emailError });
+    return;
+  }
+
+  try {
+    setLoading(true);
+    await forgotPassword(email);
+    Toast.show({ type: 'success', text1: 'Kod Gönderildi', text2: 'Emailinizi kontrol edin' });
+    navigation.navigate('ResetPassword', { email });
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -70,24 +84,29 @@ try {
         </View>
 
         {/* FORM */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Email</Text>
-          <View style={styles.inputBox}>
-            <Icon name="email" size={18} color={COLORS.textMuted} />
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="ornek@email.com"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-            />
-          </View>
-        </View>
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Email</Text>
+  <View style={[styles.inputBox, errors.email && styles.inputBoxError]}>
+    <Icon name="email" size={18} color={COLORS.textMuted} />
+    <TextInput
+      style={styles.input}
+      value={email}
+      onChangeText={t => {
+        setEmail(t);
+        if (errors.email) setErrors({});
+      }}
+      onBlur={handleBlur}
+      placeholder="ornek@email.com"
+      placeholderTextColor={COLORS.textMuted}
+      keyboardType="email-address"
+      autoCapitalize="none"
+      autoCorrect={false}
+      returnKeyType="done"
+      onSubmitEditing={handleSubmit}
+    />
+  </View>
+  {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+</View>
 
         <TouchableOpacity
           style={styles.submitButton}
@@ -177,6 +196,8 @@ const styles = StyleSheet.create({
 
   backLink: { alignItems: 'center', paddingVertical: 8 },
   backLinkText: { fontSize: 14, color: COLORS.textMuted, textDecorationLine: 'underline' },
+  inputBoxError: { borderColor: COLORS.red },
+errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
 });
 
 export default ForgotPasswordScreen;

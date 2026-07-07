@@ -13,6 +13,7 @@ import {
   ScrollView,
   Switch,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
@@ -64,60 +65,68 @@ const ShopPackagesScreen = () => {
   const [allProducts, setAllProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [modalError, setModalError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
 
-const loadPackages = async (isRefresh = false) => {
-  if (isRefresh) setRefreshing(true);
-  try {
-    const data = await fetchShopOwnPackages();
-    setPackages(data);
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
+  const loadPackages = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const data = await fetchShopOwnPackages();
+      setPackages(data);
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => { loadPackages(); }, []);
 
   const openModal = async (pkg = null) => {
-  try {
-    const products = await fetchShopProducts();
-    setAllProducts(products);
-    setSelectedPackage(pkg);
-    setFormData(pkg ? {
-      name: pkg.name || '',
-      price: pkg.price != null ? pkg.price.toString() : '',
-      description: pkg.description || '',
-      quantity: pkg.quantity != null ? pkg.quantity.toString() : '1',
-    } : EMPTY_FORM);
-
-    const isAutoDrop = pkg && (
-      pkg.autoPriceDropEnabled === true ||
-      pkg.autoPriceDropEnabled === 1 ||
-      pkg.autoPriceDropEnabled === '1' ||
-      pkg.autoPriceDropEnabled === 'true'
-    );
-
-    setAutoPriceDropEnabled(!!isAutoDrop);
-    setPriceDropInterval(isAutoDrop && pkg.priceDropInterval != null ? pkg.priceDropInterval.toString() : '');
-    setPriceDropAmount(isAutoDrop && pkg.priceDropAmount != null ? pkg.priceDropAmount.toString() : '');
-    setMinPriceDropLimit(pkg?.minPriceDropLimit != null ? pkg.minPriceDropLimit.toString() : '');
-    setDeliveryStart(pkg?.deliveryStart ? new Date(pkg.deliveryStart) : new Date());
-    setDeliveryEnd(pkg?.deliveryEnd ? new Date(pkg.deliveryEnd) : new Date());
-    setSelectedProducts(pkg?.products ? pkg.products.map(p => ({ id: p.id, quantity: p.quantity })) : []);
-    setModalError('');
     setModalVisible(true);
-  } catch (err) {
-    showErrorToast(err, Toast);
-  }
-};
+    setModalLoading(true);
+    try {
+      const products = await fetchShopProducts();
+      setAllProducts(products);
+      setSelectedPackage(pkg);
+      setFormData(pkg ? {
+        name: pkg.name || '',
+        price: pkg.price != null ? pkg.price.toString() : '',
+        description: pkg.description || '',
+        quantity: pkg.quantity != null ? pkg.quantity.toString() : '1',
+      } : EMPTY_FORM);
+
+      const isAutoDrop = pkg && (
+        pkg.autoPriceDropEnabled === true ||
+        pkg.autoPriceDropEnabled === 1 ||
+        pkg.autoPriceDropEnabled === '1' ||
+        pkg.autoPriceDropEnabled === 'true'
+      );
+
+      setAutoPriceDropEnabled(!!isAutoDrop);
+      setPriceDropInterval(isAutoDrop && pkg.priceDropInterval != null ? pkg.priceDropInterval.toString() : '');
+      setPriceDropAmount(isAutoDrop && pkg.priceDropAmount != null ? pkg.priceDropAmount.toString() : '');
+      setMinPriceDropLimit(pkg?.minPriceDropLimit != null ? pkg.minPriceDropLimit.toString() : '');
+      setDeliveryStart(pkg?.deliveryStart ? new Date(pkg.deliveryStart) : new Date());
+      setDeliveryEnd(pkg?.deliveryEnd ? new Date(pkg.deliveryEnd) : new Date());
+      setSelectedProducts(pkg?.products ? pkg.products.map(p => ({ id: p.id, quantity: p.quantity })) : []);
+      setModalError('');
+    } catch (err) {
+      showErrorToast(err, Toast);
+      setModalVisible(false);
+    } finally {
+      setModalLoading(false);
+    }
+  };
 
   const closeModal = () => {
     setModalVisible(false);
     setModalError('');
     setSelectedPackage(null);
     setFormData(EMPTY_FORM);
+    setSelectedProducts([]);
   };
 
   const handleProductSelect = (productId) => {
@@ -134,86 +143,121 @@ const loadPackages = async (isRefresh = false) => {
     ));
   };
 
-  const handleDelete = async (id, quantity) => {
-    if (quantity > 1) {
-      Toast.show({
-        type: 'info',
-        text1: 'Silme',
-        text2: 'Tüm kutular silinecek',
-      });
-      await deleteShopPackage(id);
-    } else {
-      await deleteShopPackage(id);
-    }
-    await loadPackages();
-    Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket silindi' });
+  const handleDelete = (pkg) => {
+    Alert.alert(
+      'Paketi Sil',
+      `"${pkg.name}" paketini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingId(pkg.id);
+              await deleteShopPackage(pkg.id);
+              Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket başarıyla silindi' });
+              loadPackages();
+            } catch (err) {
+              showErrorToast(err, Toast);
+            } finally {
+              setDeletingId(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
- const handleSubmit = async () => {
-  try {
-    const cleanedProducts = selectedProducts.map(p => {
-      const productInfo = allProducts.find(prod => prod.id === p.id);
-      return {
-        id: p.id,
-        quantity: p.quantity && parseInt(p.quantity) > 0 ? parseInt(p.quantity) : 1,
-        price: productInfo ? parseFloat(productInfo.price) : 0,
+  const handleSubmit = async () => {
+    setModalError('');
+
+    if (!formData.name.trim()) {
+      setModalError('Paket adı zorunlu');
+      return;
+    }
+
+    if (selectedProducts.length === 0) {
+      setModalError('En az bir ürün seçmelisiniz');
+      return;
+    }
+
+    if (deliveryEnd <= deliveryStart) {
+      setModalError('Teslimat bitiş zamanı başlangıçtan sonra olmalı');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const cleanedProducts = selectedProducts.map(p => {
+        const productInfo = allProducts.find(prod => prod.id === p.id);
+        return {
+          id: p.id,
+          quantity: p.quantity && parseInt(p.quantity) > 0 ? parseInt(p.quantity) : 1,
+          price: productInfo ? parseFloat(productInfo.price) : 0,
+        };
+      });
+
+      const totalProductsPrice = cleanedProducts.reduce((sum, p) => {
+        const productInfo = allProducts.find(prod => prod.id === p.id);
+        const price = productInfo ? parseFloat(productInfo.price) : 0;
+        return sum + price * p.quantity;
+      }, 0);
+
+      if (autoPriceDropEnabled) {
+        const minLimit = parseFloat(minPriceDropLimit);
+        const packagePrice = formData.price ? parseFloat(formData.price) : null;
+
+        if (!minPriceDropLimit || isNaN(minLimit) || minLimit <= 0) {
+          setModalError("Minimum fiyat 0'dan büyük olmalı!");
+          setSubmitting(false);
+          return;
+        }
+
+        if (packagePrice !== null && minLimit > packagePrice) {
+          setModalError("Minimum fiyat, paket fiyatından fazla olamaz!");
+          setSubmitting(false);
+          return;
+        }
+
+        if (packagePrice === null && minLimit > totalProductsPrice) {
+          setModalError("Minimum fiyat, ürünlerin toplam fiyatından fazla olamaz!");
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      const payload = {
+        name: formData.name.trim(),
+        price: formData.price ? parseFloat(formData.price) : null,
+        description: formData.description,
+        quantity: formData.quantity ? parseInt(formData.quantity) : 1,
+        deliveryStart: deliveryStart.toISOString(),
+        deliveryEnd: deliveryEnd.toISOString(),
+        products: cleanedProducts,
+        autoPriceDropEnabled,
+        priceDropAmount: autoPriceDropEnabled ? parseFloat(priceDropAmount) : null,
+        priceDropInterval: autoPriceDropEnabled ? parseInt(priceDropInterval) : null,
+        minPriceDropLimit: autoPriceDropEnabled ? parseFloat(minPriceDropLimit) : null,
       };
-    });
 
-    const totalProductsPrice = cleanedProducts.reduce((sum, p) => {
-      const productInfo = allProducts.find(prod => prod.id === p.id);
-      const price = productInfo ? parseFloat(productInfo.price) : 0;
-      return sum + price * p.quantity;
-    }, 0);
-
-    if (autoPriceDropEnabled) {
-      const minLimit = parseFloat(minPriceDropLimit);
-      const packagePrice = formData.price ? parseFloat(formData.price) : null;
-
-      if (!minPriceDropLimit || isNaN(minLimit) || minLimit <= 0) {
-        setModalError("Minimum fiyat 0'dan büyük olmalı!");
-        return;
+      if (selectedPackage) {
+        await updateShopPackage(selectedPackage.id, payload);
+        Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Paket başarıyla güncellendi' });
+      } else {
+        await addShopPackage(payload);
+        Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Paket başarıyla eklendi' });
       }
 
-      if (packagePrice !== null && minLimit > packagePrice) {
-        setModalError("Minimum fiyat, paket fiyatından fazla olamaz!");
-        return;
-      }
-
-      if (packagePrice === null && minLimit > totalProductsPrice) {
-        setModalError("Minimum fiyat, ürünlerin toplam fiyatından fazla olamaz!");
-        return;
-      }
+      closeModal();
+      loadPackages();
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setSubmitting(false);
     }
-
-    const payload = {
-      name: formData.name,
-      price: formData.price ? parseFloat(formData.price) : null,
-      description: formData.description,
-      quantity: formData.quantity ? parseInt(formData.quantity) : 1,
-      deliveryStart: deliveryStart.toISOString(),
-      deliveryEnd: deliveryEnd.toISOString(),
-      products: cleanedProducts,
-      autoPriceDropEnabled,
-      priceDropAmount: autoPriceDropEnabled ? parseFloat(priceDropAmount) : null,
-      priceDropInterval: autoPriceDropEnabled ? parseInt(priceDropInterval) : null,
-      minPriceDropLimit: autoPriceDropEnabled ? parseFloat(minPriceDropLimit) : null,
-    };
-
-    if (selectedPackage) {
-      await updateShopPackage(selectedPackage.id, payload);
-      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Paket başarıyla güncellendi' });
-    } else {
-      await addShopPackage(payload);
-      Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Paket başarıyla eklendi' });
-    }
-
-    closeModal();
-    loadPackages();
-  } catch (err) {
-    showErrorToast(err, Toast);
-  }
-};
+  };
 
   const renderPackage = ({ item }) => (
     <View style={styles.card}>
@@ -243,8 +287,16 @@ const loadPackages = async (isRefresh = false) => {
         <TouchableOpacity onPress={() => openModal(item)} style={styles.iconButton}>
           <Icon name="edit" size={20} color={COLORS.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleDelete(item.id, item.quantity)} style={styles.iconButton}>
-          <Icon name="delete" size={20} color={COLORS.red} />
+        <TouchableOpacity
+          onPress={() => handleDelete(item)}
+          style={styles.iconButton}
+          disabled={deletingId === item.id}
+        >
+          {deletingId === item.id ? (
+            <ActivityIndicator size={20} color={COLORS.red} />
+          ) : (
+            <Icon name="delete" size={20} color={COLORS.red} />
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -291,6 +343,9 @@ const loadPackages = async (isRefresh = false) => {
             <View style={styles.empty}>
               <Icon name="inventory-2" size={48} color={COLORS.border} />
               <Text style={styles.emptyText}>Henüz paket eklemediniz</Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={() => openModal()}>
+                <Text style={styles.emptyButtonText}>İlk Paketini Ekle</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -314,190 +369,209 @@ const loadPackages = async (isRefresh = false) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* TEMEL BİLGİLER */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Paket Adı</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.name}
-                  onChangeText={text => setFormData({ ...formData, name: text })}
-                  placeholder="Paket adı girin"
-                  placeholderTextColor={COLORS.textMuted}
-                  returnKeyType="next"
-                />
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.inputLabel}>Fiyat (₺)</Text>
+            {modalLoading ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ paddingVertical: 60 }} />
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* TEMEL BİLGİLER */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Paket Adı</Text>
                   <TextInput
                     style={styles.input}
-                    value={formData.price}
-                    onChangeText={text => setFormData({ ...formData, price: text })}
-                    keyboardType="numeric"
-                    placeholder="Opsiyonel"
+                    value={formData.name}
+                    onChangeText={text => setFormData({ ...formData, name: text })}
+                    placeholder="Paket adı girin"
                     placeholderTextColor={COLORS.textMuted}
-                    returnKeyType="done"
-                    onSubmitEditing={Keyboard.dismiss}
+                    returnKeyType="next"
                   />
                 </View>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabel}>Adet</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.quantity}
-                    onChangeText={text => setFormData({ ...formData, quantity: text.replace(/[^0-9]/g, '') })}
-                    keyboardType="numeric"
-                    placeholder="1"
-                    placeholderTextColor={COLORS.textMuted}
-                    returnKeyType="done"
-                    onSubmitEditing={Keyboard.dismiss}
-                  />
-                </View>
-              </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Açıklama</Text>
-                <TextInput
-                  style={[styles.input, styles.multiline]}
-                  value={formData.description}
-                  onChangeText={text => setFormData({ ...formData, description: text })}
-                  placeholder="Paket hakkında kısa bilgi"
-                  placeholderTextColor={COLORS.textMuted}
-                  multiline
-                  numberOfLines={3}
-                  maxLength={250}
-                  blurOnSubmit
-                  returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
-                />
-              </View>
-
-              {/* TESLİMAT */}
-              <Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Başlangıç</Text>
-                <DateTimePicker
-                  value={deliveryStart}
-                  mode="datetime"
-                  display="default"
-                  onChange={(_, date) => date && setDeliveryStart(date)}
-                />
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Bitiş</Text>
-                <DateTimePicker
-                  value={deliveryEnd}
-                  mode="datetime"
-                  display="default"
-                  onChange={(_, date) => date && setDeliveryEnd(date)}
-                />
-              </View>
-
-              {/* OTOMATİK FİYAT DÜŞÜŞÜ */}
-              <Text style={styles.sectionLabel}>Otomatik Fiyat Düşüşü</Text>
-              <View style={styles.switchRow}>
-                <Text style={styles.inputLabel}>Etkinleştir</Text>
-                <Switch
-                  value={autoPriceDropEnabled}
-                  onValueChange={setAutoPriceDropEnabled}
-                  trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
-                  thumbColor={autoPriceDropEnabled ? COLORS.primary : COLORS.textMuted}
-                />
-              </View>
-
-              {autoPriceDropEnabled && (
-                <>
-                  <View style={styles.row}>
-                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                      <Text style={styles.inputLabel}>Kaç saatte bir?</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={priceDropInterval}
-                        onChangeText={setPriceDropInterval}
-                        keyboardType="numeric"
-                        placeholder="Örn: 1"
-                        placeholderTextColor={COLORS.textMuted}
-                        returnKeyType="done"
-                        onSubmitEditing={Keyboard.dismiss}
-                      />
-                    </View>
-                    <View style={[styles.inputGroup, { flex: 1 }]}>
-                      <Text style={styles.inputLabel}>Kaç TL düşsün?</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={priceDropAmount}
-                        onChangeText={setPriceDropAmount}
-                        keyboardType="numeric"
-                        placeholder="Örn: 5"
-                        placeholderTextColor={COLORS.textMuted}
-                        returnKeyType="done"
-                        onSubmitEditing={Keyboard.dismiss}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Minimum Fiyat (₺)</Text>
+                <View style={styles.row}>
+                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.inputLabel}>Fiyat (₺)</Text>
                     <TextInput
                       style={styles.input}
-                      value={minPriceDropLimit}
-                      onChangeText={setMinPriceDropLimit}
+                      value={formData.price}
+                      onChangeText={text => setFormData({ ...formData, price: text })}
                       keyboardType="numeric"
-                      placeholder="Örn: 50"
+                      placeholder="Opsiyonel"
                       placeholderTextColor={COLORS.textMuted}
                       returnKeyType="done"
                       onSubmitEditing={Keyboard.dismiss}
                     />
                   </View>
-                </>
-              )}
-
-              {/* ÜRÜNLER */}
-              <Text style={styles.sectionLabel}>Ürünler</Text>
-              {allProducts.map(item => {
-                const selected = selectedProducts.find(p => p.id === item.id);
-                return (
-                  <View key={item.id} style={styles.productRow}>
-                    <TouchableOpacity
-                      onPress={() => handleProductSelect(item.id)}
-                      style={[styles.checkbox, selected && styles.checkboxActive]}
-                    >
-                      {selected && <Icon name="check" size={16} color={COLORS.white} />}
-                    </TouchableOpacity>
-                    <Text style={styles.productName}>{item.name}</Text>
-                    {selected && (
-                      <TextInput
-                        value={selected.quantity?.toString() || ''}
-                        onChangeText={q => handleQuantityChange(item.id, q)}
-                        keyboardType="numeric"
-                        style={styles.quantityInput}
-                        placeholder="Adet"
-                        placeholderTextColor={COLORS.textMuted}
-                      />
-                    )}
+                  <View style={[styles.inputGroup, { flex: 1 }]}>
+                    <Text style={styles.inputLabel}>Adet</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.quantity}
+                      onChangeText={text => setFormData({ ...formData, quantity: text.replace(/[^0-9]/g, '') })}
+                      keyboardType="numeric"
+                      placeholder="1"
+                      placeholderTextColor={COLORS.textMuted}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
                   </View>
-                );
-              })}
+                </View>
 
-              {modalError ? (
-                <Text style={styles.errorText}>{modalError}</Text>
-              ) : null}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Açıklama</Text>
+                  <TextInput
+                    style={[styles.input, styles.multiline]}
+                    value={formData.description}
+                    onChangeText={text => setFormData({ ...formData, description: text })}
+                    placeholder="Paket hakkında kısa bilgi"
+                    placeholderTextColor={COLORS.textMuted}
+                    multiline
+                    numberOfLines={3}
+                    maxLength={250}
+                    blurOnSubmit
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                </View>
 
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
-                  <Text style={styles.cancelText}>İptal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                  <Text style={styles.submitText}>
-                    {selectedPackage ? 'Güncelle' : 'Ekle'}
+                {/* TESLİMAT */}
+                <Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Başlangıç</Text>
+                  <DateTimePicker
+                    value={deliveryStart}
+                    mode="datetime"
+                    display="default"
+                    onChange={(_, date) => date && setDeliveryStart(date)}
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Bitiş</Text>
+                  <DateTimePicker
+                    value={deliveryEnd}
+                    mode="datetime"
+                    display="default"
+                    onChange={(_, date) => date && setDeliveryEnd(date)}
+                  />
+                </View>
+
+                {/* OTOMATİK FİYAT DÜŞÜŞÜ */}
+                <Text style={styles.sectionLabel}>Otomatik Fiyat Düşüşü</Text>
+                <View style={styles.switchRow}>
+                  <Text style={styles.inputLabel}>Etkinleştir</Text>
+                  <Switch
+                    value={autoPriceDropEnabled}
+                    onValueChange={setAutoPriceDropEnabled}
+                    trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
+                    thumbColor={autoPriceDropEnabled ? COLORS.primary : COLORS.textMuted}
+                  />
+                </View>
+
+                {autoPriceDropEnabled && (
+                  <>
+                    <View style={styles.row}>
+                      <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                        <Text style={styles.inputLabel}>Kaç saatte bir?</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={priceDropInterval}
+                          onChangeText={setPriceDropInterval}
+                          keyboardType="numeric"
+                          placeholder="Örn: 1"
+                          placeholderTextColor={COLORS.textMuted}
+                          returnKeyType="done"
+                          onSubmitEditing={Keyboard.dismiss}
+                        />
+                      </View>
+                      <View style={[styles.inputGroup, { flex: 1 }]}>
+                        <Text style={styles.inputLabel}>Kaç TL düşsün?</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={priceDropAmount}
+                          onChangeText={setPriceDropAmount}
+                          keyboardType="numeric"
+                          placeholder="Örn: 5"
+                          placeholderTextColor={COLORS.textMuted}
+                          returnKeyType="done"
+                          onSubmitEditing={Keyboard.dismiss}
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Minimum Fiyat (₺)</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={minPriceDropLimit}
+                        onChangeText={setMinPriceDropLimit}
+                        keyboardType="numeric"
+                        placeholder="Örn: 50"
+                        placeholderTextColor={COLORS.textMuted}
+                        returnKeyType="done"
+                        onSubmitEditing={Keyboard.dismiss}
+                      />
+                    </View>
+                  </>
+                )}
+
+                {/* ÜRÜNLER */}
+                <Text style={styles.sectionLabel}>Ürünler</Text>
+                {allProducts.length === 0 ? (
+                  <Text style={styles.noProductsText}>
+                    Henüz ürün eklemediniz. Önce Ürünlerim ekranından ürün ekleyin.
                   </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+                ) : (
+                  allProducts.map(item => {
+                    const selected = selectedProducts.find(p => p.id === item.id);
+                    return (
+                      <View key={item.id} style={styles.productRow}>
+                        <TouchableOpacity
+                          onPress={() => handleProductSelect(item.id)}
+                          style={[styles.checkbox, selected && styles.checkboxActive]}
+                        >
+                          {selected && <Icon name="check" size={16} color={COLORS.white} />}
+                        </TouchableOpacity>
+                        <Text style={styles.productName}>{item.name}</Text>
+                        {selected && (
+                          <TextInput
+                            value={selected.quantity?.toString() || ''}
+                            onChangeText={q => handleQuantityChange(item.id, q)}
+                            keyboardType="numeric"
+                            style={styles.quantityInput}
+                            placeholder="Adet"
+                            placeholderTextColor={COLORS.textMuted}
+                          />
+                        )}
+                      </View>
+                    );
+                  })
+                )}
+
+                {modalError ? (
+                  <Text style={styles.errorText}>{modalError}</Text>
+                ) : null}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
+                    <Text style={styles.cancelText}>İptal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.submitButton}
+                    onPress={handleSubmit}
+                    disabled={submitting}
+                    activeOpacity={0.8}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color={COLORS.white} size="small" />
+                    ) : (
+                      <Text style={styles.submitText}>
+                        {selectedPackage ? 'Güncelle' : 'Ekle'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -549,10 +623,18 @@ const styles = StyleSheet.create({
   productList: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   description: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   cardActions: { gap: 4 },
-  iconButton: { padding: 6 },
+  iconButton: { padding: 6, width: 32, alignItems: 'center' },
 
   empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
+  emptyButton: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+  },
+  emptyButtonText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
   // MODAL
   overlay: {
@@ -607,6 +689,12 @@ const styles = StyleSheet.create({
   },
 
   // PRODUCTS
+  noProductsText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -654,6 +742,7 @@ const styles = StyleSheet.create({
   submitButton: {
     flex: 1, paddingVertical: 14, borderRadius: 12,
     backgroundColor: COLORS.primary, alignItems: 'center',
+    justifyContent: 'center',
   },
   submitText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
 });

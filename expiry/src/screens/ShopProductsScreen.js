@@ -11,6 +11,10 @@ import {
   RefreshControl,
   StatusBar,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,19 +39,22 @@ const ShopProductsScreen = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [expiryDate, setExpiryDate] = useState(new Date());
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
-const loadProducts = async (isRefresh = false) => {
-  if (isRefresh) setRefreshing(true);
-  try {
-    const data = await fetchShopProducts();
-    setProducts(data);
-  } catch (error) {
-    showErrorToast(error, Toast);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
+  const loadProducts = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const data = await fetchShopProducts();
+      setProducts(data);
+    } catch (error) {
+      showErrorToast(error, Toast);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => { loadProducts(); }, []);
 
@@ -59,6 +66,7 @@ const loadProducts = async (isRefresh = false) => {
       quantity: product.quantity.toString()
     } : EMPTY_FORM);
     setExpiryDate(product?.expiryDate ? new Date(product.expiryDate) : new Date());
+    setErrors({});
     setModalVisible(true);
   };
 
@@ -66,41 +74,76 @@ const loadProducts = async (isRefresh = false) => {
     setModalVisible(false);
     setSelectedProduct(null);
     setFormData(EMPTY_FORM);
+    setErrors({});
   };
 
-const handleSubmit = async () => {
-  try {
-    const payload = {
-      name: formData.name,
-      price: parseFloat(formData.price),
-      quantity: parseInt(formData.quantity),
-      expiryDate: expiryDate.toISOString(),
-    };
-
-    if (selectedProduct) {
-      await updateShopProduct(selectedProduct.id, payload);
-      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Ürün başarıyla güncellendi' });
-    } else {
-      await addShopProduct(payload);
-      Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Ürün başarıyla eklendi' });
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.name.trim()) newErrors.name = 'Ürün adı zorunlu';
+    if (!formData.price || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
+      newErrors.price = 'Geçerli bir fiyat girin';
     }
+    if (!formData.quantity || isNaN(parseInt(formData.quantity)) || parseInt(formData.quantity) < 0) {
+      newErrors.quantity = 'Geçerli bir stok miktarı girin';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
-    closeModal();
-    loadProducts();
-  } catch (error) {
-    showErrorToast(error, Toast);
-  }
-};
+  const handleSubmit = async () => {
+    if (!validate()) return;
 
-const handleDelete = async (id) => {
-  try {
-    await deleteShopProduct(id);
-    Toast.show({ type: 'success', text1: 'Silindi', text2: 'Ürün başarıyla silindi' });
-    loadProducts();
-  } catch (error) {
-    showErrorToast(error, Toast);
-  }
-};
+    try {
+      setSubmitting(true);
+      const payload = {
+        name: formData.name.trim(),
+        price: parseFloat(formData.price),
+        quantity: parseInt(formData.quantity),
+        expiryDate: expiryDate.toISOString(),
+      };
+
+      if (selectedProduct) {
+        await updateShopProduct(selectedProduct.id, payload);
+        Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Ürün başarıyla güncellendi' });
+      } else {
+        await addShopProduct(payload);
+        Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Ürün başarıyla eklendi' });
+      }
+
+      closeModal();
+      loadProducts();
+    } catch (error) {
+      showErrorToast(error, Toast);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = (product) => {
+    Alert.alert(
+      'Ürünü Sil',
+      `"${product.name}" ürününü silmek istediğinize emin misiniz?`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingId(product.id);
+              await deleteShopProduct(product.id);
+              Toast.show({ type: 'success', text1: 'Silindi', text2: 'Ürün başarıyla silindi' });
+              loadProducts();
+            } catch (error) {
+              showErrorToast(error, Toast);
+            } finally {
+              setDeletingId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const renderProduct = ({ item }) => (
     <View style={styles.card}>
@@ -125,8 +168,16 @@ const handleDelete = async (id) => {
         <TouchableOpacity onPress={() => openModal(item)} style={styles.iconButton}>
           <Icon name="edit" size={20} color={COLORS.primary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.iconButton}>
-          <Icon name="delete" size={20} color={COLORS.red} />
+        <TouchableOpacity
+          onPress={() => handleDelete(item)}
+          style={styles.iconButton}
+          disabled={deletingId === item.id}
+        >
+          {deletingId === item.id ? (
+            <ActivityIndicator size={20} color={COLORS.red} />
+          ) : (
+            <Icon name="delete" size={20} color={COLORS.red} />
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -173,6 +224,9 @@ const handleDelete = async (id) => {
             <View style={styles.empty}>
               <Icon name="inventory-2" size={48} color={COLORS.border} />
               <Text style={styles.emptyText}>Henüz ürün eklemediniz</Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={() => openModal()}>
+                <Text style={styles.emptyButtonText}>İlk Ürününü Ekle</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -185,79 +239,106 @@ const handleDelete = async (id) => {
         animationType="slide"
         onRequestClose={closeModal}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.overlay}
+        >
+          <TouchableOpacity style={styles.overlayTouch} onPress={closeModal} activeOpacity={1} />
           <View style={styles.modal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {selectedProduct ? 'Ürün Düzenle' : 'Yeni Ürün'}
-              </Text>
-              <TouchableOpacity onPress={closeModal}>
-                <Icon name="close" size={22} color={COLORS.textMuted} />
-              </TouchableOpacity>
-            </View>
+            <View style={styles.modalHandle} />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Ürün Adı</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.name}
-                onChangeText={text => setFormData({ ...formData, name: text })}
-                placeholder="Ürün adı girin"
-                placeholderTextColor={COLORS.textMuted}
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-              />
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Fiyat (₺)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.price}
-                  onChangeText={text => setFormData({ ...formData, price: text })}
-                  keyboardType="numeric"
-                  placeholder="0.00"
-                  placeholderTextColor={COLORS.textMuted}
-                  returnKeyType="next"
-                  onSubmitEditing={Keyboard.dismiss}
-                />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {selectedProduct ? 'Ürün Düzenle' : 'Yeni Ürün'}
+                </Text>
+                <TouchableOpacity onPress={closeModal}>
+                  <Icon name="close" size={22} color={COLORS.textMuted} />
+                </TouchableOpacity>
               </View>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Stok</Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Ürün Adı</Text>
                 <TextInput
-                  style={styles.input}
-                  value={formData.quantity}
-                  onChangeText={text => setFormData({ ...formData, quantity: text })}
-                  keyboardType="numeric"
-                  placeholder="0"
+                  style={[styles.input, errors.name && styles.inputError]}
+                  value={formData.name}
+                  onChangeText={text => {
+                    setFormData({ ...formData, name: text });
+                    if (errors.name) setErrors({ ...errors, name: null });
+                  }}
+                  placeholder="Ürün adı girin"
                   placeholderTextColor={COLORS.textMuted}
                   returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
+                />
+                {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+              </View>
+
+              <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                  <Text style={styles.inputLabel}>Fiyat (₺)</Text>
+                  <TextInput
+                    style={[styles.input, errors.price && styles.inputError]}
+                    value={formData.price}
+                    onChangeText={text => {
+                      setFormData({ ...formData, price: text });
+                      if (errors.price) setErrors({ ...errors, price: null });
+                    }}
+                    keyboardType="numeric"
+                    placeholder="0.00"
+                    placeholderTextColor={COLORS.textMuted}
+                    returnKeyType="next"
+                  />
+                  {errors.price && <Text style={styles.errorText}>{errors.price}</Text>}
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Stok</Text>
+                  <TextInput
+                    style={[styles.input, errors.quantity && styles.inputError]}
+                    value={formData.quantity}
+                    onChangeText={text => {
+                      setFormData({ ...formData, quantity: text });
+                      if (errors.quantity) setErrors({ ...errors, quantity: null });
+                    }}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textMuted}
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                  {errors.quantity && <Text style={styles.errorText}>{errors.quantity}</Text>}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
+                <DateTimePicker
+                  value={expiryDate}
+                  mode="date"
+                  display="default"
+                  onChange={(_, date) => { if (date) setExpiryDate(date); }}
                 />
               </View>
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
-              <DateTimePicker
-                value={expiryDate}
-                mode="date"
-                display="default"
-                onChange={(_, date) => { if (date) setExpiryDate(date); }}
-              />
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
-                <Text style={styles.cancelText}>İptal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                <Text style={styles.submitText}>Kaydet</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
+                  <Text style={styles.cancelText}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.submitButton}
+                  onPress={handleSubmit}
+                  disabled={submitting}
+                  activeOpacity={0.8}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color={COLORS.white} size="small" />
+                  ) : (
+                    <Text style={styles.submitText}>Kaydet</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -266,7 +347,6 @@ const handleDelete = async (id) => {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  // HEADER
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -284,17 +364,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
 
-  // HERO
   hero: { paddingHorizontal: 20, marginBottom: 16 },
   heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
   heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
 
   loader: { marginTop: 40 },
 
-  // LIST
   list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
 
-  // CARD
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -310,21 +387,39 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metaText: { fontSize: 13, color: COLORS.textMuted },
   cardActions: { flexDirection: 'row', gap: 4 },
-  iconButton: { padding: 6 },
+  iconButton: { padding: 6, width: 32, alignItems: 'center' },
 
-  // EMPTY
   empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
+  emptyButton: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+  },
+  emptyButtonText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
-  // MODAL
   overlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    flex: 1,
     justifyContent: 'flex-end',
+  },
+  overlayTouch: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modal: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: 40,
+    padding: 24, paddingBottom: 32,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
@@ -339,7 +434,10 @@ const styles = StyleSheet.create({
     fontSize: 15, color: COLORS.text,
     borderWidth: 1, borderColor: COLORS.border,
   },
+  inputError: { borderColor: COLORS.red },
+  errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
   row: { flexDirection: 'row' },
+
   modalButtons: { flexDirection: 'row', gap: 10, marginTop: 8 },
   cancelButton: {
     flex: 1, paddingVertical: 14, borderRadius: 12,
@@ -351,6 +449,7 @@ const styles = StyleSheet.create({
   submitButton: {
     flex: 1, paddingVertical: 14, borderRadius: 12,
     backgroundColor: COLORS.primary, alignItems: 'center',
+    justifyContent: 'center',
   },
   submitText: { fontSize: 15, fontWeight: '600', color: COLORS.white },
 });

@@ -120,7 +120,7 @@ export const updateShopProfile = async (data) => {
   return res.data;
 };
 
-export const changeShopPassword = async (data) => {
+export const changePassword = async (data) => {
   const res = await api.put('/users/change-password', data);
   return res.data;
 };

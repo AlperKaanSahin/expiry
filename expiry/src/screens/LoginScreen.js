@@ -24,21 +24,44 @@ const LoginScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState({});
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Email ve şifre zorunlu' });
-      return;
-    }
-    try {
-      setLoading(true);
-      await login(email, password);
-} catch (err) {
-  showErrorToast(err, Toast);
-} finally {
-      setLoading(false);
-    }
-  };
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const validateField = (name, value) => {
+  if (name === 'email') {
+    if (!value.trim()) return 'Email zorunlu';
+    if (!EMAIL_REGEX.test(value)) return 'Geçerli bir email girin';
+  }
+  if (name === 'password') {
+    if (!value) return 'Şifre zorunlu';
+  }
+  return null;
+};
+
+const handleBlur = (name, value) => {
+  const error = validateField(name, value);
+  setErrors(prev => ({ ...prev, [name]: error }));
+};
+const handleLogin = async () => {
+  const emailError = validateField('email', email);
+  const passwordError = validateField('password', password);
+
+  if (emailError || passwordError) {
+    setErrors({ email: emailError, password: passwordError });
+    return;
+  }
+
+  try {
+    setLoading(true);
+    await login(email, password);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
+  
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -61,50 +84,59 @@ const LoginScreen = ({ navigation }) => {
           </View>
 
           {/* FORM */}
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email</Text>
-              <View style={styles.inputBox}>
-                <Icon name="email" size={18} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="ornek@email.com"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Şifre</Text>
-              <View style={styles.inputBox}>
-                <Icon name="lock" size={18} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Şifreniz"
-                  placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  onSubmitEditing={handleLogin}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
-                  <Icon
-                    name={showPassword ? 'visibility' : 'visibility-off'}
-                    size={18}
-                    color={COLORS.textMuted}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
+<View style={styles.form}>
+  <View style={styles.inputGroup}>
+    <Text style={styles.inputLabel}>Email</Text>
+    <View style={[styles.inputBox, errors.email && styles.inputBoxError]}>
+      <Icon name="email" size={18} color={COLORS.textMuted} />
+      <TextInput
+        style={styles.input}
+        value={email}
+        onChangeText={t => {
+          setEmail(t);
+          if (errors.email) setErrors(prev => ({ ...prev, email: null }));
+        }}
+        onBlur={() => handleBlur('email', email)}
+        placeholder="ornek@email.com"
+        placeholderTextColor={COLORS.textMuted}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+      />
+    </View>
+    {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+  </View>
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Şifre</Text>
+  <View style={[styles.inputBox, errors.password && styles.inputBoxError]}>
+    <Icon name="lock" size={18} color={COLORS.textMuted} />
+    <TextInput
+      style={styles.input}
+      value={password}
+      onChangeText={t => {
+        setPassword(t);
+        if (errors.password) setErrors(prev => ({ ...prev, password: null }));
+      }}
+      onBlur={() => handleBlur('password', password)}
+      placeholder="Şifreniz"
+      placeholderTextColor={COLORS.textMuted}
+      secureTextEntry={!showPassword}
+      autoCapitalize="none"
+      autoCorrect={false}
+      returnKeyType="done"
+      onSubmitEditing={handleLogin}
+    />
+    <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
+      <Icon
+        name={showPassword ? 'visibility' : 'visibility-off'}
+        size={18}
+        color={COLORS.textMuted}
+      />
+    </TouchableOpacity>
+  </View>
+  {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+</View>
           </View>
 
           {/* SUBMIT */}
@@ -192,6 +224,8 @@ const styles = StyleSheet.create({
   registerLink: { alignItems: 'center', paddingVertical: 8 },
   registerText: { fontSize: 14, color: COLORS.textMuted },
   registerTextBold: { fontWeight: '700', color: COLORS.primary },
+  inputBoxError: { borderColor: COLORS.red },
+errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
 });
 
 export default LoginScreen;
