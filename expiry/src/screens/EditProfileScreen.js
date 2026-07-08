@@ -43,25 +43,47 @@ useEffect(() => {
   };
   load();
 }, []);
+const [errors, setErrors] = useState({});
 
-  const handleChange = (key, value) => setFormData(prev => ({ ...prev, [key]: value }));
+const validateField = (name, value) => {
+  if (name === 'firstName') return !value.trim() ? 'Ad zorunlu' : null;
+  if (name === 'lastName') return !value.trim() ? 'Soyad zorunlu' : null;
+  if (name === 'phone' && value) {
+    if (value.length !== 10) return 'Telefon 10 hane olmalı';
+  }
+  return null;
+};
 
-  const handleSave = async () => {
-    if (!formData.firstName || !formData.lastName) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Ad ve soyad zorunlu' });
-      return;
-    }
-try {
-  setSaving(true);
-  await updateProfile(formData);
-  Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profiliniz güncellendi' });
-  navigation.goBack();
-} catch (err) {
-  showErrorToast(err, Toast);
-} finally {
-  setSaving(false);
-}
-  };
+const handleBlur = (name) => {
+  const error = validateField(name, formData[name]);
+  setErrors(prev => ({ ...prev, [name]: error }));
+};
+  const handleChange = (key, value) => {
+  setFormData(prev => ({ ...prev, [key]: value }));
+  if (errors[key]) setErrors(prev => ({ ...prev, [key]: null }));
+};
+
+const handleSave = async () => {
+  const firstNameError = validateField('firstName', formData.firstName);
+  const lastNameError = validateField('lastName', formData.lastName);
+  const phoneError = validateField('phone', formData.phone);
+
+  if (firstNameError || lastNameError || phoneError) {
+    setErrors({ firstName: firstNameError, lastName: lastNameError, phone: phoneError });
+    return;
+  }
+
+  try {
+    setSaving(true);
+    await updateProfile(formData);
+    Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profiliniz güncellendi' });
+    navigation.goBack();
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (
@@ -107,46 +129,53 @@ try {
 
           <View style={styles.form}>
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Ad</Text>
-                <View style={styles.inputBox}>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.firstName}
-                    onChangeText={t => handleChange('firstName', t)}
-                    placeholder="Adınız"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                </View>
-              </View>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Soyad</Text>
-                <View style={styles.inputBox}>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.lastName}
-                    onChangeText={t => handleChange('lastName', t)}
-                    placeholder="Soyadınız"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                </View>
-              </View>
+<View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+  <Text style={styles.inputLabel}>Ad</Text>
+  <View style={[styles.inputBox, errors.firstName && styles.inputBoxError]}>
+    <TextInput
+      style={styles.input}
+      value={formData.firstName}
+      onChangeText={t => handleChange('firstName', t)}
+      onBlur={() => handleBlur('firstName')}
+      placeholder="Adınız"
+      placeholderTextColor={COLORS.textMuted}
+    />
+  </View>
+  {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+</View>
+<View style={[styles.inputGroup, { flex: 1 }]}>
+  <Text style={styles.inputLabel}>Soyad</Text>
+  <View style={[styles.inputBox, errors.lastName && styles.inputBoxError]}>
+    <TextInput
+      style={styles.input}
+      value={formData.lastName}
+      onChangeText={t => handleChange('lastName', t)}
+      onBlur={() => handleBlur('lastName')}
+      placeholder="Soyadınız"
+      placeholderTextColor={COLORS.textMuted}
+    />
+  </View>
+  {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
+</View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Telefon</Text>
-              <View style={styles.inputBox}>
-                <Icon name="phone" size={18} color={COLORS.textMuted} />
-                <TextInput
-                  style={styles.input}
-                  value={formData.phone}
-                  onChangeText={t => handleChange('phone', t)}
-                  placeholder="05XX XXX XX XX"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Telefon</Text>
+  <View style={[styles.inputBox, errors.phone && styles.inputBoxError]}>
+    <Icon name="phone" size={18} color={COLORS.textMuted} />
+    <TextInput
+      style={styles.input}
+      value={formData.phone}
+      onChangeText={t => { if (t.length <= 10) handleChange('phone', t.replace(/[^0-9]/g, '')); }}
+      onBlur={() => handleBlur('phone')}
+      placeholder="05XX XXX XX XX"
+      placeholderTextColor={COLORS.textMuted}
+      keyboardType="phone-pad"
+      maxLength={10}
+    />
+  </View>
+  {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+</View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Adres</Text>
@@ -238,6 +267,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
+  inputBoxError: { borderColor: COLORS.red },
+errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
 });
 
 export default EditProfileScreen;

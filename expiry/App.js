@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { View, ActivityIndicator } from 'react-native';
 import { useFonts, Fraunces_500Medium, Fraunces_600SemiBold, Fraunces_700Bold } from '@expo-google-fonts/fraunces';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 
@@ -11,8 +12,17 @@ import AppStack from './src/navigation/AppStack';
 
 const RootNavigator = () => {
   const { userToken, loading } = useAuth();
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
 
-  if (loading) {
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      const seen = await AsyncStorage.getItem('@hasSeenOnboarding');
+      setHasSeenOnboarding(seen === 'true');
+    };
+    checkOnboarding();
+  }, []);
+
+  if (loading || hasSeenOnboarding === null) {
     return (
       <View style={{ flex: 1, justifyContent: 'center' }}>
         <ActivityIndicator size="large" />
@@ -20,7 +30,11 @@ const RootNavigator = () => {
     );
   }
 
-  return userToken ? <AppStack /> : <AuthStack />;
+  if (userToken) {
+    return <AppStack />;
+  }
+
+  return <AuthStack initialRouteName={hasSeenOnboarding ? 'Welcome' : 'Onboarding'} />;
 };
 
 export default function App() {
