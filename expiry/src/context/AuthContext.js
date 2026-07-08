@@ -64,12 +64,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async () => {
-    await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
-    setUserToken(null);
-    setUser(null);
-    setShop(null);
-  };
+const logout = async () => {
+  await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
+  setUserToken(null);
+  setUser(null);
+  setShop(null);
+};
 
   const isAdmin = user?.role === 'admin';
   const isMarket = user?.role === 'market';

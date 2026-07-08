@@ -41,13 +41,20 @@ useEffect(() => {
   checkStatus();
 }, []);
 
-  const handleChange = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+  const handleChange = (key, value) => {
+  setForm(prev => ({ ...prev, [key]: value }));
+  if (errors[key]) setErrors(prev => ({ ...prev, [key]: null }));
+};
 
 const handleSubmit = async () => {
-  if (!form.name || !form.phone) {
-    Toast.show({ type: 'error', text1: 'Hata', text2: 'Market adı ve telefon zorunlu' });
+  const nameError = validateField('name', form.name);
+  const phoneError = validateField('phone', form.phone);
+
+  if (nameError || phoneError) {
+    setErrors({ name: nameError, phone: phoneError });
     return;
   }
+
   try {
     setLoading(true);
     await applyForShop(form);
@@ -58,6 +65,22 @@ const handleSubmit = async () => {
   } finally {
     setLoading(false);
   }
+};
+const [errors, setErrors] = useState({});
+
+const validateField = (name, value) => {
+  if (name === 'name') return !value.trim() ? 'Market adı zorunlu' : null;
+  if (name === 'phone') {
+    if (!value.trim()) return 'Telefon zorunlu';
+    if (value.length !== 10) return 'Telefon 10 hane olmalı';
+    return null;
+  }
+  return null;
+};
+
+const handleBlur = (name) => {
+  const error = validateField(name, form[name]);
+  setErrors(prev => ({ ...prev, [name]: error }));
 };
   if (statusLoading) {
     return (
@@ -129,17 +152,19 @@ const handleSubmit = async () => {
 
           {/* FORM */}
           <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Market Adı *</Text>
-              <TextInput
-                style={styles.input}
-                value={form.name}
-                onChangeText={text => handleChange('name', text)}
-                placeholder="Market adını girin"
-                placeholderTextColor={COLORS.textMuted}
-                returnKeyType="next"
-              />
-            </View>
+         <View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Market Adı *</Text>
+  <TextInput
+    style={[styles.input, errors.name && styles.inputError]}
+    value={form.name}
+    onChangeText={text => handleChange('name', text)}
+    onBlur={() => handleBlur('name')}
+    placeholder="Market adını girin"
+    placeholderTextColor={COLORS.textMuted}
+    returnKeyType="next"
+  />
+  {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+</View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Adres</Text>
@@ -155,18 +180,21 @@ const handleSubmit = async () => {
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Telefon *</Text>
-              <TextInput
-                style={styles.input}
-                value={form.phone}
-                onChangeText={text => handleChange('phone', text)}
-                placeholder="05XX XXX XX XX"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="phone-pad"
-                returnKeyType="done"
-              />
-            </View>
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Telefon *</Text>
+  <TextInput
+    style={[styles.input, errors.phone && styles.inputError]}
+    value={form.phone}
+    onChangeText={text => { if (text.length <= 10) handleChange('phone', text.replace(/[^0-9]/g, '')); }}
+    onBlur={() => handleBlur('phone')}
+    placeholder="05XX XXX XX XX"
+    placeholderTextColor={COLORS.textMuted}
+    keyboardType="phone-pad"
+    maxLength={10}
+    returnKeyType="done"
+  />
+  {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+</View>
           </View>
 
           {/* SUBMIT */}
@@ -262,6 +290,8 @@ const styles = StyleSheet.create({
   },
   pendingTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, textAlign: 'center', marginBottom: 8 },
   pendingSubtitle: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  inputError: { borderColor: COLORS.red },
+errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
 });
 
 export default ShopApplyScreen;
