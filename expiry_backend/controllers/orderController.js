@@ -47,6 +47,15 @@ async function confirmOrder(req, res) {
     res.status(400).json({ error: err.message });
   }
 }
+async function confirmByQRCode(req, res) {
+  try {
+    const { deliveryToken } = req.body;
+    const order = await orderService.confirmByQRCode(req.user.id, deliveryToken);
+    res.json(order);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
 
 async function markDelivered(req, res) {
   try {
@@ -84,6 +93,7 @@ module.exports = {
   changeOrderStatus,
   markDelivered,
   confirmOrder,
+  confirmByQRCode,
   getMyShopOrders,
   getMyUserOrders
 };

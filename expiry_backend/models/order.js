@@ -23,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.FLOAT,
       allowNull: false
     },
+    deliveryToken: {
+  type: DataTypes.STRING,
+  allowNull: true
+},
 
     // 🔥 ESCROW STATE
 status: {

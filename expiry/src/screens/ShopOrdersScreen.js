@@ -19,7 +19,7 @@ import { showErrorToast } from '../utils/errorHandler';
 const STATUS_CONFIG = {
   pending:   { label: 'Bekliyor',          color: '#6B7280' },
   paid:      { label: 'Ödendi',            color: '#D97706' },
-  delivered: { label: 'Teslim Edildi',     color: '#2563EB' },
+  delivered: { label: 'Müşteri Bekleniyor', color: '#2563EB' },
   confirmed: { label: 'Onaylandı',         color: '#16A34A' },
   released:  { label: 'Tamamlandı',        color: '#7C3AED' },
 };
@@ -29,7 +29,7 @@ const TABS = [
   { key: 'past',   label: 'Geçmiş' },
 ];
 
-const ShopOrdersScreen = () => {
+const ShopOrdersScreen = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,35 +78,38 @@ const handleDeliver = async (orderId) => {
         </View>
 
         <View style={styles.cardBody}>
-          {item.status === 'paid' && (
-            <>
-              <Text style={styles.infoText}>Sipariş hazırlanmayı bekliyor</Text>
-              <TouchableOpacity
-                style={styles.deliverButton}
-                onPress={() => handleDeliver(item.id)}
-                activeOpacity={0.8}
-              >
-                <Icon name="check-circle" size={18} color={COLORS.white} />
-                <Text style={styles.deliverText}>Teslim Ettim</Text>
-              </TouchableOpacity>
-            </>
-          )}
+{item.status === 'paid' && (
+  <>
+    <Text style={styles.infoText}>Sipariş hazırlanmayı bekliyor</Text>
+    <TouchableOpacity
+      style={styles.deliverButton}
+      onPress={() => handleDeliver(item.id)}
+      activeOpacity={0.8}
+    >
+      <Icon name="check-circle" size={18} color={COLORS.white} />
+      <Text style={styles.deliverText}>Hazır, Müşteri Gelsin</Text>
+    </TouchableOpacity>
+  </>
+)}
 
-          {item.status === 'pending' && (
-            <Text style={styles.infoText}>Ödeme bekleniyor</Text>
-          )}
+{item.status === 'pending' && (
+  <Text style={styles.infoText}>Ödeme bekleniyor</Text>
+)}
 
-          {item.status === 'delivered' && (
-            <Text style={styles.infoText}>Kullanıcı onayı bekleniyor</Text>
-          )}
+{item.status === 'delivered' && (
+  <View style={styles.waitingRow}>
+    <Icon name="qr-code-scanner" size={16} color={COLORS.textMuted} />
+    <Text style={styles.infoText}>Müşteri geldiğinde yukarıdan QR okutun</Text>
+  </View>
+)}
 
-          {item.status === 'confirmed' && (
-            <Text style={styles.infoText}>Kullanıcı teslim aldı</Text>
-          )}
+{item.status === 'confirmed' && (
+  <Text style={styles.infoText}>Müşteri teslim aldı</Text>
+)}
 
-          {item.status === 'released' && (
-            <Text style={styles.infoText}>Sipariş tamamlandı</Text>
-          )}
+{item.status === 'released' && (
+  <Text style={styles.infoText}>Sipariş tamamlandı</Text>
+)}
         </View>
       </View>
     );
@@ -124,12 +127,20 @@ const handleDeliver = async (orderId) => {
         </View>
       </View>
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Shop Paneli</Text>
-        <Text style={styles.heroName}>Siparişler</Text>
-      </View>
+{/* HERO */}
+<View style={styles.hero}>
+  <Text style={styles.heroLabel}>Shop Paneli</Text>
+  <Text style={styles.heroName}>Siparişler</Text>
+</View>
 
+<TouchableOpacity
+  style={styles.scanButton}
+  onPress={() => navigation.navigate('ScanQRScreen')}
+  activeOpacity={0.8}
+>
+  <Icon name="qr-code-scanner" size={20} color={COLORS.white} />
+  <Text style={styles.scanButtonText}>Müşteri QR'ını Okut</Text>
+</TouchableOpacity>
       {/* TABS */}
       <View style={styles.tabs}>
         {TABS.map(t => (
@@ -258,6 +269,19 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
+  scanButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  backgroundColor: COLORS.primary,
+  paddingVertical: 13,
+  borderRadius: 12,
+  marginHorizontal: 20,
+  marginBottom: 16,
+},
+scanButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
 
 export default ShopOrdersScreen;

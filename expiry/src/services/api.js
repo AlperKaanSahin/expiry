@@ -219,6 +219,10 @@ export const markOrderDelivered = async (orderId) => {
   const response = await api.post(`/orders/${orderId}/deliver`);
   return response.data;
 };
+export const confirmOrderByQR = async (deliveryToken) => {
+  const response = await api.post('/orders/confirm-qr', { deliveryToken });
+  return response.data;
+};
 
 // ─── NOTIFICATIONS ───────────────────────────────────────
 export const fetchNotifications = async () => {
