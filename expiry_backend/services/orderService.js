@@ -1,8 +1,9 @@
 const {
-  Order, OrderPackage, Package, PackageUnit, Shop, sequelize
+  Order, OrderPackage, Package, PackageUnit, Shop, User, sequelize
 } = require('../models');
 const eventBus = require('../events/eventBus');
 const ORDER_EVENTS = require('../events/order.events');
+const crypto = require('crypto');
 
 const transitions = {
   pending: ['paid'],
@@ -132,8 +133,10 @@ async function createOrder(userId, data) {
       });
     }
 
+    const deliveryToken = crypto.randomBytes(16).toString('hex');
+
     const order = await Order.create(
-      { userId, shopId, totalPrice, status: 'pending' },
+      { userId, shopId, totalPrice, status: 'pending', deliveryToken },
       { transaction: t }
     );
 
@@ -143,6 +146,39 @@ async function createOrder(userId, data) {
         { transaction: t }
       );
     }
+
+    await t.commit();
+    return order;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+async function confirmByQRCode(marketUserId, deliveryToken) {
+  const t = await sequelize.transaction();
+  try {
+    const order = await Order.findOne({
+      where: { deliveryToken, status: 'delivered' },
+      include: [
+        { model: User, attributes: ['id', 'firstName', 'lastName'] },
+        {
+          model: OrderPackage,
+          include: [{ model: Package, attributes: ['id', 'name'] }]
+        }
+      ],
+      transaction: t
+    });
+
+    if (!order) throw new Error('Geçersiz veya süresi dolmuş QR kod');
+
+    const shop = await Shop.findOne({
+      where: { id: order.shopId, ownerId: marketUserId },
+      transaction: t
+    });
+
+    if (!shop) throw new Error('Bu siparişe erişim yetkiniz yok');
+
+    await changeStatusInternal(order, 'confirmed', 'user', t);
 
     await t.commit();
     return order;
@@ -240,6 +276,7 @@ async function getShopByOwner(ownerId) {
 
 module.exports = {
   createOrder,
+  confirmByQRCode,
   simulatePayment,
   changeStatus,
   listUserOrders,

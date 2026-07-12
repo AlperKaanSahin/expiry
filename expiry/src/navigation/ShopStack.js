@@ -7,6 +7,8 @@ import ShopOrdersScreen from '../screens/ShopOrdersScreen';
 import ShopProfileScreen from '../screens/ShopProfileScreen';
 import ShopApplyScreen from '../screens/ShopApplyScreen';
 import RateShopScreen from '../screens/RateShopScreen';
+import DeliveryConfirmedScreen from '../screens/DeliveryConfirmedScreen';
+import ScanQRScreen from '../screens/ScanQRScreen';
 
 const Stack = createStackNavigator();
 
@@ -20,6 +22,8 @@ export default function ShopStack() {
       <Stack.Screen name="ShopProfile" component={ShopProfileScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ShopApply" component={ShopApplyScreen} options={{ headerShown: false }} />
       <Stack.Screen name="RateShopScreen"component={RateShopScreen}options={{ headerShown: false }}/>
+      <Stack.Screen name="DeliveryConfirmedScreen" component={DeliveryConfirmedScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ScanQRScreen" component={ScanQRScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

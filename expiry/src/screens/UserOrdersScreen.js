@@ -15,6 +15,8 @@ import Toast from 'react-native-toast-message';
 import { fetchMyOrders, changeOrderStatus, confirmOrder } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Sipariş Alındı',     color: '#6B7280' },
@@ -29,7 +31,7 @@ const TABS = [
   { key: 'past',   label: 'Geçmiş' },
 ];
 
-const UserOrdersScreen = () => {
+const UserOrdersScreen = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +51,11 @@ const loadOrders = async (isRefresh = false) => {
   }
 };
 
-  useEffect(() => { loadOrders(); }, []);
+useFocusEffect(
+  useCallback(() => {
+    loadOrders();
+  }, [])
+);
 
 
 
@@ -81,16 +87,16 @@ const handleConfirm = async (orderId) => {
 
         <Text style={styles.price}>{item.totalPrice} ₺</Text>
 
-        {item.status === 'delivered' && (
-          <TouchableOpacity
-            style={styles.confirmButton}
-            onPress={() => handleConfirm(item.id)}
-            activeOpacity={0.8}
-          >
-            <Icon name="check-circle" size={18} color={COLORS.white} />
-            <Text style={styles.confirmText}>Teslim Aldım</Text>
-          </TouchableOpacity>
-        )}
+{item.status === 'delivered' && (
+  <TouchableOpacity
+    style={styles.confirmButton}
+    onPress={() => navigation.navigate('OrderQRScreen', { orderId: item.id, deliveryToken: item.deliveryToken })}
+    activeOpacity={0.8}
+  >
+    <Icon name="qr-code" size={18} color={COLORS.white} />
+    <Text style={styles.confirmText}>QR Kodumu Göster</Text>
+  </TouchableOpacity>
+)}
 
         {item.status === 'pending' && (
           <Text style={styles.infoText}>Ödeme bekleniyor</Text>

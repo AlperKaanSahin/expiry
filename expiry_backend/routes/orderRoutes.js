@@ -12,5 +12,6 @@ router.post('/simulate-payment', auth, orderController.simulatePayment);
 router.post('/:id/status', auth, orderValidator.changeOrderStatus, validate, orderController.changeOrderStatus);
 router.post('/:id/confirm', auth, orderController.confirmOrder);
 router.post('/:id/deliver', auth, orderController.markDelivered);
+router.post('/confirm-qr', auth, orderController.confirmByQRCode);
 
 module.exports = router;
