@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loginUser, fetchShopProfile } from '../services/api';
+import { loginUser, fetchShopProfile, logoutUser } from '../services/api';
 import { authEvents } from '../events/authEvents';
+
 
 const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
@@ -65,6 +66,15 @@ export const AuthProvider = ({ children }) => {
   };
 
 const logout = async () => {
+  try {
+    const refreshToken = await AsyncStorage.getItem('@refreshToken');
+    if (refreshToken) {
+      await logoutUser(refreshToken);
+    }
+  } catch (err) {
+    console.log('Backend logout başarısız (yine de devam ediliyor):', err.message);
+  }
+
   await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
   setUserToken(null);
   setUser(null);
