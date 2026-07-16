@@ -29,6 +29,15 @@ async login(req, res) {
     res.status(401).json({ error: err.message });
   }
 },
+async logout(req, res) {
+  try {
+    const { refreshToken } = req.body;
+    await userService.revokeRefreshToken(refreshToken);
+    res.json({ message: 'Çıkış yapıldı' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+},
 
   async getProfile(req, res) {
     try {

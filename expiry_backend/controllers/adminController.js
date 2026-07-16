@@ -67,8 +67,10 @@ exports.deleteUser = async (req, res) => {
 // MARKETS
 exports.getAllShops = async (req, res) => {
   try {
-    const shops = await adminService.getAllShops();
-    res.json(shops);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const result = await adminService.getAllShops(page, limit);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -65,15 +65,26 @@ exports.deleteUser = async (targetUserId, currentUserId) => {
 };
 
 // MARKETS
-exports.getAllShops = async () => {
-  return await Shop.findAll({
+exports.getAllShops = async (page = 1, limit = 10) => {
+  const offset = (page - 1) * limit;
+
+  const { count, rows } = await Shop.findAndCountAll({
     include: [{
       model: User,
       as: 'owner',
       attributes: ['id', 'firstName', 'lastName', 'email'],
     }],
-    order: [['createdAt', 'DESC']]
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset
   });
+
+  return {
+    total: count,
+    page,
+    limit,
+    shops: rows
+  };
 };
 exports.updateShop = async (id, data, currentUserId) => {
   const shop = await Shop.findByPk(id);

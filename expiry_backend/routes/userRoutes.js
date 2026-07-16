@@ -10,6 +10,7 @@ router.post('/login', userValidator.login, validate, userController.login);
 router.post('/refresh', userController.refreshToken);
 router.post('/forgot-password', userValidator.forgotPassword, validate, userController.forgotPassword);
 router.post('/reset-password', userValidator.resetPassword, validate, userController.resetPassword);
+router.post('/logout', auth, userController.logout);
 router.get('/profile', auth, userController.getProfile);
 router.put('/profile', auth, userController.updateProfile);
 router.put('/change-password', auth, userController.changePassword);

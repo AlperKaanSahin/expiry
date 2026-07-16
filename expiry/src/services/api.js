@@ -64,6 +64,10 @@ export const loginUser = async ({ email, password }) => {
   return response.data;
 };
 
+export const logoutUser = async (refreshToken) => {
+  const res = await api.post('/users/logout', { refreshToken });
+  return res.data;
+};
 export const getProfile = async () => {
   const res = await api.get('/users/profile');
   return res.data;
@@ -260,8 +264,8 @@ export const deleteUser = async (userId) => {
   return api.delete(`/admin/users/${userId}`);
 };
 
-export const fetchAllShopsAdmin = async () => {
-  const res = await api.get('/admin/shops');
+export const fetchAllShopsAdmin = async (page = 1, limit = 10) => {
+  const res = await api.get(`/admin/shops?page=${page}&limit=${limit}`);
   return res.data;
 };
 

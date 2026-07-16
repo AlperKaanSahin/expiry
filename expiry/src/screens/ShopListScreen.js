@@ -24,54 +24,62 @@ const STATUS_CONFIG = {
   rejected: { label: 'Reddedildi', color: '#6B7280' },
 };
 
+const LIMIT = 10;
+
 const ShopListScreen = () => {
   const [shops, setShops] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadShops(); }, []);
 
-const loadShops = async () => {
-  setLoading(true);
-  try {
-    const data = await fetchAllShopsAdmin();
-    setShops(data);
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadShops = async (pageNumber = 1) => {
+    setLoading(true);
+    try {
+      const data = await fetchAllShopsAdmin(pageNumber, LIMIT);
+      setShops(data.shops);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const handleStatus = async (id, status) => {
-  try {
-    await updateShopStatus(id, status);
-    loadShops();
-  } catch (err) {
-    showErrorToast(err, Toast);
-  }
-};
+  const handleStatus = async (id, status) => {
+    try {
+      await updateShopStatus(id, status);
+      loadShops(page);
+    } catch (err) {
+      showErrorToast(err, Toast);
+    }
+  };
 
-const handleDelete = (id) => {
-  Alert.alert(
-    'Shop\'u Sil',
-    'Bu shop\'u silmek istediğinize emin misiniz?',
-    [
-      { text: 'İptal', style: 'cancel' },
-      {
-        text: 'Sil',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteShop(id);
-            loadShops();
-          } catch (err) {
-            showErrorToast(err, Toast);
+  const handleDelete = (id) => {
+    Alert.alert(
+      'Shop\'u Sil',
+      'Bu shop\'u silmek istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteShop(id);
+              loadShops(page);
+            } catch (err) {
+              showErrorToast(err, Toast);
+            }
           }
         }
-      }
-    ]
-  );
-};
+      ]
+    );
+  };
+
+  const maxPage = Math.ceil(total / LIMIT);
 
   const renderShop = ({ item }) => {
     const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.primary };
@@ -79,7 +87,6 @@ const handleDelete = (id) => {
 
     return (
       <View style={styles.card}>
-        {/* CARD HEADER */}
         <View style={styles.cardHeader}>
           <Text style={styles.shopName}>{item.name}</Text>
           <View style={[styles.badge, { backgroundColor: status.color + '18' }]}>
@@ -87,7 +94,6 @@ const handleDelete = (id) => {
           </View>
         </View>
 
-        {/* INFO */}
         <View style={styles.infoRow}>
           <Icon name="location-on" size={14} color={COLORS.textMuted} />
           <Text style={styles.infoText}>{item.address}</Text>
@@ -97,15 +103,14 @@ const handleDelete = (id) => {
           <Text style={styles.infoText}>{item.phone || 'Belirtilmemiş'}</Text>
         </View>
         {item.owner && (
-  <View style={styles.infoRow}>
-    <Icon name="person" size={14} color={COLORS.textMuted} />
-    <Text style={styles.infoText}>
-      {item.owner.firstName} {item.owner.lastName} (ID: {item.owner.id})
-    </Text>
-  </View>
-)}
+          <View style={styles.infoRow}>
+            <Icon name="person" size={14} color={COLORS.textMuted} />
+            <Text style={styles.infoText}>
+              {item.owner.firstName} {item.owner.lastName} (ID: {item.owner.id})
+            </Text>
+          </View>
+        )}
 
-        {/* ACTIONS */}
         <View style={styles.actions}>
           {actions.map((action) => (
             <TouchableOpacity
@@ -135,7 +140,6 @@ const handleDelete = (id) => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.appName}>expiry</Text>
@@ -143,28 +147,52 @@ const handleDelete = (id) => {
         </View>
       </View>
 
-      {/* HERO */}
       <View style={styles.hero}>
         <Text style={styles.heroLabel}>Admin Panel</Text>
         <Text style={styles.heroName}>Shop Yönetimi</Text>
+        <Text style={styles.heroSub}>Toplam {total} shop</Text>
       </View>
 
       {loading ? (
         <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
       ) : (
-        <FlatList
-          data={shops}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderShop}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="store" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>Henüz shop bulunmuyor</Text>
+        <>
+          <FlatList
+            data={shops}
+            keyExtractor={item => item.id.toString()}
+            renderItem={renderShop}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Icon name="store" size={48} color={COLORS.border} />
+                <Text style={styles.emptyText}>Henüz shop bulunmuyor</Text>
+              </View>
+            }
+          />
+
+          {total > LIMIT && (
+            <View style={styles.pagination}>
+              <TouchableOpacity
+                style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+                onPress={() => loadShops(page - 1)}
+                disabled={page === 1}
+              >
+                <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+              </TouchableOpacity>
+
+              <Text style={styles.pageInfo}>{page} / {maxPage}</Text>
+
+              <TouchableOpacity
+                style={[styles.pageBtn, page >= maxPage && styles.pageBtnDisabled]}
+                onPress={() => loadShops(page + 1)}
+                disabled={page >= maxPage}
+              >
+                <Icon name="chevron-right" size={20} color={page >= maxPage ? COLORS.textMuted : COLORS.white} />
+              </TouchableOpacity>
             </View>
-          }
-        />
+          )}
+        </>
       )}
     </SafeAreaView>
   );
@@ -187,12 +215,12 @@ const styles = StyleSheet.create({
   hero: { paddingHorizontal: 20, marginBottom: 16 },
   heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
   heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+  heroSub: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
 
   loader: { marginTop: 40 },
 
-  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
+  list: { paddingHorizontal: 20, paddingBottom: 20, gap: 10 },
 
-  // CARD
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 14,
@@ -244,6 +272,26 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
+
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  pageBtn: {
+    width: 40, height: 40,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnDisabled: { backgroundColor: COLORS.border },
+  pageInfo: { fontSize: 15, fontWeight: '700', color: COLORS.text },
 });
 
 export default ShopListScreen;

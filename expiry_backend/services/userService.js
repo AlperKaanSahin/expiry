@@ -1,4 +1,4 @@
-const { User, Order } = require('../models');
+const { User, Order, RefreshToken } = require('../models');
 const jwt = require('jsonwebtoken');
 
 
@@ -10,12 +10,23 @@ const generateAccessToken = (user) => {
   );
 };
 
-const generateRefreshToken = (user) => {
-  return jwt.sign(
+const generateRefreshToken = async (user) => {
+  const token = jwt.sign(
     { id: user.id },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: '7d' }
   );
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  await RefreshToken.create({
+    token,
+    userId: user.id,
+    expiresAt
+  });
+
+  return token;
 };
 
 exports.login = async (email, password) => {
@@ -26,8 +37,7 @@ exports.login = async (email, password) => {
   }
 
   const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
- 
+  const refreshToken = await generateRefreshToken(user); // await eklendi
 
   const safeUser = user.toJSON();
   delete safeUser.password;
@@ -46,12 +56,9 @@ exports.register = async (data) => {
   const user = await User.create({ email, password, firstName, lastName, phone, address, birthDate, gender });
 
   const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
+  const refreshToken = await generateRefreshToken(user); // await eklendi
 
-  // Email gönder — hata olursa kayıt işlemini etkilemesin
-  emailService.sendWelcomeEmail(user.email, user.firstName)
-  .then(res => console.log("EMAIL OK:", res))
-  .catch(err => console.log("EMAIL FAIL:", err));
+  emailService.sendWelcomeEmail(user.email, user.firstName).catch(() => {});
 
   const safeUser = user.toJSON();
   delete safeUser.password;
@@ -68,11 +75,34 @@ exports.refreshAccessToken = async (refreshToken) => {
     throw new Error('Geçersiz refresh token');
   }
 
+  const storedToken = await RefreshToken.findOne({ where: { token: refreshToken } });
+
+  if (!storedToken || storedToken.revoked) {
+    throw new Error('Refresh token geçersiz veya iptal edilmiş');
+  }
+
+  if (new Date() > storedToken.expiresAt) {
+    throw new Error('Refresh token süresi dolmuş');
+  }
+
   const user = await User.findByPk(payload.id);
   if (!user) throw new Error('Kullanıcı bulunamadı');
 
   const accessToken = generateAccessToken(user);
   return { accessToken };
+};
+exports.revokeRefreshToken = async (refreshToken) => {
+  await RefreshToken.update(
+    { revoked: true },
+    { where: { token: refreshToken } }
+  );
+};
+
+exports.revokeAllUserTokens = async (userId) => {
+  await RefreshToken.update(
+    { revoked: true },
+    { where: { userId } }
+  );
 };
 
 exports.getProfile = async (userId) => {
@@ -93,6 +123,8 @@ exports.changePassword = async (userId, currentPassword, newPassword) => {
 
   user.password = newPassword;
   await user.save();
+
+  await exports.revokeAllUserTokens(userId); // yeni eklendi
 
   return true;
 };
