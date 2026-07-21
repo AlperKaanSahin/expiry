@@ -9,6 +9,13 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 import AuthStack from './src/navigation/AuthStack';
 import AppStack from './src/navigation/AppStack';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: __DEV__ ? 'development' : 'production',
+  release: '1.0.0',
+});
 
 const RootNavigator = () => {
   const { userToken, loading } = useAuth();
