@@ -84,6 +84,7 @@ try {
           <Text style={styles.heroName}>{user?.firstName || 'Kullanıcı'}</Text>
           <Text style={styles.heroSub}>Bugün ne yapmak istersin?</Text>
         </View>
+        
 
         {/* ACTIONS */}
         <View style={styles.grid}>
@@ -100,6 +101,7 @@ try {
               <Text style={styles.cardTitle}>{action.title}</Text>
               <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
+            
           ))}
         </View>
 
@@ -112,6 +114,8 @@ try {
           <Icon name="logout" size={18} color={COLORS.red} />
           <Text style={styles.logoutText}>Çıkış Yap</Text>
         </TouchableOpacity>
+
+        
       </ScrollView>
     </SafeAreaView>
   );

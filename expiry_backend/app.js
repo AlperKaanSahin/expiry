@@ -1,5 +1,13 @@
 require('dotenv').config();
 
+const Sentry = require('@sentry/node');
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'development',
+  release: process.env.npm_package_version,
+});
+
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -25,6 +33,9 @@ if (process.env.NODE_ENV !== 'development') {
   app.use('/api/users/register', authLimiter);
 }
 
+app.get('/test-error', (req, res) => {
+  throw new Error('Sentry backend test hatası');
+});
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/shops', require('./routes/shopRoutes'));
 app.use('/api/shop/products', require('./routes/shopProductRoutes'));
