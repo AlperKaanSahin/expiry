@@ -15,6 +15,9 @@ import Toast from 'react-native-toast-message';
 import { fetchShopOrders, changeOrderStatus, markOrderDelivered } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import EmptyState from '../components/common/EmptyState';
+import ErrorState from '../components/common/ErrorState';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Bekliyor',          color: '#6B7280' },
@@ -34,15 +37,18 @@ const ShopOrdersScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('active');
+  const [hasError, setHasError] = useState(false);
 
 const loadOrders = async (isRefresh = false) => {
+  setHasError(false);
   if (isRefresh) setRefreshing(true);
   else setLoading(true);
   try {
     const data = await fetchShopOrders();
     setOrders(Array.isArray(data) ? data : []);
   } catch (err) {
-    showErrorToast(err, Toast);
+setHasError(true);
+showErrorToast(err, Toast);
   } finally {
     setLoading(false);
     setRefreshing(false);
@@ -63,7 +69,13 @@ const handleDeliver = async (orderId) => {
 
   const activeOrders = orders.filter(o => ['pending', 'paid', 'delivered'].includes(o.status));
   const pastOrders = orders.filter(o => ['confirmed', 'released'].includes(o.status));
-  const filteredOrders = tab === 'active' ? activeOrders : pastOrders;
+const filteredOrders = orders.filter(order => {
+    if (tab === 'active') {
+        return ['pending', 'paid', 'delivered'].includes(order.status);
+    }
+
+    return ['confirmed', 'released'].includes(order.status);
+});
 
   const renderOrder = ({ item }) => {
     const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.textMuted };
@@ -115,6 +127,17 @@ const handleDeliver = async (orderId) => {
     );
   };
 
+  if (loading) {
+  return <LoadingState />;
+}
+if (hasError) {
+  return (
+    <ErrorState
+      onRetry={() => loadOrders()}
+    />
+  );
+}
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -156,10 +179,6 @@ const handleDeliver = async (orderId) => {
           </TouchableOpacity>
         ))}
       </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
         <FlatList
           data={filteredOrders}
           keyExtractor={item => item.id.toString()}
@@ -173,16 +192,18 @@ const handleDeliver = async (orderId) => {
               colors={[COLORS.primary]}
             />
           }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="receipt-long" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>
-                {tab === 'active' ? 'Aktif sipariş yok' : 'Geçmiş sipariş yok'}
-              </Text>
-            </View>
-          }
+ListEmptyComponent={
+  <EmptyState
+    icon="receipt-long"
+    title={
+      tab === 'active'
+        ? 'Aktif sipariş yok'
+        : 'Geçmiş sipariş yok'
+    }
+  />
+}
         />
-      )}
+      
     </SafeAreaView>
   );
 };

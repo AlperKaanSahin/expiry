@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   TextInput,
   StatusBar,
@@ -15,6 +14,10 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import { useIsFocused } from '@react-navigation/native';
 import { fetchShopPackages, canRateShop } from '../services/api';
 import { COLORS } from '../theme/colors';
+import LoadingState from '../components/common/LoadingState';
+import Toast from 'react-native-toast-message';
+import { showErrorToast } from '../utils/errorHandler';
+import EmptyState from '../components/common/EmptyState';
 
 const formatDelivery = (start, end) => {
   if (!start || !end) return null;
@@ -33,21 +36,30 @@ const ShopDetailScreen = ({ route, navigation }) => {
   const [canRate, setCanRate] = useState(false);
   const isFocused = useIsFocused();
 
-  const loadData = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await fetchShopPackages(shopId);
-      setPackages(data);
+const loadData = async (isRefresh = false) => {
+  if (isRefresh) {
+    setRefreshing(true);
+  } else {
+    setLoading(true);
+  }
 
-      const rateRes = await canRateShop(shopId);
-      setCanRate(rateRes.canRate);
-    } catch {
-      //
-    } finally {
-      setLoading(false);
+
+  try {
+    const data = await fetchShopPackages(shopId);
+    setPackages(data);
+
+    const rateRes = await canRateShop(shopId);
+    setCanRate(rateRes.canRate);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    if (isRefresh) {
       setRefreshing(false);
+    } else {
+      setLoading(false);
     }
-  };
+  }
+};
 
   useEffect(() => {
     if (isFocused) loadData();
@@ -103,7 +115,9 @@ const ShopDetailScreen = ({ route, navigation }) => {
       <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
     </TouchableOpacity>
   );
-
+if (loading) {
+  return <LoadingState />;
+}
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -164,31 +178,26 @@ const ShopDetailScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         )}
       </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
-        <FlatList
-          data={filteredPackages}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderPackage}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadData(true)}
-              colors={[COLORS.primary]}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="inventory-2" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>Paket bulunamadı</Text>
-            </View>
-          }
-        />
-      )}
+      <FlatList
+  data={filteredPackages}
+  keyExtractor={item => item.id.toString()}
+  renderItem={renderPackage}
+  contentContainerStyle={styles.list}
+  showsVerticalScrollIndicator={false}
+  refreshControl={
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={() => loadData(true)}
+      colors={[COLORS.primary]}
+    />
+  }
+ListEmptyComponent={() => (
+  <EmptyState
+    icon="inventory-2"
+    title="Paket bulunamadı"
+  />
+)}
+/>
     </SafeAreaView>
   );
 };

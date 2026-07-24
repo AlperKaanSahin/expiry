@@ -16,6 +16,7 @@ import Toast from 'react-native-toast-message';
 import { fetchShopProfile, updateShopProfile, changeShopPassword } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
 
 const TABS = [
   { key: 'profile', label: 'Bilgilerim' },
@@ -30,23 +31,29 @@ const ShopProfileScreen = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [formData, setFormData] = useState({ name: '', address: '', phone: '', email: '' });
   const [passwordData, setPasswordData] = useState(EMPTY_PASSWORD);
+  const [error, setError] = useState(null);
+  
+const loadProfile = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    const data = await fetchShopProfile();
+
+    setFormData({
+      name: data.shop?.name || '',
+      address: data.shop?.address || '',
+      phone: data.shop?.phone || '',
+      email: data.shop?.email || '',
+    });
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
 useEffect(() => {
-  const loadProfile = async () => {
-    try {
-      const data = await fetchShopProfile();
-      setFormData({
-        name: data.shop?.name || '',
-        address: data.shop?.address || '',
-        phone: data.shop?.phone || '',
-        email: data.shop?.email || '',
-      });
-    } catch (err) {
-      showErrorToast(err, Toast);
-    } finally {
-      setLoading(false);
-    }
-  };
   loadProfile();
 }, []);
 
@@ -86,15 +93,17 @@ const handlePasswordChange = async () => {
   }
 };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+if (loading) {
+  return <LoadingState />;
+}
+if (error) {
+  return (
+    <ErrorState
+      message="Shop bilgileri yüklenirken bir hata oluştu."
+      onRetry={loadProfile}
+    />
+  );
+}
 
   return (
     <SafeAreaView style={styles.safe}>

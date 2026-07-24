@@ -21,28 +21,56 @@ const ResetPasswordScreen = ({ route, navigation }) => {
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
-  const handleSubmit = async () => {
-    if (!token || token.length !== 6) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: '6 haneli kodu giriniz' });
-      return;
-    }
-    if (!newPassword || newPassword.length < 6) {
-      Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre en az 6 karakter olmalı' });
-      return;
-    }
+const handleSubmit = async () => {
+  const tokenError = validateField('token', token);
+  const passwordError = validateField('newPassword', newPassword);
 
-try {
-  setLoading(true);
-  await resetPassword(email, token, newPassword);
-  Toast.show({ type: 'success', text1: 'Başarılı', text2: 'Şifreniz güncellendi' });
-  navigation.navigate('Login');
-} catch (err) {
-  showErrorToast(err, Toast);
-}finally {
-      setLoading(false);
-    }
-  };
+  if (tokenError || passwordError) {
+    setErrors({
+      token: tokenError,
+      newPassword: passwordError,
+    });
+    return;
+  }
+
+  try {
+    setLoading(true);
+    await resetPassword(email, token, newPassword);
+    Toast.show({
+      type: 'success',
+      text1: 'Başarılı',
+      text2: 'Şifreniz güncellendi',
+    });
+    navigation.navigate('Login');
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
+  const validateField = (name, value) => {
+  switch (name) {
+    case 'token':
+      if (!value.trim()) return 'Kod zorunlu';
+      if (value.length !== 6) return 'Kod 6 haneli olmalı';
+      return null;
+
+    case 'newPassword':
+      if (!value) return 'Şifre zorunlu';
+      if (value.length < 6) return 'Şifre en az 6 karakter olmalı';
+      return null;
+
+    default:
+      return null;
+  }
+};
+
+const handleBlur = (name) => {
+  const error = validateField(name, name === 'token' ? token : newPassword);
+  setErrors(prev => ({ ...prev, [name]: error }));
+};
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -77,48 +105,66 @@ try {
           </Text>
         </View>
 
-        {/* KOD */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>6 Haneli Kod</Text>
-          <View style={styles.inputBox}>
-            <Icon name="pin" size={18} color={COLORS.textMuted} />
-            <TextInput
-              style={[styles.input, styles.codeInput]}
-              value={token}
-              onChangeText={setToken}
-              placeholder="000000"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="number-pad"
-              maxLength={6}
-              returnKeyType="next"
-            />
-          </View>
-        </View>
+{/* KOD */}
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>6 Haneli Kod</Text>
+  <View style={[styles.inputBox, errors.token && styles.inputBoxError]}>
+    <Icon name="pin" size={18} color={COLORS.textMuted} />
+    <TextInput
+      style={[styles.input, styles.codeInput]}
+      value={token}
+      onChangeText={t => {
+        setToken(t.replace(/[^0-9]/g, ''));
+        if (errors.token) {
+          setErrors(prev => ({ ...prev, token: null }));
+        }
+      }}
+      onBlur={() => handleBlur('token')}
+      placeholder="000000"
+      placeholderTextColor={COLORS.textMuted}
+      keyboardType="number-pad"
+      maxLength={6}
+      returnKeyType="next"
+    />
+  </View>
+  {errors.token && (
+    <Text style={styles.errorText}>{errors.token}</Text>
+  )}
+</View>
 
-        {/* YENİ ŞİFRE */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Yeni Şifre</Text>
-          <View style={styles.inputBox}>
-            <Icon name="lock-outline" size={18} color={COLORS.textMuted} />
-            <TextInput
-              style={styles.input}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder="En az 6 karakter"
-              placeholderTextColor={COLORS.textMuted}
-              secureTextEntry={!showPassword}
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
-              <Icon
-                name={showPassword ? 'visibility' : 'visibility-off'}
-                size={18}
-                color={COLORS.textMuted}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
+{/* YENİ ŞİFRE */}
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Yeni Şifre</Text>
+  <View style={[styles.inputBox, errors.newPassword && styles.inputBoxError]}>
+    <Icon name="lock-outline" size={18} color={COLORS.textMuted} />
+    <TextInput
+      style={styles.input}
+      value={newPassword}
+      onChangeText={t => {
+        setNewPassword(t);
+        if (errors.newPassword) {
+          setErrors(prev => ({ ...prev, newPassword: null }));
+        }
+      }}
+      onBlur={() => handleBlur('newPassword')}
+      placeholder="En az 6 karakter"
+      placeholderTextColor={COLORS.textMuted}
+      secureTextEntry={!showPassword}
+      returnKeyType="done"
+      onSubmitEditing={handleSubmit}
+    />
+    <TouchableOpacity onPress={() => setShowPassword(p => !p)}>
+      <Icon
+        name={showPassword ? 'visibility' : 'visibility-off'}
+        size={18}
+        color={COLORS.textMuted}
+      />
+    </TouchableOpacity>
+  </View>
+  {errors.newPassword && (
+    <Text style={styles.errorText}>{errors.newPassword}</Text>
+  )}
+</View>
 
         <TouchableOpacity
           style={styles.submitButton}
@@ -212,6 +258,15 @@ const styles = StyleSheet.create({
 
   resendLink: { alignItems: 'center', paddingVertical: 8 },
   resendLinkText: { fontSize: 14, color: COLORS.primary, fontWeight: '500' },
+  inputBoxError: {
+  borderColor: COLORS.red,
+},
+
+errorText: {
+  fontSize: 12,
+  color: COLORS.red,
+  marginTop: 4,
+}
 });
 
 export default ResetPasswordScreen;

@@ -28,6 +28,9 @@ import {
 } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
+import EmptyState from '../components/common/EmptyState';
 
 const EMPTY_FORM = { name: '', price: '', description: '', quantity: '1' };
 
@@ -68,19 +71,32 @@ const ShopPackagesScreen = () => {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [error, setError] = useState(false);
+  
 
-  const loadPackages = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await fetchShopOwnPackages();
-      setPackages(data);
-    } catch (err) {
-      showErrorToast(err, Toast);
-    } finally {
-      setLoading(false);
+const loadPackages = async (isRefresh = false) => {
+  if (isRefresh) {
+    setRefreshing(true);
+  } else {
+    setLoading(true);
+  }
+
+  setError(false);
+
+  try {
+    const data = await fetchShopOwnPackages();
+    setPackages(data);
+  } catch (err) {
+    setError(true);
+    showErrorToast(err, Toast);
+  } finally {
+    if (isRefresh) {
       setRefreshing(false);
+    } else {
+      setLoading(false);
     }
-  };
+  }
+};
 
   useEffect(() => { loadPackages(); }, []);
 
@@ -302,6 +318,16 @@ const ShopPackagesScreen = () => {
     </View>
   );
 
+if (loading) {
+  return <LoadingState />;
+}
+if (error) {
+  return (
+    <ErrorState
+      onRetry={loadPackages}
+    />
+  );
+}
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -323,9 +349,6 @@ const ShopPackagesScreen = () => {
         <Text style={styles.heroName}>Paketlerim</Text>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
         <FlatList
           data={packages}
           keyExtractor={item => item.id.toString()}
@@ -339,17 +362,22 @@ const ShopPackagesScreen = () => {
               colors={[COLORS.primary]}
             />
           }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="inventory-2" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>Henüz paket eklemediniz</Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={() => openModal()}>
-                <Text style={styles.emptyButtonText}>İlk Paketini Ekle</Text>
-              </TouchableOpacity>
-            </View>
-          }
+ListEmptyComponent={
+  <EmptyState
+    icon="inventory-2"
+    title="Henüz paket eklemediniz"
+  >
+    <TouchableOpacity
+      style={styles.emptyButton}
+      onPress={openModal}
+    >
+      <Text style={styles.emptyButtonText}>
+        İlk Paketini Ekle
+      </Text>
+    </TouchableOpacity>
+  </EmptyState>
+}
         />
-      )}
 
       {/* MODAL */}
       <Modal

@@ -13,6 +13,14 @@ import { fetchAuditLogs } from '../services/api';
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
+
+import LoadingState from '../components/common/LoadingState';
+import EmptyState from '../components/common/EmptyState';
+import ErrorState from '../components/common/ErrorState';
+
+import { RefreshControl } from 'react-native';
 
 const ACTION_COLORS = {
   CREATE: '#16A34A',
@@ -20,6 +28,7 @@ const ACTION_COLORS = {
   DELETE: '#DC2626',
   LOGIN:  '#2563EB',
 };
+
 
 const formatDate = (dateString) => {
   const diff = Date.now() - new Date(dateString);
@@ -102,19 +111,62 @@ const actor = item.actor
 
 const AuditLogsScreen = () => {
   const [logs, setLogs] = useState([]);
+const [loading, setLoading] = useState(true);
+const [refreshing, setRefreshing] = useState(false);
+const [error, setError] = useState(false);
+const loadLogs = async (isRefresh = false) => {
+  if (isRefresh) {
+    setRefreshing(true);
+  } else {
+    setLoading(true);
+  }
 
-useEffect(() => {
-  const loadLogs = async () => {
-    try {
-      const res = await fetchAuditLogs();
-      const data = res.data?.logs || [];
-      setLogs([...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-    } catch (err) {
-      showErrorToast(err, Toast);
-    }
-  };
-  loadLogs();
-}, []);
+  setError(false);
+
+  try {
+    const res = await fetchAuditLogs();
+
+    const data = res.data?.logs || [];
+
+    setLogs(
+      [...data].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      )
+    );
+  } catch (err) {
+    setError(true);
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
+
+useFocusEffect(
+  useCallback(() => {
+    loadLogs();
+  }, [])
+);
+
+if (loading) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <LoadingState text="Kayıtlar yükleniyor..." />
+    </SafeAreaView>
+  );
+}
+
+if (error) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ErrorState
+        title="Denetim kayıtları yüklenemedi"
+        subtitle="Lütfen tekrar deneyin."
+        onRetry={() => loadLogs()}
+      />
+    </SafeAreaView>
+  );
+}
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -132,19 +184,30 @@ useEffect(() => {
         <Text style={styles.heroName}>Denetim Kayıtları</Text>
       </View>
 
-      <FlatList
-        data={logs}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => <LogCard item={item} />}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Icon name="assignment" size={48} color={COLORS.border} />
-            <Text style={styles.emptyText}>Henüz kayıt yok</Text>
-          </View>
-        }
-      />
+<FlatList
+  data={logs}
+  keyExtractor={(item) => item.id.toString()}
+  renderItem={({ item }) => <LogCard item={item} />}
+  contentContainerStyle={[
+    styles.list,
+    logs.length === 0 && { flexGrow: 1 },
+  ]}
+  showsVerticalScrollIndicator={false}
+  refreshControl={
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={() => loadLogs(true)}
+      colors={[COLORS.primary]}
+    />
+  }
+  ListEmptyComponent={
+    <EmptyState
+      icon="assignment"
+      title="Henüz kayıt bulunmuyor"
+      subtitle="Gerçekleşen işlemler burada listelenecek."
+    />
+  }
+/>
     </SafeAreaView>
   );
 };

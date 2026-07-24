@@ -16,6 +16,7 @@ import { actionsByStatus, actionToStatus, actionLabels, actionColors } from '../
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
+import EmptyState from '../components/common/EmptyState';
 
 const STATUS_CONFIG = {
   active:   { label: 'Aktif',      color: '#16A34A' },
@@ -31,10 +32,12 @@ const ShopListScreen = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => { loadShops(); }, []);
 
   const loadShops = async (pageNumber = 1) => {
+    setHasError(false);
     setLoading(true);
     try {
       const data = await fetchAllShopsAdmin(pageNumber, LIMIT);
@@ -42,7 +45,8 @@ const ShopListScreen = () => {
       setTotal(data.total);
       setPage(data.page);
     } catch (err) {
-      showErrorToast(err, Toast);
+      setHasError(true);
+showErrorToast(err, Toast);
     } finally {
       setLoading(false);
     }
@@ -136,6 +140,18 @@ const ShopListScreen = () => {
     );
   };
 
+if (loading) {
+    return <LoadingState />;
+}
+
+if (hasError) {
+    return (
+        <ErrorState
+            onRetry={() => loadShops(page)}
+        />
+    );
+}
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -153,9 +169,7 @@ const ShopListScreen = () => {
         <Text style={styles.heroSub}>Toplam {total} shop</Text>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
+
         <>
           <FlatList
             data={shops}
@@ -163,12 +177,12 @@ const ShopListScreen = () => {
             renderItem={renderShop}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Icon name="store" size={48} color={COLORS.border} />
-                <Text style={styles.emptyText}>Henüz shop bulunmuyor</Text>
-              </View>
-            }
+ListEmptyComponent={
+  <EmptyState
+    icon="store"
+    title="Henüz shop bulunmuyor"
+  />
+}
           />
 
           {total > LIMIT && (
@@ -193,7 +207,7 @@ const ShopListScreen = () => {
             </View>
           )}
         </>
-      )}
+      
     </SafeAreaView>
   );
 };

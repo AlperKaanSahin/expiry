@@ -69,6 +69,7 @@ export const logoutUser = async (refreshToken) => {
   return res.data;
 };
 export const getProfile = async () => {
+
   const res = await api.get('/users/profile');
   return res.data;
 };
@@ -99,9 +100,14 @@ export const fetchShops = async () => {
   return response.data;
 };
 
+export const fetchMyShop = async () => {
+  const response = await api.get('/shops/me');
+  return response.data;
+};
+
 export const fetchShopProfile = async () => {
-  const res = await api.get('/shops/me');
-  return res.data;
+  const response = await api.get('/shops/me/profile');
+  return response.data;
 };
 
 export const applyForShop = async (data) => {
@@ -120,8 +126,8 @@ export const canRateShop = async (shopId) => {
 };
 
 export const updateShopProfile = async (data) => {
-  const res = await api.put('/shops/profile', data);
-  return res.data;
+    const response = await api.patch('/shops/me/profile', data);
+  return response.data;
 };
 
 export const changePassword = async (data) => {
@@ -136,6 +142,7 @@ export const deleteShop = async (id) => {
 
 // ─── PACKAGES ────────────────────────────────────────────
 export const fetchShopPackages = async (shopId) => {
+
   const response = await api.get(`/packages/shop/${shopId}/packages`);
   return response.data;
 };
@@ -147,6 +154,7 @@ export const fetchPackageDetail = async (packageId) => {
 
 // ─── SHOP PRODUCTS ───────────────────────────────────────
 export const fetchShopProducts = async () => {
+  
   const response = await api.get('/shop/products');
   return response.data;
 };
@@ -251,6 +259,7 @@ export const fetchAllUsers = async (page = 1, limit = 10) => {
 };
 
 export const getUserById = async (id) => {
+  
   const res = await api.get(`/admin/users/${id}`);
   return res.data;
 };
@@ -274,7 +283,7 @@ export const updateShopStatus = async (id, status) => {
   return res.data;
 };
 
-export const fetchAuditLogs = () => {
+export const fetchAuditLogs = async () => {
   return api.get('/audit-logs');
 };
 

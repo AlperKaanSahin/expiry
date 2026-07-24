@@ -7,7 +7,10 @@ const getShopByUserId = async (userId) => {
 };
 
 exports.listPackages = async (userId) => {
-  const shop = await Shop.findOne({ where: { ownerId: userId } });
+  const shop = await Shop.findOne({
+    where: { ownerId: userId },
+  });
+
   if (!shop) return [];
 
   const packages = await Package.findAll({
@@ -15,29 +18,57 @@ exports.listPackages = async (userId) => {
     include: [
       {
         model: PackageProduct,
-        include: [{ model: ShopProduct, attributes: ['id', 'name', 'price'] }]
-      }
-    ]
+        include: [
+          {
+            model: ShopProduct,
+            attributes: ['id', 'name', 'price'],
+          },
+        ],
+      },
+    ],
   });
 
-  const result = [];
-  for (const pkg of packages) {
-    const products = (pkg.PackageProducts || [])
-      .filter(pp => pp && pp.ShopProduct)
-      .map(pp => ({
-        id: pp.ShopProduct.id,
-        name: pp.ShopProduct.name,
-        price: pp.ShopProduct.price,
-        quantity: pp.quantity
-      }));
+  const packageIds = packages.map(pkg => pkg.id);
 
-    const remainingUnits = await PackageUnit.count({
-      where: { packageId: pkg.id, isSold: false }
-    });
+  const packageCounts = await PackageUnit.findAll({
+    attributes: [
+      'packageId',
+      [
+        sequelize.fn('COUNT', sequelize.col('id')),
+        'remaining',
+      ],
+    ],
+    where: {
+      packageId: packageIds,
+      isSold: false,
+    },
+    group: ['packageId'],
+  });
 
-    if (remainingUnits > 0) {
-      const totalPrice = products.reduce((sum, p) => sum + p.price * p.quantity, 0);
-      result.push({
+  const counts = new Map(
+    packageCounts.map(item => [
+      item.packageId,
+      Number(item.get('remaining')),
+    ])
+  );
+
+  return packages
+    .map(pkg => {
+      const products = (pkg.PackageProducts || [])
+        .filter(pp => pp && pp.ShopProduct)
+        .map(pp => ({
+          id: pp.ShopProduct.id,
+          name: pp.ShopProduct.name,
+          price: pp.ShopProduct.price,
+          quantity: pp.quantity,
+        }));
+
+      const totalPrice = products.reduce(
+        (sum, p) => sum + p.price * p.quantity,
+        0
+      );
+
+      return {
         id: pkg.id,
         name: pkg.name,
         price: pkg.price,
@@ -50,12 +81,10 @@ exports.listPackages = async (userId) => {
         priceDropInterval: pkg.priceDropInterval ?? '',
         priceDropAmount: pkg.priceDropAmount ?? '',
         minPriceDropLimit: pkg.minPriceDropLimit ?? '',
-        quantity: remainingUnits
-      });
-    }
-  }
-
-  return result;
+        quantity: counts.get(pkg.id) || 0,
+      };
+    })
+    .filter(pkg => pkg.quantity > 0);
 };
 
 exports.createPackage = async (userId, data) => {

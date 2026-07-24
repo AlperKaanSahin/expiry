@@ -23,6 +23,8 @@ import Toast from 'react-native-toast-message';
 import { fetchShopProducts, addShopProduct, updateShopProduct, deleteShopProduct } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 const EMPTY_FORM = { name: '', price: '', quantity: '' };
 
@@ -32,29 +34,35 @@ const formatDate = (dateStr) => {
 };
 
 const ShopProductsScreen = () => {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+const [products, setProducts] = useState([]);
+const [loading, setLoading] = useState(true);
+const [refreshing, setRefreshing] = useState(false);
+const [error, setError] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [expiryDate, setExpiryDate] = useState(new Date());
   const [formData, setFormData] = useState(EMPTY_FORM);
-  const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [errors, setErrors] = useState({});
 
-  const loadProducts = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const data = await fetchShopProducts();
-      setProducts(data);
-    } catch (error) {
-      showErrorToast(error, Toast);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const loadProducts = async (isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+
+  try {
+    setError(null);
+
+    const data = await fetchShopProducts();
+    setProducts(data);
+
+  } catch (error) {
+    setError(error.message);
+
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => { loadProducts(); }, []);
 
@@ -183,6 +191,18 @@ const ShopProductsScreen = () => {
     </View>
   );
 
+if (loading) {
+  return <LoadingState />;
+}
+
+if (error) {
+  return (
+    <ErrorState
+      message="Ürünler yüklenirken bir hata oluştu."
+      onRetry={loadProducts}
+    />
+  );
+}
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -203,10 +223,6 @@ const ShopProductsScreen = () => {
         <Text style={styles.heroLabel}>Shop Paneli</Text>
         <Text style={styles.heroName}>Ürünlerim</Text>
       </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
         <FlatList
           data={products}
           keyExtractor={item => item.id.toString()}
@@ -230,7 +246,6 @@ const ShopProductsScreen = () => {
             </View>
           }
         />
-      )}
 
       {/* MODAL */}
       <Modal
