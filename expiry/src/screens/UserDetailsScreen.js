@@ -17,6 +17,8 @@ import { getUserById, updateUserRole, deleteUser } from '../services/api';
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 const ROLES = [
   { key: 'user',   label: 'Kullanıcı', desc: 'Standart kullanıcı yetkileri', icon: 'person' },
@@ -44,6 +46,8 @@ const UserDetailsScreen = ({ route, navigation }) => {
   const [role, setRole] = useState('');
   const [deleteModal, setDeleteModal] = useState(false);
   const [roleModal, setRoleModal] = useState(false);
+  const [error, setError] = useState(null);
+
 
   const panResponder = useRef(
     PanResponder.create({
@@ -55,11 +59,14 @@ const UserDetailsScreen = ({ route, navigation }) => {
 const fetchUser = async () => {
   try {
     setLoading(true);
+    setError(null);
+
     const res = await getUserById(userId);
     setUser(res);
     setRole(res.role);
+
   } catch (err) {
-    showErrorToast(err, Toast);
+    setError(err.message);
   } finally {
     setLoading(false);
   }
@@ -88,27 +95,22 @@ const handleDelete = async () => {
   }
 };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-      </SafeAreaView>
-    );
-  }
+if (loading) {
+  return <LoadingState />;
+}
 
-  if (!user) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Icon name="error-outline" size={48} color={COLORS.border} />
-          <Text style={styles.emptyText}>Kullanıcı bulunamadı</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.backBtnText}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+if (error) {
+  return (
+    <ErrorState
+      message="Kullanıcı bilgileri yüklenirken hata oluştu."
+      onRetry={fetchUser}
+    />
+  );
+}
+
+if (!user) {
+  return <EmptyState />;
+}
 
   const roleConfig = ROLE_CONFIG[role] || { color: COLORS.primary, bg: COLORS.primaryLight };
   const initials = `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase();

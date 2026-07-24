@@ -16,6 +16,9 @@ import { fetchNotifications, markNotificationAsRead } from '../services/api';
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
+import EmptyState from '../components/common/EmptyState';
 
 const TYPE_CONFIG = {
   SHOP_APPROVED:   { icon: 'check-circle',   color: '#16A34A' },
@@ -49,20 +52,23 @@ const NotificationScreen = ({ navigation }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       loadNotifications();
     }, [])
   );
-
 const loadNotifications = async () => {
   setLoading(true);
+  setError(false);
+
   try {
     const res = await fetchNotifications();
     setNotifications(res.data || []);
   } catch (err) {
-    console.log('Bildirimler yüklenemedi:', err.message);
+    setError(true);
+    showErrorToast(err, Toast);
   } finally {
     setLoading(false);
   }
@@ -146,7 +152,26 @@ const loadNotifications = async () => {
       </TouchableOpacity>
     );
   };
+  // Burada başlar
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <LoadingState text="Bildirimler yükleniyor..." />
+      </SafeAreaView>
+    );
+  }
 
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ErrorState
+          title="Bildirimler yüklenemedi"
+          subtitle="Lütfen tekrar deneyin."
+          onRetry={loadNotifications}
+        />
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -171,10 +196,6 @@ const loadNotifications = async () => {
       <View style={styles.hero}>
         <Text style={styles.heroName}>Bildirimler</Text>
       </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
         <FlatList
           data={notifications}
           keyExtractor={item => item.id.toString()}
@@ -188,7 +209,7 @@ const loadNotifications = async () => {
             </View>
           }
         />
-      )}
+
     </SafeAreaView>
   );
 };

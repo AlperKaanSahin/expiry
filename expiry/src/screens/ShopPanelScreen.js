@@ -4,14 +4,15 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
-import { fetchShopProfile } from '../services/api';
+import { fetchMyShop } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../theme/colors';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 const MENU_ITEMS = [
   { title: 'Ürünlerim', icon: 'shopping-basket', screen: 'ShopProducts' },
@@ -22,34 +23,43 @@ const MENU_ITEMS = [
 
 const ShopPanelScreen = ({ navigation }) => {
   const { logout } = useAuth();
-  const [status, setStatus] = useState(null);
-  const [shop, setShop] = useState(null);
-  const [loading, setLoading] = useState(true);
+const [status, setStatus] = useState(null);
+const [shop, setShop] = useState(null);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState(null);
+
+const loadShopProfile = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    const data = await fetchMyShop();
+
+    setStatus(data.status);
+    setShop(data.shop);
+  } catch (err) {
+    console.log('Shop profile yüklenemedi:', err.message);
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
 useEffect(() => {
-  const loadShopProfile = async () => {
-    try {
-      const data = await fetchShopProfile();
-      setStatus(data.status);
-      setShop(data.shop);
-    } catch (err) {
-      console.log('Shop profile yüklenemedi:', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
   loadShopProfile();
 }, []);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+if (loading) {
+  return <LoadingState />;
+}
+if (error) {
+  return (
+    <ErrorState
+      message="Shop bilgileri yüklenirken bir hata oluştu."
+      onRetry={loadShopProfile}
+    />
+  );
+}
 
   if (status === 'PENDING') {
     return (

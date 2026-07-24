@@ -14,6 +14,19 @@ async function getMyShop(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
+async function getMyShopProfile(req, res) {
+  try {
+    const shop = await shopService.getMyShopProfile(req.user.id);
+
+    if (!shop) {
+      return res.status(404).json({ error: 'Market bulunamadı' });
+    }
+
+    res.json({ shop });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
 async function list(req, res) {
   try {
@@ -74,4 +87,4 @@ async function updateShopProfile(req, res) {
   }
 }
 
-module.exports = { list, getShopWithPackages, rateShop, canRateShop, applyShop, getMyShop, updateShopProfile };
+module.exports = { list, getShopWithPackages, rateShop, canRateShop, applyShop, getMyShop, getMyShopProfile, updateShopProfile };

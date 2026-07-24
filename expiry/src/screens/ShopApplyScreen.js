@@ -23,21 +23,30 @@ const EMPTY_FORM = { name: '', address: '', phone: '' };
 const ShopApplyScreen = ({ navigation }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
   const [shopStatus, setShopStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
-useEffect(() => {
-  const checkStatus = async () => {
-    try {
-      const data = await fetchShopProfile();
-      setShopStatus(data?.shop?.status || null);
-    } catch (err) {
+const checkStatus = async () => {
+  setStatusLoading(true);
+
+  try {
+    const data = await fetchShopProfile();
+    setShopStatus(data?.shop?.status ?? null);
+  } catch (err) {
+    if (err.response?.status === 404) {
       setShopStatus(null);
-      console.log('Shop status kontrolü:', err.message);
-    } finally {
-      setStatusLoading(false);
+      return;
     }
-  };
+
+    showErrorToast(err, Toast);
+    navigation.goBack();
+  } finally {
+    setStatusLoading(false);
+  }
+};
+
+useEffect(() => {
   checkStatus();
 }, []);
 
@@ -66,7 +75,7 @@ const handleSubmit = async () => {
     setLoading(false);
   }
 };
-const [errors, setErrors] = useState({});
+
 
 const validateField = (name, value) => {
   if (name === 'name') return !value.trim() ? 'Market adı zorunlu' : null;
@@ -82,13 +91,9 @@ const handleBlur = (name) => {
   const error = validateField(name, form[name]);
   setErrors(prev => ({ ...prev, [name]: error }));
 };
-  if (statusLoading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-      </SafeAreaView>
-    );
-  }
+if (statusLoading) {
+  return <LoadingState />;
+}
 
   if (shopStatus === 'pending') {
     return (

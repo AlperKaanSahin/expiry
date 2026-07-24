@@ -14,6 +14,9 @@ import { fetchPackageDetail, createOrder } from '../services/api';
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
+import EmptyState from '../components/common/EmptyState';
 
 const formatDelivery = (start, end) => {
   if (!start || !end) return 'Teslimat zamanı belirtilmemiş';
@@ -31,19 +34,27 @@ const PackageDetailScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [ordering, setOrdering] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [error, setError] = useState(false);
+  
+  
+
+const loadPackage = async () => {
+  setLoading(true);
+  setError(false);
+
+  try {
+    const data = await fetchPackageDetail(packageId);
+    setPackageData(data);
+  } catch (err) {
+    setError(true);
+    showErrorToast(err, Toast);
+  } finally {
+    setLoading(false);
+  }
+};
 
 useEffect(() => {
-  const load = async () => {
-    try {
-      const data = await fetchPackageDetail(packageId);
-      setPackageData(data);
-    } catch (err) {
-      showErrorToast(err, Toast);
-    } finally {
-      setLoading(false);
-    }
-  };
-  load();
+  loadPackage();
 }, [packageId]);
 
 const handleOrder = async () => {
@@ -63,24 +74,31 @@ const handleOrder = async () => {
 
   const maxQuantity = packageData?.quantity || 1;
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-      </SafeAreaView>
-    );
-  }
+if (loading) {
+  return (
+    <LoadingState text="Paket yükleniyor..." />
+  );
+}
 
-  if (!packageData) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Icon name="error-outline" size={48} color={COLORS.border} />
-          <Text style={styles.emptyText}>Paket bulunamadı</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+if (error) {
+  return (
+    <ErrorState
+      title="Paket yüklenemedi"
+      subtitle="Lütfen tekrar deneyin."
+      onRetry={loadPackage}
+    />
+  );
+}
+
+if (!packageData) {
+  return (
+    <EmptyState
+      icon="inventory-2"
+      title="Paket bulunamadı"
+      subtitle="Bu paket kaldırılmış veya artık mevcut değil."
+    />
+  );
+}
 
   return (
     <SafeAreaView style={styles.safe}>

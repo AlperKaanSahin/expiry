@@ -3,7 +3,6 @@ import {
   View,
   Text,
   FlatList,
-  ActivityIndicator,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
@@ -17,6 +16,9 @@ import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
+import LoadingState from '../components/common/LoadingState';
+import EmptyState from '../components/common/EmptyState';
+import ErrorState from '../components/common/ErrorState';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Sipariş Alındı',     color: '#6B7280' },
@@ -36,14 +38,21 @@ const UserOrdersScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('active');
+  const [error, setError] = useState(null);
 
 const loadOrders = async (isRefresh = false) => {
-  if (isRefresh) setRefreshing(true);
-  else setLoading(true);
+  if (isRefresh)
+    setRefreshing(true);
+  else
+    setLoading(true);
+
+  setError(false);
+
   try {
     const data = await fetchMyOrders();
     setOrders(Array.isArray(data) ? data : []);
   } catch (err) {
+    setError(true);
     showErrorToast(err, Toast);
   } finally {
     setLoading(false);
@@ -109,68 +118,99 @@ const handleConfirm = async (orderId) => {
     );
   };
 
+  if (loading) {
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
-
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.appName}>expiry</Text>
-          <View style={styles.dot} />
-        </View>
-      </View>
-
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Hesabım</Text>
-        <Text style={styles.heroName}>Siparişlerim</Text>
-      </View>
-
-      {/* TABS */}
-      <View style={styles.tabs}>
-        {TABS.map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tabItem, tab === t.key && styles.tabItemActive]}
-            onPress={() => setTab(t.key)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
-        <FlatList
-          data={filteredOrders}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderOrder}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadOrders(true)}
-              colors={[COLORS.primary]}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="receipt-long" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>
-                {tab === 'active' ? 'Aktif sipariş yok' : 'Geçmiş sipariş yok'}
-              </Text>
-            </View>
-          }
-        />
-      )}
+      <LoadingState text="Siparişler yükleniyor..." />
     </SafeAreaView>
   );
+}
+
+if (error) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ErrorState
+        title="Siparişler yüklenemedi"
+        subtitle="Lütfen internet bağlantınızı kontrol edip tekrar deneyin."
+        onRetry={() => loadOrders()}
+      />
+    </SafeAreaView>
+  );
+}
+
+return (
+  <SafeAreaView style={styles.safe}>
+    <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+    {/* HEADER */}
+    <View style={styles.header}>
+      <View style={styles.headerLeft}>
+        <Text style={styles.appName}>expiry</Text>
+        <View style={styles.dot} />
+      </View>
+    </View>
+
+    {/* HERO */}
+    <View style={styles.hero}>
+      <Text style={styles.heroLabel}>Hesabım</Text>
+      <Text style={styles.heroName}>Siparişlerim</Text>
+    </View>
+
+    {/* TABS */}
+    <View style={styles.tabs}>
+      {TABS.map((t) => (
+        <TouchableOpacity
+          key={t.key}
+          style={[
+            styles.tabItem,
+            tab === t.key && styles.tabItemActive,
+          ]}
+          onPress={() => setTab(t.key)}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              tab === t.key && styles.tabTextActive,
+            ]}
+          >
+            {t.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+
+    <FlatList
+      data={filteredOrders}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={renderOrder}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => loadOrders(true)}
+          colors={[COLORS.primary]}
+        />
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="receipt-long"
+          title={
+            tab === 'active'
+              ? 'Aktif sipariş bulunmuyor'
+              : 'Geçmiş sipariş bulunmuyor'
+          }
+          subtitle={
+            tab === 'active'
+              ? 'İlk siparişinizi verdiğinizde burada görünecek.'
+              : 'Tamamlanan siparişleriniz burada listelenecek.'
+          }
+        />
+      }
+    />
+  </SafeAreaView>
+);
 };
 
 const styles = StyleSheet.create({

@@ -17,6 +17,8 @@ import { fetchAllUsers, deleteUser } from '../services/api';
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 const ROLE_CONFIG = {
   admin:  { label: 'Admin',  color: '#D97706', bg: '#FEF3C7' },
@@ -32,16 +34,22 @@ export default function UserListScreen({ navigation }) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [error, setError] = useState(null);
 
 const loadUsers = async (pageNumber = 1) => {
   try {
     setLoading(true);
+    setError(null);
+
     const data = await fetchAllUsers(pageNumber, LIMIT);
+
     setUsers(data.users);
     setTotal(data.total);
     setPage(data.page);
+
   } catch (err) {
-    showErrorToast(err, Toast);
+    setError(err.message);
+
   } finally {
     setLoading(false);
   }
@@ -124,6 +132,19 @@ const handleDelete = (userId) => {
     );
   };
 
+  if (loading) {
+  return <LoadingState />;
+}
+
+if (error) {
+  return (
+    <ErrorState
+      message="Kullanıcılar yüklenirken hata oluştu."
+      onRetry={loadUsers}
+    />
+  );
+}
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -159,10 +180,6 @@ const handleDelete = (userId) => {
           </TouchableOpacity>
         )}
       </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
         <>
           <FlatList
             data={filteredUsers}
@@ -201,7 +218,6 @@ const handleDelete = (userId) => {
             </View>
           )}
         </>
-      )}
     </SafeAreaView>
   );
 }

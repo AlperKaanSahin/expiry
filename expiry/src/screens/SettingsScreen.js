@@ -77,10 +77,6 @@ const SettingsScreen = ({ navigation }) => {
     return errors[name];
   };
 
-  const isFieldValid = (name) => {
-    return !errors[name];
-  };
-
   const handlePasswordChange = async () => {
     // Tüm alanları validate et
     const currentError = validateField('currentPassword', passwordData.currentPassword);
@@ -159,9 +155,6 @@ const SettingsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
         {error && <Text style={styles.errorText}>{error}</Text>}
-        {!error && value.length > 0 && (
-          <Text style={styles.successText}>✓ Geçerli</Text>
-        )}
       </View>
     );
   };

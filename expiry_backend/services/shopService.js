@@ -1,5 +1,6 @@
 const { Shop, User, Package, PackageProduct, ShopProduct,  ShopRating, Order } = require('../models');
 const { createNotification } = require('./notificationService');
+const { Op } = require('sequelize');
 
 exports.applyShop = async (userId, data) => {
   if (!data?.name || !data?.address || !data?.phone) {
@@ -58,7 +59,15 @@ exports.getMyShop = async (userId) => {
   if (!shop) return null;
   return shop;
 };
+exports.getMyShopProfile = async (userId) => {
+  const shop = await Shop.findOne({
+    where: { ownerId: userId }
+  });
 
+  if (!shop) return null;
+
+  return shop;
+};
 exports.listActiveShops = async () => {
   return await Shop.findAll({ where: { status: 'active' } });
 };
@@ -88,33 +97,45 @@ exports.updateShopProfile = async (userId, data) => {
 };
 
 
-exports.canRateShop = async (userId, shopId) => {
-  // Kullanıcının o marketten tamamlanmış siparişi var mı?
+
+
 exports.canRateShop = async (userId, shopId) => {
   const completedOrder = await Order.findOne({
     where: {
       userId,
       shopId,
-      status: ['confirmed', 'released']
-    }
+      status: {
+        [Op.in]: ['confirmed', 'released'],
+      },
+    },
   });
-  // ...
-};
 
   if (!completedOrder) {
-    return { canRate: false, reason: 'Henüz tamamlanmış siparişiniz yok' };
+    return {
+      canRate: false,
+      reason: 'Henüz tamamlanmış siparişiniz yok',
+    };
   }
 
-  // Daha önce bu sipariş için puan vermiş mi?
   const existingRating = await ShopRating.findOne({
-    where: { userId, shopId, orderId: completedOrder.id }
+    where: {
+      userId,
+      shopId,
+      orderId: completedOrder.id,
+    },
   });
 
   if (existingRating) {
-    return { canRate: false, reason: 'Bu sipariş için zaten puan verdiniz' };
+    return {
+      canRate: false,
+      reason: 'Bu sipariş için zaten puan verdiniz',
+    };
   }
 
-  return { canRate: true, orderId: completedOrder.id };
+  return {
+    canRate: true,
+    orderId: completedOrder.id,
+  };
 };
 
 

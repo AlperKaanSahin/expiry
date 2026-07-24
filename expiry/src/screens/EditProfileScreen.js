@@ -17,33 +17,40 @@ import Toast from 'react-native-toast-message';
 import { getProfile, updateProfile } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 const EditProfileScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', phone: '', address: ''
   });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+const [loading, setLoading] = useState(true);
+const [saving, setSaving] = useState(false);
+const [error, setError] = useState(false);
+const [errors, setErrors] = useState({}); // eklenen satır
 
-useEffect(() => {
-  const load = async () => {
-    try {
-      const user = await getProfile();
-      setFormData({
-        firstName: user.firstName || '',
-        lastName: user.lastName || '',
-        phone: user.phone || '',
-        address: user.address || '',
-      });
-    } catch (err) {
-      showErrorToast(err, Toast);
-    } finally {
-      setLoading(false);
-    }
-  };
-  load();
-}, []);
-const [errors, setErrors] = useState({});
+const loadProfile = async () => {
+
+  setLoading(true);
+  setError(false);
+
+  try {
+    const user = await getProfile();
+
+    setFormData({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      phone: user.phone || '',
+      address: user.address || '',
+    });
+  } catch (err) {
+    setError(true);
+    showErrorToast(err, Toast);
+  } finally {
+
+    setLoading(false);
+  }
+};
 
 const validateField = (name, value) => {
   if (name === 'firstName') return !value.trim() ? 'Ad zorunlu' : null;
@@ -84,14 +91,29 @@ const handleSave = async () => {
     setSaving(false);
   }
 };
+useEffect(() => {
+  loadProfile();
+}, []);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-      </SafeAreaView>
-    );
-  }
+if (loading) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <LoadingState text="Profil yükleniyor..." />
+    </SafeAreaView>
+  );
+}
+
+if (error) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ErrorState
+        title="Profil yüklenemedi"
+        subtitle="Lütfen tekrar deneyin."
+        onRetry={loadProfile}
+      />
+    </SafeAreaView>
+  );
+}
 
   return (
     <SafeAreaView style={styles.safe}>

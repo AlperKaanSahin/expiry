@@ -16,6 +16,8 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { fetchShops } from '../services/api';
 import { COLORS } from '../theme/colors';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 
 const ShopScreen = () => {
@@ -24,24 +26,32 @@ const ShopScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState(null);
 
 
 const loadShops = async (isRefresh = false) => {
   if (isRefresh) setRefreshing(true);
+
   try {
+    setError(null);
+
     const data = await fetchShops();
     setShops(data);
+
   } catch (err) {
-    console.log('Marketler yüklenemedi:', err.message);
+    setError(err.message);
+
   } finally {
     setLoading(false);
     setRefreshing(false);
   }
 };
 
-  useFocusEffect(
-    useCallback(() => { loadShops(); }, [])
-  );
+useFocusEffect(
+  useCallback(() => {
+    loadShops();
+  }, [])
+);
 
   const filteredShops = shops.filter(shop =>
     shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -82,6 +92,19 @@ const loadShops = async (isRefresh = false) => {
     </TouchableOpacity>
   );
 
+  if (loading) {
+  return <LoadingState />;
+}
+
+if (error) {
+  return (
+    <ErrorState
+      message="Marketler yüklenirken bir hata oluştu."
+      onRetry={loadShops}
+    />
+  );
+}
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -120,9 +143,6 @@ const loadShops = async (isRefresh = false) => {
 
 
       {/* LIST */}
-      {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
-      ) : (
         <FlatList
           data={filteredShops}
           keyExtractor={item => item.id.toString()}
@@ -143,7 +163,6 @@ const loadShops = async (isRefresh = false) => {
             </View>
           }
         />
-      )}
     </SafeAreaView>
   );
 };

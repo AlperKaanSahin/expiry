@@ -18,6 +18,8 @@ import { COLORS } from '../theme/colors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
 
 const ROLE_LABELS = {
   user: 'Kullanıcı',
@@ -33,20 +35,26 @@ export default function UserProfileScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState(null);
 
+const loadProfile = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    const data = await getProfile();
+    setUser(data);
+
+  } catch (err) {
+    setError(err.message);
+
+  } finally {
+    setLoading(false);
+  }
+};
 useFocusEffect(
   useCallback(() => {
-    const load = async () => {
-      try {
-        const data = await getProfile();
-        setUser(data);
-      } catch (err) {
-        console.log('Profil yüklenemedi:', err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadProfile();
   }, [])
 );
 
@@ -68,15 +76,20 @@ const handleDeleteAccount = async () => {
   }
 };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
-      </SafeAreaView>
-    );
-  }
-
+if (loading) {
+  return <LoadingState />;
+}
+if (error) {
+  return (
+    <ErrorState
+      title="Profil yüklenemedi"
+      subtitle="Profil bilgileri alınırken bir hata oluştu."
+      onRetry={loadProfile}
+    />
+  );
+}
   const initials = `${user?.firstName?.charAt(0) || ''}${user?.lastName?.charAt(0) || ''}`.toUpperCase();
+
 
   return (
     <SafeAreaView style={styles.safe}>
