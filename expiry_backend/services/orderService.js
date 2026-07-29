@@ -11,6 +11,10 @@ const transitions = {
   delivered: ['confirmed'],
   confirmed: ['released']
 };
+const STATUS_GROUPS = {
+  active: ['pending', 'paid', 'delivered'],
+  past: ['confirmed', 'released'],
+};
 
 function canTransition(current, next) {
   return transitions[current]?.includes(next);
@@ -262,12 +266,48 @@ async function changeStatusInternal(order, newStatus, actor, transaction) {
   await runSideEffects(order, newStatus, transaction);
 }
 
-async function listUserOrders(userId) {
-  return await Order.findAll({ where: { userId } });
+async function listUserOrders(userId, statusGroup = 'active', page = 1, limit = 10) {
+  const statuses = STATUS_GROUPS[statusGroup] || STATUS_GROUPS.active;
+
+  if (statusGroup === 'past') {
+    const offset = (page - 1) * limit;
+    const { count, rows } = await Order.findAndCountAll({
+      where: { userId, status: statuses },
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+    return { total: count, page, limit, orders: rows };
+  }
+
+  const orders = await Order.findAll({
+    where: { userId, status: statuses },
+    order: [['createdAt', 'DESC']],
+  });
+  return { total: orders.length, page: 1, limit: orders.length, orders };
 }
 
-async function listShopOrders(shopId) {
-  return await Order.findAll({ where: { shopId } });
+
+
+async function listShopOrders(shopId, statusGroup = 'active', page = 1, limit = 10) {
+  const statuses = STATUS_GROUPS[statusGroup] || STATUS_GROUPS.active;
+
+  if (statusGroup === 'past') {
+    const offset = (page - 1) * limit;
+    const { count, rows } = await Order.findAndCountAll({
+      where: { shopId, status: statuses },
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+    return { total: count, page, limit, orders: rows };
+  }
+
+  const orders = await Order.findAll({
+    where: { shopId, status: statuses },
+    order: [['createdAt', 'DESC']],
+  });
+  return { total: orders.length, page: 1, limit: orders.length, orders };
 }
 
 async function getShopByOwner(ownerId) {

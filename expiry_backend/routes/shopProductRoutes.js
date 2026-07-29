@@ -7,6 +7,7 @@ const validate = require('../middlewares/validate');
 const shopProductValidator = require('../validators/shopProduct.validator');
 
 router.get('/', auth, onlyMarket, shopProductController.list);
+router.get('/all', auth, onlyMarket, shopProductController.listAll);
 router.post('/', auth, onlyMarket, shopProductValidator.createProduct, validate, shopProductController.create);
 router.put('/:id', auth, onlyMarket, shopProductValidator.updateProduct, validate, shopProductController.update);
 router.delete('/:id', auth, onlyMarket, shopProductController.delete);

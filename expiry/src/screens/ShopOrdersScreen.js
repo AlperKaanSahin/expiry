@@ -31,6 +31,7 @@ const TABS = [
   { key: 'active', label: 'Aktif' },
   { key: 'past',   label: 'Geçmiş' },
 ];
+const LIMIT = 10;
 
 const ShopOrdersScreen = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
@@ -38,44 +39,39 @@ const ShopOrdersScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('active');
   const [hasError, setHasError] = useState(false);
+  const [total, setTotal] = useState(0);
+const [page, setPage] = useState(1);
 
-const loadOrders = async (isRefresh = false) => {
+const loadOrders = async (tabValue = tab, pageNumber = 1, isRefresh = false) => {
   setHasError(false);
   if (isRefresh) setRefreshing(true);
   else setLoading(true);
   try {
-    const data = await fetchShopOrders();
-    setOrders(Array.isArray(data) ? data : []);
+    const data = await fetchShopOrders(tabValue, pageNumber, LIMIT);
+    setOrders(data.orders);
+    setTotal(data.total);
+    setPage(data.page);
   } catch (err) {
-setHasError(true);
-showErrorToast(err, Toast);
+    setHasError(true);
+    showErrorToast(err, Toast);
   } finally {
     setLoading(false);
     setRefreshing(false);
   }
 };
 
-  useEffect(() => { loadOrders(); }, []);
+useEffect(() => { loadOrders('active', 1); }, []);
 
 
 const handleDeliver = async (orderId) => {
   try {
     await markOrderDelivered(orderId);
-    loadOrders();
+    loadOrders(tab, page);
   } catch (err) {
     showErrorToast(err, Toast);
   }
 };
 
-  const activeOrders = orders.filter(o => ['pending', 'paid', 'delivered'].includes(o.status));
-  const pastOrders = orders.filter(o => ['confirmed', 'released'].includes(o.status));
-const filteredOrders = orders.filter(order => {
-    if (tab === 'active') {
-        return ['pending', 'paid', 'delivered'].includes(order.status);
-    }
-
-    return ['confirmed', 'released'].includes(order.status);
-});
 
   const renderOrder = ({ item }) => {
     const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.textMuted };
@@ -133,8 +129,8 @@ const filteredOrders = orders.filter(order => {
 if (hasError) {
   return (
     <ErrorState
-      onRetry={() => loadOrders()}
-    />
+  onRetry={() => loadOrders(tab, 1)}
+/>
   );
 }
 
@@ -167,12 +163,15 @@ if (hasError) {
       {/* TABS */}
       <View style={styles.tabs}>
         {TABS.map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tabItem, tab === t.key && styles.tabItemActive]}
-            onPress={() => setTab(t.key)}
-            activeOpacity={0.8}
-          >
+<TouchableOpacity
+  key={t.key}
+  style={[styles.tabItem, tab === t.key && styles.tabItemActive]}
+  onPress={() => {
+    setTab(t.key);
+    loadOrders(t.key, 1);
+  }}
+  activeOpacity={0.8}
+>
             <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
               {t.label}
             </Text>
@@ -180,7 +179,7 @@ if (hasError) {
         ))}
       </View>
         <FlatList
-          data={filteredOrders}
+          data={orders}
           keyExtractor={item => item.id.toString()}
           renderItem={renderOrder}
           contentContainerStyle={styles.list}
@@ -188,7 +187,7 @@ if (hasError) {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadOrders(true)}
+              onRefresh={() => loadOrders(tab, 1, true)}
               colors={[COLORS.primary]}
             />
           }
@@ -204,6 +203,28 @@ ListEmptyComponent={
 }
         />
       
+{total > LIMIT && (
+  <View style={styles.pagination}>
+    <TouchableOpacity
+      style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+      onPress={() => loadOrders(tab, page - 1)}
+      disabled={page === 1}
+    >
+      <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+
+    <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
+
+    <TouchableOpacity
+      style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
+      onPress={() => loadOrders(tab, page + 1)}
+      disabled={page >= Math.ceil(total / LIMIT)}
+    >
+      <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+  </View>
+)}
+
     </SafeAreaView>
   );
 };
@@ -303,6 +324,31 @@ const styles = StyleSheet.create({
 },
 scanButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pagination: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  gap: 16,
+},
+pageBtn: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: COLORS.primary,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+pageBtnDisabled: {
+  backgroundColor: COLORS.border,
+},
+pageInfo: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: COLORS.text,
+  minWidth: 50,
+  textAlign: 'center',
+},
 });
 
 export default ShopOrdersScreen;

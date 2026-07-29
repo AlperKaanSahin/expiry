@@ -32,6 +32,7 @@ const TABS = [
   { key: 'active', label: 'Aktif' },
   { key: 'past',   label: 'Geçmiş' },
 ];
+const LIMIT = 10;
 
 const UserOrdersScreen = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
@@ -39,18 +40,20 @@ const UserOrdersScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('active');
   const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
+const [page, setPage] = useState(1);
 
-const loadOrders = async (isRefresh = false) => {
-  if (isRefresh)
-    setRefreshing(true);
-  else
-    setLoading(true);
+const loadOrders = async (tabValue = tab, pageNumber = 1, isRefresh = false) => {
+  if (isRefresh) setRefreshing(true);
+  else setLoading(true);
 
   setError(false);
 
   try {
-    const data = await fetchMyOrders();
-    setOrders(Array.isArray(data) ? data : []);
+    const data = await fetchMyOrders(tabValue, pageNumber, LIMIT);
+    setOrders(data.orders);
+    setTotal(data.total);
+    setPage(data.page);
   } catch (err) {
     setError(true);
     showErrorToast(err, Toast);
@@ -62,8 +65,8 @@ const loadOrders = async (isRefresh = false) => {
 
 useFocusEffect(
   useCallback(() => {
-    loadOrders();
-  }, [])
+    loadOrders(tab, page);
+  }, [tab, page])
 );
 
 
@@ -72,15 +75,11 @@ const handleConfirm = async (orderId) => {
   try {
     await confirmOrder(orderId);
     Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Siparişiniz teslim alındı olarak işaretlendi' });
-    loadOrders();
+    loadOrders(tab, page);
   } catch (err) {
     showErrorToast(err, Toast);
   }
 };
-
-  const activeOrders = orders.filter(o => ['pending', 'paid', 'delivered'].includes(o.status));
-  const pastOrders = orders.filter(o => ['confirmed', 'released'].includes(o.status));
-  const filteredOrders = tab === 'active' ? activeOrders : pastOrders;
 
   const renderOrder = ({ item }) => {
     const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.textMuted };
@@ -132,7 +131,7 @@ if (error) {
       <ErrorState
         title="Siparişler yüklenemedi"
         subtitle="Lütfen internet bağlantınızı kontrol edip tekrar deneyin."
-        onRetry={() => loadOrders()}
+        onRetry={() => loadOrders(tab, 1)}
       />
     </SafeAreaView>
   );
@@ -165,7 +164,10 @@ return (
             styles.tabItem,
             tab === t.key && styles.tabItemActive,
           ]}
-          onPress={() => setTab(t.key)}
+onPress={() => {
+  setTab(t.key);
+  setPage(1);
+}}
           activeOpacity={0.8}
         >
           <Text
@@ -181,7 +183,7 @@ return (
     </View>
 
     <FlatList
-      data={filteredOrders}
+      data={orders}
       keyExtractor={(item) => item.id.toString()}
       renderItem={renderOrder}
       contentContainerStyle={styles.list}
@@ -189,7 +191,7 @@ return (
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={() => loadOrders(true)}
+          onRefresh={() => loadOrders(tab, 1, true)}
           colors={[COLORS.primary]}
         />
       }
@@ -209,6 +211,28 @@ return (
         />
       }
     />
+{total > LIMIT && (
+  <View style={styles.pagination}>
+    <TouchableOpacity
+      style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+      onPress={() => loadOrders(tab, page - 1)}
+      disabled={page === 1}
+    >
+      <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+
+    <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
+
+    <TouchableOpacity
+      style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
+      onPress={() => loadOrders(tab, page + 1)}
+      disabled={page >= Math.ceil(total / LIMIT)}
+    >
+      <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+  </View>
+)}
+
   </SafeAreaView>
 );
 };
@@ -277,6 +301,31 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
+  pagination: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  gap: 16,
+},
+pageBtn: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: COLORS.primary,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+pageBtnDisabled: {
+  backgroundColor: COLORS.border,
+},
+pageInfo: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: COLORS.text,
+  minWidth: 50,
+  textAlign: 'center',
+}
 });
 
 export default UserOrdersScreen;

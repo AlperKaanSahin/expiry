@@ -1,14 +1,16 @@
 const shopPackageService = require('../services/ShopPackageService');
 
 module.exports = {
-  list: async (req, res) => {
-    try {
-      const packages = await shopPackageService.listPackages(req.user.id);
-      res.json(packages);
-    } catch (err) {
-      res.status(500).json({ error: 'Paketler yüklenemedi' });
-    }
-  },
+list: async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const result = await shopPackageService.listPackages(req.user.id, page, limit);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Paketler yüklenemedi' });
+  }
+},
 
   create: async (req, res) => {
     try {

@@ -71,8 +71,12 @@ async function getMyShopOrders(req, res) {
     const shop = await orderService.getShopByOwner(req.user.id);
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
 
-    const orders = await orderService.listShopOrders(shop.id);
-    res.json(orders);
+    const statusGroup = req.query.tab === 'past' ? 'past' : 'active';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const result = await orderService.listShopOrders(shop.id, statusGroup, page, limit);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -80,8 +84,12 @@ async function getMyShopOrders(req, res) {
 
 async function getMyUserOrders(req, res) {
   try {
-    const orders = await orderService.listUserOrders(req.user.id);
-    res.json(orders);
+    const statusGroup = req.query.tab === 'past' ? 'past' : 'active';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const result = await orderService.listUserOrders(req.user.id, statusGroup, page, limit);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

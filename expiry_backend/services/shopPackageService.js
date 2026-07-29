@@ -1,4 +1,5 @@
 const { Package, Shop, PackageProduct, ShopProduct, PackageUnit, sequelize } = require('../models');
+const { QueryTypes } = require('sequelize');
 
 const getShopByUserId = async (userId) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
@@ -6,53 +7,68 @@ const getShopByUserId = async (userId) => {
   return shop;
 };
 
-exports.listPackages = async (userId) => {
-  const shop = await Shop.findOne({
-    where: { ownerId: userId },
-  });
+exports.listPackages = async (userId, page = 1, limit = 10) => {
+  const shop = await Shop.findOne({ where: { ownerId: userId } });
+  if (!shop) return { total: 0, page, limit, packages: [] };
 
-  if (!shop) return [];
+  const offset = (page - 1) * limit;
 
+  // Adım 1: satılabilir stoğu olan paketlerin ID'lerini bul + sayfala
+const unitCounts = await sequelize.query(`
+  SELECT pu.packageId, COUNT(pu.id) as remaining
+  FROM \`PackageUnits\` pu
+  INNER JOIN \`Packages\` p ON p.id = pu.packageId
+  WHERE p.shopId = :shopId AND pu.isSold = false
+  GROUP BY pu.packageId
+  HAVING COUNT(pu.id) > 0
+  ORDER BY pu.packageId DESC
+  LIMIT :limit OFFSET :offset
+`, {
+  replacements: { shopId: shop.id, limit, offset },
+  type: QueryTypes.SELECT,
+});
+
+  // Toplam sayı (filtre uygulanmış hali)
+const [{ total }] = await sequelize.query(`
+  SELECT COUNT(*) as total FROM (
+    SELECT pu.packageId
+    FROM \`PackageUnits\` pu
+    INNER JOIN \`Packages\` p ON p.id = pu.packageId
+    WHERE p.shopId = :shopId AND pu.isSold = false
+    GROUP BY pu.packageId
+    HAVING COUNT(pu.id) > 0
+  ) as filtered
+`, {
+  replacements: { shopId: shop.id },
+  type: QueryTypes.SELECT,
+});
+
+  if (unitCounts.length === 0) {
+    return { total: Number(total), page, limit, packages: [] };
+  }
+
+  const packageIds = unitCounts.map(u => u.packageId);
+  const countMap = new Map(unitCounts.map(u => [u.packageId, Number(u.remaining)]));
+
+  // Adım 2: sadece bu sayfadaki paketler için zengin veriyi çek
   const packages = await Package.findAll({
-    where: { shopId: shop.id },
+    where: { id: packageIds },
     include: [
       {
         model: PackageProduct,
         include: [
-          {
-            model: ShopProduct,
-            attributes: ['id', 'name', 'price'],
-          },
+          { model: ShopProduct, attributes: ['id', 'name', 'price'] },
         ],
       },
     ],
   });
 
-  const packageIds = packages.map(pkg => pkg.id);
+  const packageMap = new Map(packages.map(pkg => [pkg.id, pkg]));
 
-  const packageCounts = await PackageUnit.findAll({
-    attributes: [
-      'packageId',
-      [
-        sequelize.fn('COUNT', sequelize.col('id')),
-        'remaining',
-      ],
-    ],
-    where: {
-      packageId: packageIds,
-      isSold: false,
-    },
-    group: ['packageId'],
-  });
-
-  const counts = new Map(
-    packageCounts.map(item => [
-      item.packageId,
-      Number(item.get('remaining')),
-    ])
-  );
-
-  return packages
+  // Adım 1'deki sırayı koru (findAll where-in sırayı garanti etmez)
+  const orderedPackages = packageIds
+    .map(id => packageMap.get(id))
+    .filter(Boolean)
     .map(pkg => {
       const products = (pkg.PackageProducts || [])
         .filter(pp => pp && pp.ShopProduct)
@@ -63,10 +79,7 @@ exports.listPackages = async (userId) => {
           quantity: pp.quantity,
         }));
 
-      const totalPrice = products.reduce(
-        (sum, p) => sum + p.price * p.quantity,
-        0
-      );
+      const totalPrice = products.reduce((sum, p) => sum + p.price * p.quantity, 0);
 
       return {
         id: pkg.id,
@@ -81,10 +94,11 @@ exports.listPackages = async (userId) => {
         priceDropInterval: pkg.priceDropInterval ?? '',
         priceDropAmount: pkg.priceDropAmount ?? '',
         minPriceDropLimit: pkg.minPriceDropLimit ?? '',
-        quantity: counts.get(pkg.id) || 0,
+        quantity: countMap.get(pkg.id) || 0,
       };
-    })
-    .filter(pkg => pkg.quantity > 0);
+    });
+
+  return { total: Number(total), page, limit, packages: orderedPackages };
 };
 
 exports.createPackage = async (userId, data) => {

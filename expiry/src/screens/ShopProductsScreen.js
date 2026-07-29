@@ -27,6 +27,7 @@ import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
 
 const EMPTY_FORM = { name: '', price: '', quantity: '' };
+const LIMIT = 10;
 
 const formatDate = (dateStr) => {
   if (!dateStr) return 'Tarih yok';
@@ -38,33 +39,35 @@ const [products, setProducts] = useState([]);
 const [loading, setLoading] = useState(true);
 const [refreshing, setRefreshing] = useState(false);
 const [error, setError] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [expiryDate, setExpiryDate] = useState(new Date());
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [errors, setErrors] = useState({});
+const [modalVisible, setModalVisible] = useState(false);
+const [selectedProduct, setSelectedProduct] = useState(null);
+const [expiryDate, setExpiryDate] = useState(new Date());
+const [formData, setFormData] = useState(EMPTY_FORM);
+const [submitting, setSubmitting] = useState(false);
+const [deletingId, setDeletingId] = useState(null);
+const [errors, setErrors] = useState({});
+const [total, setTotal] = useState(0);
+const [page, setPage] = useState(1);
 
-const loadProducts = async (isRefresh = false) => {
+const loadProducts = async (pageNumber = 1, isRefresh = false) => {
   if (isRefresh) setRefreshing(true);
+  else setLoading(true);
 
   try {
     setError(null);
-
-    const data = await fetchShopProducts();
-    setProducts(data);
-
+    const data = await fetchShopProducts(pageNumber, LIMIT);
+    setProducts(data.products);
+    setTotal(data.total);
+    setPage(data.page);
   } catch (error) {
     setError(error.message);
-
   } finally {
     setLoading(false);
     setRefreshing(false);
   }
 };
 
-  useEffect(() => { loadProducts(); }, []);
+useEffect(() => { loadProducts(1); }, []);
 
   const openModal = (product = null) => {
     setSelectedProduct(product);
@@ -118,8 +121,8 @@ const loadProducts = async (isRefresh = false) => {
         Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Ürün başarıyla eklendi' });
       }
 
-      closeModal();
-      loadProducts();
+closeModal();
+loadProducts(selectedProduct ? page : 1);
     } catch (error) {
       showErrorToast(error, Toast);
     } finally {
@@ -141,7 +144,8 @@ const loadProducts = async (isRefresh = false) => {
               setDeletingId(product.id);
               await deleteShopProduct(product.id);
               Toast.show({ type: 'success', text1: 'Silindi', text2: 'Ürün başarıyla silindi' });
-              loadProducts();
+              const targetPage = (products.length === 1 && page > 1) ? page - 1 : page;
+loadProducts(targetPage);
             } catch (error) {
               showErrorToast(error, Toast);
             } finally {
@@ -232,7 +236,7 @@ if (error) {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadProducts(true)}
+              onRefresh={() => loadProducts(1, true)}
               colors={[COLORS.primary]}
             />
           }
@@ -246,6 +250,27 @@ if (error) {
             </View>
           }
         />
+        {total > LIMIT && (
+  <View style={styles.pagination}>
+    <TouchableOpacity
+      style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+      onPress={() => loadProducts(page - 1)}
+      disabled={page === 1}
+    >
+      <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+
+    <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
+
+    <TouchableOpacity
+      style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
+      onPress={() => loadProducts(page + 1)}
+      disabled={page >= Math.ceil(total / LIMIT)}
+    >
+      <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+  </View>
+)}
 
       {/* MODAL */}
       <Modal
@@ -466,7 +491,33 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary, alignItems: 'center',
     justifyContent: 'center',
   },
-  submitText: { fontSize: 15, fontWeight: '600', color: COLORS.white },
+  submitText: { fontSize: 15, fontWeight: '600', color: COLORS.white 
+  },
+  pagination: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  gap: 16,
+},
+pageBtn: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: COLORS.primary,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+pageBtnDisabled: {
+  backgroundColor: COLORS.border,
+},
+pageInfo: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: COLORS.text,
+  minWidth: 50,
+  textAlign: 'center',
+}
 });
 
 export default ShopProductsScreen;
