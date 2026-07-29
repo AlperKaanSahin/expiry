@@ -1,10 +1,22 @@
 const shopProductService = require('../services/shopProductService');
 
 module.exports = {
+
+  // controller'a yeni bir action
+listAll: async (req, res) => {
+  try {
+    const products = await shopProductService.listAllProducts(req.user.id);
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: 'Ürünler yüklenemedi' });
+  }
+},
   list: async (req, res) => {
     try {
-      const products = await shopProductService.listProducts(req.user.id);
-      res.json(products);
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const result = await shopProductService.listProducts(req.user.id, page, limit);
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: 'Ürünler yüklenemedi' });
     }

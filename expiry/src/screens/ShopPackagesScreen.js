@@ -25,6 +25,7 @@ import {
   updateShopPackage,
   deleteShopPackage,
   fetchShopProducts,
+  fetchAllShopProducts,
 } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
@@ -33,6 +34,7 @@ import ErrorState from '../components/common/ErrorState';
 import EmptyState from '../components/common/EmptyState';
 
 const EMPTY_FORM = { name: '', price: '', description: '', quantity: '1' };
+const LIMIT = 10;
 
 const formatDeliveryRange = (start, end) => {
   if (!start || !end) return '-';
@@ -72,9 +74,11 @@ const ShopPackagesScreen = () => {
   const [deletingId, setDeletingId] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   
 
-const loadPackages = async (isRefresh = false) => {
+const loadPackages = async (pageNumber = 1, isRefresh = false) => {
   if (isRefresh) {
     setRefreshing(true);
   } else {
@@ -84,8 +88,10 @@ const loadPackages = async (isRefresh = false) => {
   setError(false);
 
   try {
-    const data = await fetchShopOwnPackages();
-    setPackages(data);
+    const data = await fetchShopOwnPackages(pageNumber, LIMIT);
+    setPackages(data.packages);
+    setTotal(data.total);
+    setPage(data.page);
   } catch (err) {
     setError(true);
     showErrorToast(err, Toast);
@@ -98,13 +104,13 @@ const loadPackages = async (isRefresh = false) => {
   }
 };
 
-  useEffect(() => { loadPackages(); }, []);
+useEffect(() => { loadPackages(1); }, []);
 
   const openModal = async (pkg = null) => {
     setModalVisible(true);
     setModalLoading(true);
     try {
-      const products = await fetchShopProducts();
+      const products = await fetchAllShopProducts();
       setAllProducts(products);
       setSelectedPackage(pkg);
       setFormData(pkg ? {
@@ -168,18 +174,19 @@ const loadPackages = async (isRefresh = false) => {
         {
           text: 'Sil',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeletingId(pkg.id);
-              await deleteShopPackage(pkg.id);
-              Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket başarıyla silindi' });
-              loadPackages();
-            } catch (err) {
-              showErrorToast(err, Toast);
-            } finally {
-              setDeletingId(null);
-            }
-          }
+onPress: async () => {
+  try {
+    setDeletingId(pkg.id);
+    await deleteShopPackage(pkg.id);
+    Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket başarıyla silindi' });
+    const targetPage = (packages.length === 1 && page > 1) ? page - 1 : page;
+    loadPackages(targetPage);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setDeletingId(null);
+  }
+}
         }
       ]
     );
@@ -265,9 +272,8 @@ const loadPackages = async (isRefresh = false) => {
         await addShopPackage(payload);
         Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Paket başarıyla eklendi' });
       }
-
-      closeModal();
-      loadPackages();
+closeModal();
+loadPackages(selectedPackage ? page : 1);
     } catch (err) {
       showErrorToast(err, Toast);
     } finally {
@@ -324,8 +330,8 @@ if (loading) {
 if (error) {
   return (
     <ErrorState
-      onRetry={loadPackages}
-    />
+  onRetry={() => loadPackages(1)}
+/>
   );
 }
   return (
@@ -358,7 +364,7 @@ if (error) {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadPackages(true)}
+              onRefresh={() => loadPackages(1, true)}
               colors={[COLORS.primary]}
             />
           }
@@ -378,7 +384,27 @@ ListEmptyComponent={
   </EmptyState>
 }
         />
+{total > LIMIT && (
+  <View style={styles.pagination}>
+    <TouchableOpacity
+      style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+      onPress={() => loadPackages(page - 1)}
+      disabled={page === 1}
+    >
+      <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
 
+    <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
+
+    <TouchableOpacity
+      style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
+      onPress={() => loadPackages(page + 1)}
+      disabled={page >= Math.ceil(total / LIMIT)}
+    >
+      <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
+    </TouchableOpacity>
+  </View>
+)}
       {/* MODAL */}
       <Modal
         visible={modalVisible}
@@ -773,6 +799,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   submitText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
+  pagination: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  gap: 16,
+},
+pageBtn: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: COLORS.primary,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+pageBtnDisabled: {
+  backgroundColor: COLORS.border,
+},
+pageInfo: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: COLORS.text,
+  minWidth: 50,
+  textAlign: 'center',
+},
 });
 
 export default ShopPackagesScreen;

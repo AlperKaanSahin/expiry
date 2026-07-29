@@ -153,9 +153,13 @@ export const fetchPackageDetail = async (packageId) => {
 };
 
 // ─── SHOP PRODUCTS ───────────────────────────────────────
-export const fetchShopProducts = async () => {
-  
-  const response = await api.get('/shop/products');
+// api.js
+export const fetchAllShopProducts = async () => {
+  const response = await api.get('/shop/products/all');
+  return response.data;  // düz array
+};
+export const fetchShopProducts = async (page = 1, limit = 10) => {
+  const response = await api.get('/shop/products', { params: { page, limit } });
   return response.data;
 };
 
@@ -175,8 +179,8 @@ export const deleteShopProduct = async (id) => {
 };
 
 // ─── SHOP PACKAGES ───────────────────────────────────────
-export const fetchShopOwnPackages = async () => {
-  const response = await api.get('/shop/packages');
+export const fetchShopOwnPackages = async (page = 1, limit = 10) => {
+  const response = await api.get('/shop/packages', { params: { page, limit } });
   return response.data;
 };
 
@@ -201,15 +205,14 @@ export const createOrder = async ({ shopId, packages }) => {
   const response = await api.post('/orders', { shopId, packages });
   return response.data;
 };
-
-export const fetchMyOrders = async () => {
-  const res = await api.get('/orders/user/me');
+export const fetchMyOrders = async (tab = 'active', page = 1, limit = 10) => {
+  const res = await api.get('/orders/user/me', { params: { tab, page, limit } });
   return res.data;
 };
 
-export const fetchShopOrders = async () => {
-  const res = await api.get('/orders/shop/me');
-  return res.data || [];
+export const fetchShopOrders = async (tab = 'active', page = 1, limit = 10) => {
+  const res = await api.get('/orders/shop/me', { params: { tab, page, limit } });
+  return res.data;
 };
 
 export const changeOrderStatus = async (orderId, status) => {
