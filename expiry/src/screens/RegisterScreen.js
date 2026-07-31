@@ -14,74 +14,50 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions } from '@react-navigation/native';
 import Icon from '@expo/vector-icons/MaterialIcons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import { registerUser } from '../services/api';
 import { ROUTES } from '../navigation/routes';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
 
-const GENDERS = [
-  { value: 'Erkek', label: 'Erkek', icon: 'male' },
-  { value: 'Kadın', label: 'Kadın', icon: 'female' },
-  { value: 'Diğer', label: 'Diğer', icon: 'transgender' },
-];
-
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const RegisterScreen = ({ navigation }) => {
-  const [formData, setFormData] = useState({
-    firstName: '', lastName: '', email: '',
-    phone: '', birthDate: '', gender: '', password: ''
-  });
+const [formData, setFormData] = useState({
+  firstName: '', lastName: '', email: '', password: ''
+});
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
   const handleChange = (name, value) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
   };
 
-  const validateField = (name, value) => {
-    switch (name) {
-      case 'firstName':
-        return !value.trim() ? 'Ad zorunlu' : null;
-      case 'lastName':
-        return !value.trim() ? 'Soyad zorunlu' : null;
-      case 'email':
-        if (!value.trim()) return 'Email zorunlu';
-        if (!EMAIL_REGEX.test(value)) return 'Geçerli bir email girin';
-        return null;
-      case 'phone':
-        if (!value.trim()) return 'Telefon zorunlu';
-        if (value.length !== 10) return 'Telefon 10 hane olmalı';
-        return null;
-      case 'birthDate':
-        return !value ? 'Doğum tarihi zorunlu' : null;
-      case 'gender':
-        return !value ? 'Cinsiyet seçimi zorunlu' : null;
-      case 'password':
-        if (!value) return 'Şifre zorunlu';
-        if (value.length < 6) return 'Şifre en az 6 karakter olmalı';
-        return null;
-      default:
-        return null;
-    }
-  };
+const validateField = (name, value) => {
+  switch (name) {
+    case 'firstName':
+      return !value.trim() ? 'Ad zorunlu' : null;
+    case 'lastName':
+      return !value.trim() ? 'Soyad zorunlu' : null;
+    case 'email':
+      if (!value.trim()) return 'Email zorunlu';
+      if (!EMAIL_REGEX.test(value)) return 'Geçerli bir email girin';
+      return null;
+    case 'password':
+      if (!value) return 'Şifre zorunlu';
+      if (value.length < 6) return 'Şifre en az 6 karakter olmalı';
+      return null;
+    default:
+      return null;
+  }
+};
 
   const handleBlur = (name) => {
     const error = validateField(name, formData[name]);
     setErrors(prev => ({ ...prev, [name]: error }));
   };
 
-  const handleDateChange = (_, selectedDate) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      handleChange('birthDate', selectedDate.toISOString().split('T')[0]);
-    }
-  };
 
   const validateAll = () => {
     const newErrors = {};
@@ -191,95 +167,6 @@ const RegisterScreen = ({ navigation }) => {
             </View>
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
-
-          {/* TELEFON */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Telefon *</Text>
-            <View style={[styles.inputBox, errors.phone && styles.inputBoxError]}>
-              <Icon name="phone" size={18} color={COLORS.textMuted} />
-              <TextInput
-                style={styles.input}
-                value={formData.phone}
-                onChangeText={t => { if (t.length <= 10) handleChange('phone', t.replace(/[^0-9]/g, '')); }}
-                onBlur={() => handleBlur('phone')}
-                placeholder="05XX XXX XX XX"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="phone-pad"
-                maxLength={10}
-                returnKeyType="next"
-              />
-            </View>
-            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-          </View>
-
-          {/* DOĞUM TARİHİ */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Doğum Tarihi *</Text>
-            <TouchableOpacity
-              style={[styles.inputBox, errors.birthDate && styles.inputBoxError]}
-              onPress={() => setShowDatePicker(true)}
-              activeOpacity={0.8}
-            >
-              <Icon name="calendar-today" size={18} color={COLORS.textMuted} />
-              <Text style={[styles.input, !formData.birthDate && { color: COLORS.textMuted }]}>
-                {formData.birthDate || 'GG-AA-YYYY'}
-              </Text>
-            </TouchableOpacity>
-            {errors.birthDate && <Text style={styles.errorText}>{errors.birthDate}</Text>}
-            {showDatePicker && (
-              <View style={styles.datePicker}>
-                <DateTimePicker
-                  value={formData.birthDate ? new Date(formData.birthDate) : new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleDateChange}
-                  maximumDate={new Date()}
-                />
-                {Platform.OS === 'ios' && (
-                  <View style={styles.datePickerBtns}>
-                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                      <Text style={styles.datePickerCancel}>Vazgeç</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.datePickerConfirm}
-                      onPress={() => { setShowDatePicker(false); handleBlur('birthDate'); }}
-                    >
-                      <Text style={styles.datePickerConfirmText}>Tamam</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* CİNSİYET */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Cinsiyet *</Text>
-            <View style={styles.genderRow}>
-              {GENDERS.map(g => (
-                <TouchableOpacity
-                  key={g.value}
-                  style={[styles.genderOption, formData.gender === g.value && styles.genderOptionActive]}
-                  onPress={() => { handleChange('gender', g.value); setErrors(prev => ({ ...prev, gender: null })); }}
-                  activeOpacity={0.8}
-                >
-                  <Icon
-                    name={g.icon}
-                    size={18}
-                    color={formData.gender === g.value ? COLORS.primary : COLORS.textMuted}
-                  />
-                  <Text style={[
-                    styles.genderLabel,
-                    formData.gender === g.value && styles.genderLabelActive
-                  ]}>
-                    {g.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
-          </View>
-
           {/* ŞİFRE */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Şifre *</Text>
@@ -362,52 +249,6 @@ const styles = StyleSheet.create({
   inputBoxError: { borderColor: COLORS.red },
   input: { flex: 1, fontSize: 15, color: COLORS.text },
   errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
-
-  datePicker: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginTop: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  datePickerBtns: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    gap: 10,
-  },
-  datePickerCancel: { color: COLORS.textMuted, fontSize: 15, padding: 8 },
-  datePickerConfirm: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  datePickerConfirmText: { color: COLORS.white, fontWeight: '600' },
-
-  genderRow: { flexDirection: 'row', gap: 8 },
-  genderOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  genderOptionActive: {
-    backgroundColor: COLORS.primaryLight,
-    borderColor: COLORS.primary,
-  },
-  genderLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
-  genderLabelActive: { color: COLORS.primary },
-
   submitButton: {
     backgroundColor: COLORS.primary,
     paddingVertical: 15,

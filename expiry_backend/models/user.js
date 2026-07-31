@@ -40,33 +40,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
-    phone: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      validate: {
-        is: /^[0-9+\s()-]{10,20}$/i
-      }
-    },
     address: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    birthDate: {
-      type: DataTypes.DATEONLY,
-      allowNull: true
-    },
-    gender: {
-      type: DataTypes.ENUM('Erkek', 'Kadın', 'Diğer'),
-      allowNull: true
-    },
     resetToken: {
-  type: DataTypes.STRING,
-  allowNull: true
-},
-resetTokenExpiry: {
-  type: DataTypes.DATE,
-  allowNull: true
-}
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    resetTokenExpiry: {
+      type: DataTypes.DATE,
+      allowNull: true
+    }
   }, {
     sequelize,
     modelName: 'User',

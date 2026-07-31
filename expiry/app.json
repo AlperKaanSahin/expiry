@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "toogoddtogog",
-    "slug": "toogoddtogog",
+    "name": "Expiry",
+    "slug": "Expiry",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,7 +20,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.Expiry"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,7 +33,18 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-font",
-      "@sentry/react-native"
-    ]
+      "@sentry/react-native",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Uygulama, teslimat QR kodunu okutmak için kameranıza erişim istiyor."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8e896faf-9f5e-448f-8f4e-f057aa2866b4"
+      }
+    }
   }
 }

@@ -21,13 +21,13 @@ const RootNavigator = () => {
   const { userToken, loading } = useAuth();
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
 
-  useEffect(() => {
-    const checkOnboarding = async () => {
-      const seen = await AsyncStorage.getItem('@hasSeenOnboarding');
-      setHasSeenOnboarding(seen === 'true');
-    };
-    checkOnboarding();
-  }, []);
+useEffect(() => {
+  const checkOnboarding = async () => {
+    const seen = await AsyncStorage.getItem('@hasSeenOnboarding');
+    setHasSeenOnboarding(seen === 'true');
+  };
+  checkOnboarding();
+}, [userToken]);
 
   if (loading || hasSeenOnboarding === null) {
     return (
