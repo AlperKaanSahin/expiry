@@ -17,6 +17,7 @@ import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
 import EmptyState from '../components/common/EmptyState';
+import LoadingState from '../components/common/LoadingState';
 
 const STATUS_CONFIG = {
   active:   { label: 'Aktif',      color: '#16A34A' },

@@ -5,18 +5,14 @@ exports.register = [
     .isEmail()
     .withMessage('Geçerli bir email giriniz'),
   body('password')
-    .isLength({ min: 4 })
-    .withMessage('Şifre en az 4 karakter olmalı'),
+    .isLength({ min: 6 })
+    .withMessage('Şifre en az 6 karakter olmalı'),
   body('firstName')
     .notEmpty()
     .withMessage('İsim zorunlu'),
   body('lastName')
     .notEmpty()
     .withMessage('Soyisim zorunlu'),
-  body('phone')
-    .optional()
-    .isMobilePhone()
-    .withMessage('Geçerli bir telefon numarası giriniz'),
 ];
 
 exports.login = [
@@ -41,6 +37,6 @@ exports.resetPassword = [
     .isLength({ min: 6, max: 6 })
     .withMessage('Geçerli bir kod giriniz'),
   body('newPassword')
-    .isLength({ min: 4 })
-    .withMessage('Şifre en az 4 karakter olmalı'),
+    .isLength({ min: 6 })
+    .withMessage('Şifre en az 6 karakter olmalı'),
 ];
