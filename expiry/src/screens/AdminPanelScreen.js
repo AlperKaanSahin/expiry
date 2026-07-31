@@ -20,7 +20,7 @@ const ADMIN_FEATURES = [
 ];
 
 export default function AdminPanelScreen({ navigation }) {
-  const { logout } = useAuth();
+  const { logout, setViewMode } = useAuth();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -63,6 +63,16 @@ export default function AdminPanelScreen({ navigation }) {
           ))}
         </View>
 
+        {/* HESAP */}
+        <TouchableOpacity
+          style={styles.browseButton}
+          onPress={() => setViewMode('browsing')}
+          activeOpacity={0.8}
+        >
+          <Icon name="storefront" size={18} color={COLORS.primary} />
+          <Text style={styles.browseButtonText}>Normal Kullanıcı Olarak Gez</Text>
+        </TouchableOpacity>
+
         {/* LOGOUT */}
         <TouchableOpacity
           style={styles.logoutButton}
@@ -76,7 +86,6 @@ export default function AdminPanelScreen({ navigation }) {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
@@ -131,4 +140,21 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   logoutText: { fontSize: 15, fontWeight: '600', color: COLORS.red },
+  browseButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  paddingVertical: 14,
+  borderRadius: 12,
+  backgroundColor: '#F0FDF4',
+  borderWidth: 1,
+  borderColor: COLORS.primary,
+  marginTop: 16,
+},
+browseButtonText: {
+  color: COLORS.primary,
+  fontWeight: '600',
+  fontSize: 14,
+},
 });

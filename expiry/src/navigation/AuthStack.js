@@ -10,13 +10,20 @@ import OnboardingScreen from '../screens/OnboardingScreen';
 const Stack = createStackNavigator();
 
 const AuthStack = ({ initialRouteName = 'Welcome' }) => (
-  <Stack.Navigator initialRouteName={initialRouteName}>
-    <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+  <Stack.Navigator
+    initialRouteName={initialRouteName}
+    screenOptions={{
+      headerShown: false,
+      gestureEnabled: true,
+      gestureDirection: 'horizontal',
+    }}
+  >
+    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+    <Stack.Screen name="Welcome" component={WelcomeScreen} />
+    <Stack.Screen name="Login" component={LoginScreen} />
+    <Stack.Screen name="Register" component={RegisterScreen} />
+    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+    <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
   </Stack.Navigator>
 );
 

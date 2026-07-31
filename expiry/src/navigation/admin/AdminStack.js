@@ -1,8 +1,8 @@
-import UserListScreen from '../screens/UserListScreen';
-import ShopListScreen from '../screens/ShopListScreen';
-import AdminPanelScreen from '../screens/AdminPanelScreen';
-import AuditLogsScreen from '../screens/AuditLogsScreen';
-import UserDetailsScreen from '../screens/UserDetailsScreen';
+import ShopListScreen from '../../screens/ShopListScreen';
+import AdminPanelScreen from '../../screens/AdminPanelScreen';
+import AuditLogsScreen from '../../screens/AuditLogsScreen';
+import UserDetailsScreen from '../../screens/UserDetailsScreen';
+import UserListScreen from '../../screens/UserListScreen';
 
 import { createStackNavigator } from '@react-navigation/stack';
 
@@ -11,7 +11,13 @@ const Stack = createStackNavigator();
 
 export default function AdminStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+  screenOptions={{
+    headerShown: false,
+    gestureEnabled: true,
+    gestureDirection: 'horizontal',
+  }}
+>
       <Stack.Screen name="AdminPanel" component={AdminPanelScreen} options={{ headerShown: false }} />
       <Stack.Screen name="UserListScreen" component={UserListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ShopListScreen" component={ShopListScreen} options={{ headerShown: false }} />
