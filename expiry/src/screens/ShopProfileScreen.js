@@ -17,6 +17,9 @@ import { fetchShopProfile, updateShopProfile, changeShopPassword } from '../serv
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
+import Icon from '@expo/vector-icons/MaterialIcons';
+import { useAuth } from '../context/AuthContext';
+import ErrorState from '../components/common/ErrorState';
 
 const TABS = [
   { key: 'profile', label: 'Bilgilerim' },
@@ -26,6 +29,7 @@ const TABS = [
 const EMPTY_PASSWORD = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
 const ShopProfileScreen = () => {
+  const { logout, setViewMode } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
@@ -264,6 +268,26 @@ if (error) {
               </TouchableOpacity>
             </>
           )}
+          {/* HESAP */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.browseButton}
+              onPress={() => setViewMode('browsing')}
+              activeOpacity={0.8}
+            >
+              <Icon name="storefront" size={18} color={COLORS.primary} />
+              <Text style={styles.browseButtonText}>Normal Kullanıcı Olarak Gez</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={logout}
+              activeOpacity={0.8}
+            >
+              <Icon name="logout" size={18} color={COLORS.red} />
+              <Text style={styles.logoutText}>Çıkış Yap</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -335,6 +359,43 @@ const styles = StyleSheet.create({
   submitText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
 
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  footer: {
+  marginTop: 24,
+  marginBottom: 16,
+  gap: 10,
+},
+browseButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  paddingVertical: 14,
+  borderRadius: 12,
+  backgroundColor: '#F0FDF4',
+  borderWidth: 1,
+  borderColor: COLORS.primary,
+},
+browseButtonText: {
+  color: COLORS.primary,
+  fontWeight: '600',
+  fontSize: 14,
+},
+logoutButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  paddingVertical: 14,
+  borderRadius: 12,
+  backgroundColor: '#FEF2F2',
+  borderWidth: 1,
+  borderColor: '#FCA5A5',
+},
+logoutText: {
+  color: COLORS.red,
+  fontWeight: '600',
+  fontSize: 14,
+},
 });
 
 export default ShopProfileScreen;

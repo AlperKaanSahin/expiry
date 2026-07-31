@@ -74,7 +74,7 @@ const loadNotifications = async () => {
   }
 };
 
- const handlePress = async (item) => {
+const handlePress = async (item) => {
   try {
     await markNotificationAsRead(item.id);
     setNotifications(prev =>
@@ -85,38 +85,39 @@ const loadNotifications = async () => {
       switch (item.type) {
         case 'SHOP_APPLY':
         case 'SHOP_REAPPLY':
-          navigation.navigate('AdminStack', { screen: 'ShopListScreen' });
+          navigation.navigate('AdminMain', { screen: 'ShopListScreen' });
           break;
         default:
-          navigation.navigate('AdminStack');
+          navigation.navigate('AdminMain');
       }
       return;
     }
 
+    if (user.role === 'market') {
+      switch (item.type) {
+        case 'SHOP_APPROVED':
+        case 'SHOP_REJECTED':
+          navigation.navigate('ShopMain');
+          break;
+        case 'ORDER_NEW':
+        case 'ORDER_CONFIRMED':
+        case 'ORDER_RELEASED':
+          navigation.navigate('ShopMain', { screen: 'ShopOrders' });
+          break;
+        default:
+          break;
+      }
+      return;
+    }
+
+    // normal user
     switch (item.type) {
-      case 'SHOP_APPROVED':
-        navigation.navigate('ShopStack', { screen: 'ShopPanel' });
-        break;
-      case 'SHOP_REJECTED':
-        navigation.navigate('ShopStack', { screen: 'ShopApply' });
-        break;
       case 'RATE_SHOP':
-        navigation.navigate('ShopStack', { screen: 'RateShopScreen', params: { shopId: item.targetId, orderId: item.orderId } });
-        break;
-      case 'ORDER_NEW':
-        navigation.navigate('ShopStack', { screen: 'ShopOrders' });
-        break;
-      case 'ORDER_CONFIRMED':
-        navigation.navigate('ShopStack', { screen: 'ShopOrders' });
-        break;
-      case 'ORDER_RELEASED':
-        navigation.navigate('ShopStack', { screen: 'ShopOrders' });
+        navigation.navigate('OrdersTab', { screen: 'RateShopScreen', params: { shopId: item.targetId, orderId: item.orderId } });
         break;
       case 'ORDER_PAID':
-        navigation.navigate('UserOrders');
-        break;
       case 'ORDER_DELIVERED':
-        navigation.navigate('UserOrders');
+        navigation.navigate('OrdersTab', { screen: 'UserOrders' });
         break;
       default:
         break;

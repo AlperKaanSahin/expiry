@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('panel'); // 'panel' | 'browsing'
 
   const loadAuth = async () => {
     try {
@@ -65,21 +66,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-const logout = async () => {
-  try {
-    const refreshToken = await AsyncStorage.getItem('@refreshToken');
-    if (refreshToken) {
-      await logoutUser(refreshToken);
+  const logout = async () => {
+    try {
+      const refreshToken = await AsyncStorage.getItem('@refreshToken');
+      if (refreshToken) {
+        await logoutUser(refreshToken);
+      }
+    } catch (err) {
+      console.log('Backend logout başarısız (yine de devam ediliyor):', err.message);
     }
-  } catch (err) {
-    console.log('Backend logout başarısız (yine de devam ediliyor):', err.message);
-  }
 
-  await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
-  setUserToken(null);
-  setUser(null);
-  setShop(null);
-};
+    await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
+    setUserToken(null);
+    setUser(null);
+    setShop(null);
+    setViewMode('panel');   // ← eklendi
+  };
 
   const isAdmin = user?.role === 'admin';
   const isMarket = user?.role === 'market';
@@ -97,6 +99,8 @@ const logout = async () => {
         isAdmin,
         isMarket,
         isMarketActive,
+        viewMode,           // ← eklendi
+        setViewMode, 
       }}
     >
       {children}

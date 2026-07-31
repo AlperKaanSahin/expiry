@@ -135,18 +135,18 @@ if (loading) {
           <Text style={styles.appName}>expiry</Text>
           <View style={styles.dot} />
         </View>
-        {canRate ? (
-          <TouchableOpacity
-            style={styles.rateButton}
-            onPress={() => navigation.navigate('RateShopScreen', { shopId })}
-            activeOpacity={0.8}
-          >
-            <Icon name="star" size={16} color={COLORS.primary} />
-            <Text style={styles.rateButtonText}>Puan Ver</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 80 }} />
-        )}
+          {canRate ? (
+            <TouchableOpacity
+              style={styles.rateButton}
+              onPress={() => navigation.navigate('RateShopScreen', { shopId })}
+              activeOpacity={0.8}
+            >
+              <Icon name="star" size={16} color={COLORS.primary} />
+              <Text style={styles.rateButtonText}>Puan Ver</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 80 }} />
+          )}
       </View>
 
       {/* HERO */}

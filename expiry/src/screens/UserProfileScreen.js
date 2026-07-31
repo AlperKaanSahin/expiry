@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
+import { useNavigation } from '@react-navigation/native';
 
 const ROLE_LABELS = {
   user: 'Kullanıcı',
@@ -28,7 +29,7 @@ const ROLE_LABELS = {
 };
 
 export default function UserProfileScreen({ navigation }) {
-  const { logout } = useAuth();
+  const { logout, setViewMode } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState(false);
@@ -132,32 +133,36 @@ if (error) {
           </View>
         </View>
 
-        {user?.phone && (
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Icon name="phone" size={18} color={COLORS.primary} />
-            </View>
-            <View>
-              <Text style={styles.infoLabel}>Telefon</Text>
-              <Text style={styles.infoValue}>{user.phone}</Text>
-            </View>
-          </View>
-        )}
-
-        {user?.address && (
-          <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-            <View style={styles.infoIcon}>
-              <Icon name="location-on" size={18} color={COLORS.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.infoLabel}>Adres</Text>
-              <Text style={styles.infoValue}>{user.address}</Text>
-            </View>
-          </View>
-        )}
       </View>
 
       {/* FOOTER */}
+
+
+{/* MANAGEMENT */}
+{user?.role === 'market' && (
+  <TouchableOpacity
+    style={styles.settingsButton}
+    onPress={() => setViewMode('panel')}
+    activeOpacity={0.8}
+  >
+    <Icon name="store" size={18} color={COLORS.text} />
+    <Text style={styles.settingsText}>Market Panelim</Text>
+    <Icon name="chevron-right" size={18} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+  </TouchableOpacity>
+)}
+
+{user?.role === 'admin' && (
+  <TouchableOpacity
+    style={styles.settingsButton}
+    onPress={() => setViewMode('panel')}
+    activeOpacity={0.8}
+  >
+    <Icon name="admin-panel-settings" size={18} color={COLORS.text} />
+    <Text style={styles.settingsText}>Admin Paneli</Text>
+    <Icon name="chevron-right" size={18} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+  </TouchableOpacity>
+)}
+
       <View style={styles.footer}>
         <TouchableOpacity
   style={styles.settingsButton}
