@@ -2,13 +2,11 @@
 
 A full-stack mobile marketplace that helps reduce food waste by connecting consumers with local markets offering discounted products nearing their expiration date.
 
-> 🚧 **Status:** Active Development
-
----
+🚧 **Status:** Active Development — pre-launch
 
 ## Overview
 
-Expiry enables local markets to create discounted product packages that are close to their expiration date. Customers can browse nearby markets, purchase available packages, and collect their orders in person.
+Expiry enables local markets to create discounted product packages that are close to their expiration date. Customers can browse nearby markets, purchase available packages, and collect their orders in person via a QR-based pickup flow.
 
 The platform supports three different roles:
 
@@ -18,46 +16,40 @@ The platform supports three different roles:
 
 Market owners and administrators can also switch back to the regular customer experience without creating separate accounts.
 
----
-
 ## Features
 
-- JWT authentication with Access & Refresh Tokens
+- JWT authentication with Access & Refresh Tokens (rotation + revocation support)
 - Role-based authorization (User / Market / Admin)
-- Role-based mobile navigation
-- Market application & approval workflow
-- Product and package management
+- Role-based mobile navigation with a shared codebase for all three roles
+- Market application & approval workflow (including reapplication after rejection)
+- Product and package management with pagination
+- QR-based delivery confirmation — single-scan pickup flow
 - Escrow-style order lifecycle
-- In-app notification system
+- Event-driven, deep-linked in-app notification system
 - Shop rating system
 - Admin audit logs
 - Server-side price validation
 - Automatic access token renewal
+- Password reset with rate limiting and protection against user enumeration
 - Account deletion
-
----
 
 ## Tech Stack
 
-### Mobile
-
+**Mobile**
 - React Native
-- Expo
+- Expo (EAS Build for development/production builds)
 - React Navigation
 - Axios
 
-### Backend
-
+**Backend**
 - Node.js
 - Express.js
 - Sequelize ORM
 
-### Database
-
+**Database**
 - MySQL
 
-### Security
-
+**Security**
 - JWT
 - bcrypt
 - Helmet
@@ -65,7 +57,10 @@ Market owners and administrators can also switch back to the regular customer ex
 - express-rate-limit
 - express-validator
 
----
+**Monitoring & Tooling**
+- Sentry (error monitoring, backend + frontend)
+- Resend (transactional email)
+- Postman (E2E API test collection)
 
 ## Architecture
 
@@ -81,16 +76,15 @@ Business logic is isolated inside the service layer while side effects such as n
 
 ### Highlights
 
-- Role-Based Access Control
-- Event-Driven Notifications
-- Event-Driven Audit Logs
-- Automatic Refresh Token Flow
-- Server-Side Price Validation
-- Ownership Validation
-- Relational Database Design
+- **Role-Based Access Control** — three distinct experiences (customer, shop owner, admin) served from a single codebase via conditional root navigators
+- **Event-Driven Notifications & Audit Logs** — order/shop status changes emit events consumed by dedicated handlers, decoupling business logic from side effects
+- **Pagination strategy** — straightforward `LIMIT`/`OFFSET` for most lists; a two-step query (filter + paginate on IDs, then hydrate) for endpoints where filtering depends on an aggregate (e.g. packages with available stock), keeping results accurate without loading full tables into memory
+- **Automatic Refresh Token Flow**
+- **Server-Side Price Validation**
+- **Ownership Validation**
+- **Relational Database Design**
 
----
-
+  
 ## Project Structure
 
 ```text
@@ -134,7 +128,7 @@ expiry/
 - Node.js 18+
 - MySQL
 - npm
-- Expo Go or Android/iOS Emulator
+- Expo Go or Android/iOS Emulator (or an EAS development build for native modules like camera/Sentry)
 
 ### Backend
 
@@ -163,8 +157,6 @@ Start the server.
 npm start
 ```
 
----
-
 ### Mobile
 
 ```bash
@@ -190,8 +182,6 @@ Start Expo.
 npx expo start
 ```
 
----
-
 ## API Testing
 
 A complete Postman collection is included for testing the application's API.
@@ -205,15 +195,11 @@ It covers:
 - Notifications
 - Ratings
 
----
-
 ## Roadmap
 
-- Firebase Cloud Messaging
-- Push notifications
+- Firebase Cloud Messaging / push notifications
 - Real payment integration
 - Email verification
-- Password reset
 - Automatic order release scheduler
 - Automatic package price scheduler
 - Maps integration
@@ -223,20 +209,15 @@ It covers:
 - Integration tests
 - CI/CD pipeline
 
----
-
 ## Development Goals
 
 Current development focuses on:
 
-- Improving navigation architecture
-- Production-ready backend security
-- Better notification flow
+- Finalizing navigation UX ahead of launch
+- Production-ready backend security (rate limiting tuning, domain verification for transactional email)
 - Automated testing
 - Code quality
 - Performance optimization
-
----
 
 ## Author
 
