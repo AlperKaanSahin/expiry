@@ -16,14 +16,11 @@ import { COLORS } from '../theme/colors';
 import { filterNotificationsByWorkspace } from '../utils/notificationFilters';
 
 const TYPE_ICONS = {
-  SHOP_APPROVED: { icon: 'check-circle', color: '#16A34A' },
-  SHOP_REJECTED: { icon: 'cancel', color: '#DC2626' },
-  RATE_SHOP: { icon: 'star', color: '#F59E0B' },
-  ORDER_PAID: { icon: 'payment', color: '#16A34A' },
   ORDER_NEW: { icon: 'shopping-bag', color: '#2563EB' },
-  ORDER_DELIVERED: { icon: 'local-shipping', color: '#7C3AED' },
   ORDER_CONFIRMED: { icon: 'check-circle', color: '#16A34A' },
   ORDER_RELEASED: { icon: 'account-balance', color: '#16A34A' },
+  SHOP_APPROVED: { icon: 'check-circle', color: '#16A34A' },
+  SHOP_REJECTED: { icon: 'cancel', color: '#DC2626' },
 };
 const DEFAULT_TYPE_ICON = { icon: 'notifications', color: COLORS.primary };
 
@@ -38,27 +35,27 @@ const formatRelative = (dateString) => {
   return `${days} gün önce`;
 };
 
-const HomeScreen = ({ navigation }) => {
-  const { user } = useAuth();
+const ShopHomeScreen = ({ navigation }) => {
+  const { shop } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifications, setRecentNotifications] = useState([]);
 
-useFocusEffect(
-  useCallback(() => {
-    const loadNotifications = async () => {
-      try {
-        const res = await fetchNotifications();
-        const data = res.data || [];
-        const userNotifications = filterNotificationsByWorkspace(data, 'user');
-        setUnreadCount(userNotifications.filter(n => !n.isRead).length);
-        setRecentNotifications(userNotifications.slice(0, 3));
-      } catch (err) {
-        console.log('Bildirimler yüklenemedi:', err.message);
-      }
-    };
-    loadNotifications();
-  }, [])
-);
+  useFocusEffect(
+    useCallback(() => {
+const loadNotifications = async () => {
+  try {
+    const res = await fetchNotifications();
+    const data = res.data || [];
+    const shopNotifications = filterNotificationsByWorkspace(data, 'shop');
+    setUnreadCount(shopNotifications.filter(n => !n.isRead).length);
+    setRecentNotifications(shopNotifications.slice(0, 3));
+  } catch (err) {
+    console.log('Bildirimler yüklenemedi:', err.message);
+  }
+};
+      loadNotifications();
+    }, [])
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -78,49 +75,52 @@ useFocusEffect(
           <Icon name="notifications-none" size={22} color={COLORS.text} />
           {unreadCount > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </Text>
+              <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.body}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {/* HERO */}
         <View style={styles.hero}>
-          <Text style={styles.heroLabel}>Hoş geldin 👋</Text>
-          <Text style={styles.heroName}>{user?.firstName || 'Kullanıcı'}</Text>
-          <Text style={styles.heroSub}>Bugün ne yapmak istersin?</Text>
+          <Text style={styles.heroLabel}>Shop Paneli</Text>
+          <Text style={styles.heroName}>{shop?.name || 'Shopum'}</Text>
         </View>
 
         {/* QUICK ACTIONS */}
         <View style={styles.quickActions}>
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('BrowseTab')}
+            onPress={() => navigation.navigate('ShopProducts')}
             activeOpacity={0.8}
           >
             <View style={styles.actionIcon}>
-              <Icon name="storefront" size={26} color={COLORS.primary} />
+              <Icon name="shopping-basket" size={24} color={COLORS.primary} />
             </View>
-            <Text style={styles.actionTitle}>Marketleri Keşfet</Text>
-            <Text style={styles.actionSub}>Yakınındaki fırsatlara göz at</Text>
+            <Text style={styles.actionTitle}>Ürünler</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('OrdersTab')}
+            onPress={() => navigation.navigate('ShopPackages')}
             activeOpacity={0.8}
           >
             <View style={styles.actionIcon}>
-              <Icon name="receipt-long" size={26} color={COLORS.primary} />
+              <Icon name="inventory" size={24} color={COLORS.primary} />
             </View>
-            <Text style={styles.actionTitle}>Siparişlerim</Text>
-            <Text style={styles.actionSub}>Aktif ve geçmiş siparişlerin</Text>
+            <Text style={styles.actionTitle}>Paketler</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('ShopOrders')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.actionIcon}>
+              <Icon name="receipt-long" size={24} color={COLORS.primary} />
+            </View>
+            <Text style={styles.actionTitle}>Siparişler</Text>
           </TouchableOpacity>
         </View>
 
@@ -166,119 +166,53 @@ useFocusEffect(
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: COLORS.bg,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: COLORS.bg,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
   notifButton: {
-    width: 42, height: 42,
-    borderRadius: 21,
-    backgroundColor: COLORS.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.white,
+    justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border,
   },
   badge: {
-    position: 'absolute',
-    top: 6, right: 6,
-    backgroundColor: COLORS.red,
-    borderRadius: 8,
-    minWidth: 16, height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 3,
+    position: 'absolute', top: 6, right: 6, backgroundColor: COLORS.red, borderRadius: 8,
+    minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3,
   },
   badgeText: { color: COLORS.white, fontSize: 9, fontWeight: '800' },
-
   body: { paddingHorizontal: 20, paddingBottom: 110 },
-
-  hero: { marginTop: 8, marginBottom: 28 },
-  heroLabel: { fontSize: 14, color: COLORS.textMuted, marginBottom: 4 },
-  heroName: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5, marginBottom: 6 },
-  heroSub: { fontSize: 14, color: COLORS.textMuted },
-
-  quickActions: { gap: 12 },
+  hero: { marginTop: 8, marginBottom: 24 },
+  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 4 },
+  heroName: { fontSize: 26, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+  quickActions: { flexDirection: 'row', gap: 10 },
   actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    flex: 1, alignItems: 'center', gap: 8, backgroundColor: COLORS.white,
+    borderRadius: 16, paddingVertical: 18, borderWidth: 1, borderColor: COLORS.border,
   },
   actionIcon: {
-    width: 48, height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F0FDF4',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center', alignItems: 'center',
   },
-  actionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  actionSub: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
-
+  actionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 28,
-    marginBottom: 10,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 28, marginBottom: 10,
   },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    letterSpacing: 0.6,
-  },
-  sectionLink: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-
+  sectionLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textMuted, letterSpacing: 0.6 },
+  sectionLink: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   list: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
+    backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 1,
+    borderColor: COLORS.border, overflow: 'hidden',
   },
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 12,
-  },
-  notifIcon: {
-    width: 32, height: 32,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  notifRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, gap: 12 },
+  notifIcon: { width: 32, height: 32, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
   notifText: { flex: 1 },
   notifTitle: { fontSize: 13, fontWeight: '600', color: COLORS.text },
   notifTime: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
-  unreadDot: {
-    width: 7, height: 7,
-    borderRadius: 3.5,
-    backgroundColor: COLORS.primary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginLeft: 58,
-  },
+  unreadDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.primary },
+  divider: { height: 1, backgroundColor: COLORS.border, marginLeft: 58 },
 });
 
-export default HomeScreen;
+export default ShopHomeScreen;

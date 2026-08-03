@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from '@expo/vector-icons/MaterialIcons';
+import { useWorkspace } from '../../context/WorkspaceContext';
 import { COLORS } from '../../theme/colors';
 
+import ShopHomeScreen from '../../screens/ShopHomeScreen';
 import ShopProductsScreen from '../../screens/ShopProductsScreen';
 import ShopPackagesScreen from '../../screens/ShopPackagesScreen';
 import ShopOrdersScreen from '../../screens/ShopOrdersScreen';
@@ -11,11 +13,28 @@ import ShopProfileScreen from '../../screens/ShopProfileScreen';
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS = {
+  ShopHome: 'home',
   ShopProducts: 'shopping-basket',
   ShopPackages: 'inventory',
   ShopOrders: 'receipt-long',
   ShopProfile: 'store',
 };
+
+function ShopHomeWithIntent({ navigation, ...props }) {
+  const { pendingIntent, consumeIntent } = useWorkspace();
+
+useEffect(() => {
+  if (pendingIntent && pendingIntent.screen !== 'ShopHome') {
+    const timer = setTimeout(() => {
+      navigation.navigate(pendingIntent.screen, pendingIntent.params);
+      consumeIntent();
+    }, 0);
+    return () => clearTimeout(timer);
+  }
+}, [pendingIntent]);
+
+  return <ShopHomeScreen navigation={navigation} {...props} />;
+}
 
 export default function ShopTabs() {
   return (
@@ -24,11 +43,17 @@ export default function ShopTabs() {
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarStyle: {
+          height: 68, paddingBottom: 10, paddingTop: 10,
+          backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         tabBarIcon: ({ color, size }) => (
-          <Icon name={TAB_ICONS[route.name]} size={size} color={color} />
+          <Icon name={TAB_ICONS[route.name] || 'help-outline'} size={size} color={color} />
         ),
       })}
     >
+      <Tab.Screen name="ShopHome" component={ShopHomeWithIntent} options={{ title: 'Ana Sayfa' }} />
       <Tab.Screen name="ShopProducts" component={ShopProductsScreen} options={{ title: 'Ürünler' }} />
       <Tab.Screen name="ShopPackages" component={ShopPackagesScreen} options={{ title: 'Paketler' }} />
       <Tab.Screen name="ShopOrders" component={ShopOrdersScreen} options={{ title: 'Siparişler' }} />

@@ -20,6 +20,7 @@ import LoadingState from '../components/common/LoadingState';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
 import ErrorState from '../components/common/ErrorState';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 const TABS = [
   { key: 'profile', label: 'Bilgilerim' },
@@ -29,7 +30,8 @@ const TABS = [
 const EMPTY_PASSWORD = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
 const ShopProfileScreen = () => {
-  const { logout, setViewMode } = useAuth();
+  const { logout } = useAuth();
+const { switchWorkspace } = useWorkspace();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
@@ -272,7 +274,7 @@ if (error) {
           <View style={styles.footer}>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => setViewMode('browsing')}
+              onPress={() => switchWorkspace('user')}
               activeOpacity={0.8}
             >
               <Icon name="storefront" size={18} color={COLORS.primary} />

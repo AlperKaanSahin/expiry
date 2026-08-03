@@ -17,38 +17,41 @@ import Toast from 'react-native-toast-message';
 import { applyForShop, fetchShopProfile } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import LoadingState from '../components/common/LoadingState';
+import { useAuth } from '../context/AuthContext';
 
 const EMPTY_FORM = { name: '', address: '', phone: '' };
 
 const ShopApplyScreen = ({ navigation }) => {
+  const { user } = useAuth();
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [shopStatus, setShopStatus] = useState(null);
-  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(user?.role === 'market');
 
-const checkStatus = async () => {
-  setStatusLoading(true);
-
-  try {
-    const data = await fetchShopProfile();
-    setShopStatus(data?.shop?.status ?? null);
-  } catch (err) {
-    if (err.response?.status === 404) {
-      setShopStatus(null);
-      return;
+  const checkStatus = async () => {
+    setStatusLoading(true);
+    try {
+      const data = await fetchShopProfile();
+      setShopStatus(data?.shop?.status ?? null);
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setShopStatus(null);
+        return;
+      }
+      showErrorToast(err, Toast);
+      navigation.goBack();
+    } finally {
+      setStatusLoading(false);
     }
+  };
 
-    showErrorToast(err, Toast);
-    navigation.goBack();
-  } finally {
-    setStatusLoading(false);
-  }
-};
-
-useEffect(() => {
-  checkStatus();
-}, []);
+  useEffect(() => {
+    if (user?.role === 'market') {
+      checkStatus();
+    }
+  }, []);
 
   const handleChange = (key, value) => {
   setForm(prev => ({ ...prev, [key]: value }));

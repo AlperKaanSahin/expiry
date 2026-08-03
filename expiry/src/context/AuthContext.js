@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginUser, fetchShopProfile, logoutUser } from '../services/api';
 import { authEvents } from '../events/authEvents';
 
-
 const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
@@ -12,7 +11,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState('panel'); // 'panel' | 'browsing'
 
   const loadAuth = async () => {
     try {
@@ -64,6 +62,8 @@ export const AuthProvider = ({ children }) => {
       const shopData = await fetchShopProfile();
       setShop(shopData?.shop || shopData);
     }
+
+    return res.user;
   };
 
   const logout = async () => {
@@ -80,7 +80,6 @@ export const AuthProvider = ({ children }) => {
     setUserToken(null);
     setUser(null);
     setShop(null);
-    setViewMode('panel');   // ← eklendi
   };
 
   const isAdmin = user?.role === 'admin';
@@ -99,8 +98,6 @@ export const AuthProvider = ({ children }) => {
         isAdmin,
         isMarket,
         isMarketActive,
-        viewMode,           // ← eklendi
-        setViewMode, 
       }}
     >
       {children}
