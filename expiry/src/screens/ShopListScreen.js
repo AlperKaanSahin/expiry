@@ -28,12 +28,15 @@ const STATUS_CONFIG = {
 
 const LIMIT = 10;
 
-const ShopListScreen = () => {
+const ShopListScreen = ({ navigation }) => {
+  console.log('ShopListScreen RENDER OLDU');
   const [shops, setShops] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+
+  
 
   useEffect(() => { loadShops(); }, []);
 
@@ -158,6 +161,12 @@ if (hasError) {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
       <View style={styles.header}>
+          <TouchableOpacity
+    style={styles.backButton}
+    onPress={() => navigation.navigate('AdminHome')}
+  >
+    <Icon name="arrow-back" size={22} color={COLORS.text} />
+  </TouchableOpacity>
         <View style={styles.headerLeft}>
           <Text style={styles.appName}>expiry</Text>
           <View style={styles.dot} />

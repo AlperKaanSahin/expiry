@@ -1,24 +1,29 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { fetchNotifications, markNotificationAsRead } from '../services/api';
 import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
-import EmptyState from '../components/common/EmptyState';
+import {
+  SHOP_OWNER_TYPES,
+  ADMIN_TYPES,
+  CUSTOMER_TYPES,
+  filterNotificationsByWorkspace,
+} from '../utils/notificationFilters';
 
 const TYPE_CONFIG = {
   SHOP_APPROVED:   { icon: 'check-circle',   color: '#16A34A' },
@@ -50,6 +55,7 @@ const formatDate = (dateString) => {
 
 const NotificationScreen = ({ navigation }) => {
   const { user } = useAuth();
+  const { currentWorkspace, switchWorkspace } = useWorkspace();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -59,73 +65,61 @@ const NotificationScreen = ({ navigation }) => {
       loadNotifications();
     }, [])
   );
-const loadNotifications = async () => {
-  setLoading(true);
-  setError(false);
 
-  try {
-    const res = await fetchNotifications();
-    setNotifications(res.data || []);
-  } catch (err) {
-    setError(true);
-    showErrorToast(err, Toast);
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadNotifications = async () => {
+    setLoading(true);
+    setError(false);
 
-const handlePress = async (item) => {
-  try {
-    await markNotificationAsRead(item.id);
-    setNotifications(prev =>
-      prev.map(n => n.id === item.id ? { ...n, isRead: true } : n)
-    );
+    try {
+      const res = await fetchNotifications();
+      setNotifications(res.data || []);
+    } catch (err) {
+      setError(true);
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    if (user.role === 'admin') {
-      switch (item.type) {
-        case 'SHOP_APPLY':
-        case 'SHOP_REAPPLY':
-          navigation.navigate('AdminMain', { screen: 'ShopListScreen' });
-          break;
-        default:
-          navigation.navigate('AdminMain');
+  const handlePress = async (item) => {
+    try {
+      await markNotificationAsRead(item.id);
+      setNotifications(prev =>
+        prev.map(n => n.id === item.id ? { ...n, isRead: true } : n)
+      );
+
+      // Bildirim tipine göre karar veriyoruz, kullanıcının rolüne göre değil —
+      // aynı hesap hem "market sahibi" hem "müşteri" bildirimi alabiliyor.
+
+      if (item.type in ADMIN_TYPES && user.role === 'admin') {
+        switchWorkspace('admin', { screen: ADMIN_TYPES[item.type] });
+        return;
       }
-      return;
-    }
 
-    if (user.role === 'market') {
-      switch (item.type) {
-        case 'SHOP_APPROVED':
-        case 'SHOP_REJECTED':
-          navigation.navigate('ShopMain');
-          break;
-        case 'ORDER_NEW':
-        case 'ORDER_CONFIRMED':
-        case 'ORDER_RELEASED':
-          navigation.navigate('ShopMain', { screen: 'ShopOrders' });
-          break;
-        default:
-          break;
+      if (item.type in SHOP_OWNER_TYPES && (user.role === 'market' || user.role === 'admin')) {
+        switchWorkspace('shop', { screen: SHOP_OWNER_TYPES[item.type] });
+        return;
       }
-      return;
-    }
 
-    // normal user
-    switch (item.type) {
-      case 'RATE_SHOP':
-        navigation.navigate('OrdersTab', { screen: 'RateShopScreen', params: { shopId: item.targetId, orderId: item.orderId } });
-        break;
-      case 'ORDER_PAID':
-      case 'ORDER_DELIVERED':
-        navigation.navigate('OrdersTab', { screen: 'UserOrders' });
-        break;
-      default:
-        break;
+      if (CUSTOMER_TYPES.has(item.type)) {
+        let intentParams;
+        if (item.type === 'RATE_SHOP') {
+          intentParams = {
+            screen: 'RateShopScreen',
+            params: { shopId: item.targetId, orderId: item.orderId },
+          };
+        } else {
+          intentParams = { screen: 'UserOrders' };
+        }
+        switchWorkspace('user', { screen: 'OrdersTab', params: intentParams });
+        return;
+      }
+    } catch (err) {
+      showErrorToast(err, Toast);
     }
-  } catch (err) {
-    showErrorToast(err, Toast);
-  }
-};
+  };
+
+  const filteredNotifications = filterNotificationsByWorkspace(notifications, currentWorkspace);
 
   const renderItem = ({ item }) => {
     const config = TYPE_CONFIG[item.type] || DEFAULT_TYPE;
@@ -153,7 +147,7 @@ const handlePress = async (item) => {
       </TouchableOpacity>
     );
   };
-  // Burada başlar
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -173,6 +167,7 @@ const handlePress = async (item) => {
       </SafeAreaView>
     );
   }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
@@ -197,87 +192,68 @@ const handlePress = async (item) => {
       <View style={styles.hero}>
         <Text style={styles.heroName}>Bildirimler</Text>
       </View>
-        <FlatList
-          data={notifications}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="notifications-none" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>Henüz bildirim yok</Text>
-            </View>
-          }
-        />
-
+<FlatList
+  data={filteredNotifications}
+  keyExtractor={item => item.id.toString()}
+  renderItem={renderItem}
+  contentContainerStyle={styles.list}
+  showsVerticalScrollIndicator={false}
+  ListEmptyComponent={
+    <View style={styles.empty}>
+      <Icon name="notifications-none" size={48} color={COLORS.border} />
+      <Text style={styles.emptyText}>Henüz bildirim yok</Text>
+    </View>
+  }
+/>
     </SafeAreaView>
   );
 };
 
+export default NotificationScreen;
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: COLORS.bg,
   },
   backButton: {
-    width: 36, height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 36, height: 36, borderRadius: 18,
+    justifyContent: 'center', alignItems: 'center',
   },
-  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
+  headerCenter: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  appName: { fontSize: 20, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
   headerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
-
-  hero: { paddingHorizontal: 20, marginBottom: 16 },
-  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
-
-  loader: { marginTop: 40 },
-  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
-
+  hero: { paddingHorizontal: 20, marginBottom: 12 },
+  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text },
+  list: { paddingHorizontal: 20, paddingBottom: 40 },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     backgroundColor: COLORS.white,
     borderRadius: 14,
     padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 12,
   },
   itemUnread: {
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
+    borderColor: COLORS.primary + '40',
+    backgroundColor: COLORS.primaryLight,
   },
   iconBox: {
-    width: 46, height: 46,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 42, height: 42, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
   },
   content: { flex: 1 },
-  title: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 3 },
-  message: { fontSize: 13, color: COLORS.textMuted, lineHeight: 18, marginBottom: 6 },
+  title: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
+  message: { fontSize: 13, color: COLORS.textMuted, marginBottom: 6, lineHeight: 18 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   date: { fontSize: 11, color: COLORS.textMuted },
-  dot: {
-    width: 8, height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-
-  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+  empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
 });
-
-export default NotificationScreen;

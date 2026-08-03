@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
@@ -20,7 +21,8 @@ import { useAuth } from '../context/AuthContext';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
-import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 const ROLE_LABELS = {
   user: 'Kullanıcı',
@@ -29,7 +31,8 @@ const ROLE_LABELS = {
 };
 
 export default function UserProfileScreen({ navigation }) {
-  const { logout, setViewMode } = useAuth();
+  const { logout } = useAuth();
+const { currentWorkspace, switchWorkspace } = useWorkspace();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState(false);
@@ -37,60 +40,59 @@ export default function UserProfileScreen({ navigation }) {
   const [deleting, setDeleting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
+  const tabBarHeight = useBottomTabBarHeight();
 
-const loadProfile = async () => {
-  try {
-    setLoading(true);
-    setError(null);
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getProfile();
+      setUser(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const data = await getProfile();
-    setUser(data);
-
-  } catch (err) {
-    setError(err.message);
-
-  } finally {
-    setLoading(false);
-  }
-};
-useFocusEffect(
-  useCallback(() => {
-    loadProfile();
-  }, [])
-);
-
-const handleDeleteAccount = async () => {
-  if (!password) {
-    Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifrenizi girin' });
-    return;
-  }
-  try {
-    setDeleting(true);
-    await deleteAccount(password);
-    setDeleteModal(false);
-    Toast.show({ type: 'success', text1: 'Hesabınız silindi' });
-    await logout();
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setDeleting(false);
-  }
-};
-
-if (loading) {
-  return <LoadingState />;
-}
-if (error) {
-  return (
-    <ErrorState
-      title="Profil yüklenemedi"
-      subtitle="Profil bilgileri alınırken bir hata oluştu."
-      onRetry={loadProfile}
-    />
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [])
   );
-}
-  const initials = `${user?.firstName?.charAt(0) || ''}${user?.lastName?.charAt(0) || ''}`.toUpperCase();
 
+  const handleDeleteAccount = async () => {
+    if (!password) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifrenizi girin' });
+      return;
+    }
+    try {
+      setDeleting(true);
+      await deleteAccount(password);
+      setDeleteModal(false);
+      Toast.show({ type: 'success', text1: 'Hesabınız silindi' });
+      await logout();
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingState />;
+  }
+  if (error) {
+    return (
+      <ErrorState
+        title="Profil yüklenemedi"
+        subtitle="Profil bilgileri alınırken bir hata oluştu."
+        onRetry={loadProfile}
+      />
+    );
+  }
+
+  const initials = `${user?.firstName?.charAt(0) || ''}${user?.lastName?.charAt(0) || ''}`.toUpperCase();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -104,93 +106,151 @@ if (error) {
         </View>
       </View>
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Hesabım</Text>
-        <Text style={styles.heroName}>Profil</Text>
-      </View>
-
-      {/* AVATAR */}
-      <View style={styles.avatarSection}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
-        <Text style={styles.fullName}>{user?.firstName} {user?.lastName}</Text>
-        <View style={styles.roleBadge}>
-          <Text style={styles.roleText}>{ROLE_LABELS[user?.role] || user?.role}</Text>
-        </View>
-      </View>
-
-      {/* INFO */}
-      <View style={styles.infoSection}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoIcon}>
-            <Icon name="email" size={18} color={COLORS.primary} />
+      <ScrollView
+        contentContainerStyle={[styles.body, { paddingBottom: tabBarHeight + 30 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* AVATAR */}
+        <View style={styles.avatarSection}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <View>
-            <Text style={styles.infoLabel}>E-posta</Text>
-            <Text style={styles.infoValue}>{user?.email}</Text>
+          <Text style={styles.fullName}>{user?.firstName} {user?.lastName}</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>{ROLE_LABELS[user?.role] || user?.role}</Text>
           </View>
         </View>
 
-      </View>
+        {/* INFO */}
+        <Text style={styles.sectionLabel}>HESAP BİLGİLERİ</Text>
+        <View style={styles.list}>
+          <View style={styles.row}>
+            <View style={styles.rowIcon}>
+              <Icon name="email" size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowSubtitle}>E-posta</Text>
+              <Text style={styles.rowTitle}>{user?.email}</Text>
+            </View>
+          </View>
+        </View>
 
-      {/* FOOTER */}
-
-
-{/* MANAGEMENT */}
-{user?.role === 'market' && (
-  <TouchableOpacity
-    style={styles.settingsButton}
-    onPress={() => setViewMode('panel')}
-    activeOpacity={0.8}
-  >
-    <Icon name="store" size={18} color={COLORS.text} />
-    <Text style={styles.settingsText}>Market Panelim</Text>
-    <Icon name="chevron-right" size={18} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
-  </TouchableOpacity>
+{/* Admin kendi panelindeyken: normal kullanıcı gibi gezinme seçeneği */}
+{user?.role === 'admin' && currentWorkspace === 'admin' && (
+  <>
+    <Text style={styles.sectionLabel}>YÖNETİM</Text>
+    <View style={styles.list}>
+      <TouchableOpacity
+        style={styles.row}
+        onPress={() => switchWorkspace('user')}
+        activeOpacity={0.6}
+      >
+        <View style={styles.rowIcon}>
+          <Icon name="storefront" size={18} color={COLORS.primary} />
+        </View>
+        <Text style={styles.rowTitleOnly}>Normal Kullanıcı Olarak Gez</Text>
+        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </View>
+  </>
 )}
 
-{user?.role === 'admin' && (
-  <TouchableOpacity
-    style={styles.settingsButton}
-    onPress={() => setViewMode('panel')}
-    activeOpacity={0.8}
-  >
-    <Icon name="admin-panel-settings" size={18} color={COLORS.text} />
-    <Text style={styles.settingsText}>Admin Paneli</Text>
-    <Icon name="chevron-right" size={18} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
-  </TouchableOpacity>
+{/* Market/Admin, normal kullanıcı modunda geziniyorken: panele dönüş */}
+{(user?.role === 'market' || user?.role === 'admin') && currentWorkspace === 'user' && (
+  <>
+    <Text style={styles.sectionLabel}>YÖNETİM</Text>
+    <View style={styles.list}>
+      <TouchableOpacity
+        style={styles.row}
+        onPress={() => switchWorkspace(user.role === 'market' ? 'shop' : 'admin')}
+        activeOpacity={0.6}
+      >
+        <View style={styles.rowIcon}>
+          <Icon
+            name={user.role === 'market' ? 'store' : 'admin-panel-settings'}
+            size={18}
+            color={COLORS.primary}
+          />
+        </View>
+        <Text style={styles.rowTitleOnly}>
+          {user.role === 'market' ? 'Market Panelim' : 'Admin Paneli'}
+        </Text>
+        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </View>
+  </>
+)}
+        {user?.role === 'user' && (
+  <>
+    <Text style={styles.sectionLabel}>MARKET SAHİBİ MİSİN?</Text>
+    <View style={styles.list}>
+      <TouchableOpacity
+        style={styles.row}
+        onPress={() => navigation.navigate('HomeTab', { screen: 'ShopApply' })}
+        activeOpacity={0.6}
+      >
+        <View style={styles.rowIcon}>
+          <Icon name="storefront" size={18} color={COLORS.primary} />
+        </View>
+        <Text style={styles.rowTitleOnly}>Market Başvurusu Yap</Text>
+        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </View>
+  </>
 )}
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-  style={styles.settingsButton}
-  onPress={() => navigation.navigate('Settings')}
-  activeOpacity={0.8}
->
-  <Icon name="settings" size={18} color={COLORS.text} />
-  <Text style={styles.settingsText}>Ayarlar</Text>
-  <Icon name="chevron-right" size={18} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
-</TouchableOpacity>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => navigation.navigate('EditProfile')}
-          activeOpacity={0.8}
-        >
-          <Icon name="edit" size={18} color={COLORS.white} />
-          <Text style={styles.editText}>Profili Düzenle</Text>
-        </TouchableOpacity>
+        {/* GENERAL */}
+        <Text style={styles.sectionLabel}>GENEL</Text>
+        <View style={styles.list}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => navigation.navigate('EditProfile')}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowIcon}>
+              <Icon name="edit" size={18} color={COLORS.primary} />
+            </View>
+            <Text style={styles.rowTitleOnly}>Profili Düzenle</Text>
+            <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => navigation.navigate('Settings')}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowIcon}>
+              <Icon name="settings" size={18} color={COLORS.primary} />
+            </View>
+            <Text style={styles.rowTitleOnly}>Ayarlar</Text>
+            <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </View>
 
+        {/* SESSION */}
+        <Text style={styles.sectionLabel}>OTURUM</Text>
+        <View style={styles.list}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={logout}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowIconDanger}>
+              <Icon name="logout" size={18} color={COLORS.red} />
+            </View>
+            <Text style={styles.rowTitleDanger}>Çıkış Yap</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* DANGER ZONE */}
         <TouchableOpacity
-          style={styles.deleteButton}
+          style={styles.deleteAccountLink}
           onPress={() => setDeleteModal(true)}
-          activeOpacity={0.8}
+          activeOpacity={0.6}
         >
-          <Icon name="delete-forever" size={18} color={COLORS.red} />
-          <Text style={styles.deleteText}>Hesabı Sil</Text>
+          <Text style={styles.deleteAccountText}>Hesabımı Kalıcı Olarak Sil</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* DELETE MODAL */}
       <Modal
@@ -272,11 +332,12 @@ const styles = StyleSheet.create({
   appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
 
-  hero: { paddingHorizontal: 20, marginBottom: 24 },
-  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
-  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+  body: {
+  paddingHorizontal: 20,
+  paddingBottom: 110,   // tab bar yüksekliği (~68) + güvenlik payı + safe area
+},
 
-  avatarSection: { alignItems: 'center', marginBottom: 32 },
+  avatarSection: { alignItems: 'center', marginTop: 8, marginBottom: 28 },
   avatar: {
     width: 80, height: 80,
     borderRadius: 24,
@@ -297,61 +358,65 @@ const styles = StyleSheet.create({
   },
   roleText: { fontSize: 12, fontWeight: '600', color: COLORS.primary },
 
-  infoSection: {
-    marginHorizontal: 20,
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: 10,
+    marginTop: 20,
+  },
+
+  list: {
     backgroundColor: COLORS.white,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
   },
-  infoRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
   },
-  infoIcon: {
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginLeft: 58,
+  },
+  rowIcon: {
     width: 38, height: 38,
     borderRadius: 10,
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  infoLabel: { fontSize: 12, color: COLORS.textMuted, marginBottom: 2 },
-  infoValue: { fontSize: 14, fontWeight: '600', color: COLORS.text },
-
-  footer: {
-    paddingHorizontal: 20,
-    marginTop: 'auto',
-    paddingBottom: 24,
-    paddingTop: 24,
-    gap: 10,
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 15,
-    borderRadius: 14,
-  },
-  editText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-  deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 14,
+  rowIconDanger: {
+    width: 38, height: 38,
+    borderRadius: 10,
     backgroundColor: COLORS.redLight,
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  deleteText: { fontSize: 15, fontWeight: '600', color: COLORS.red },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  rowSubtitle: { fontSize: 12, color: COLORS.textMuted, marginBottom: 2 },
+  rowTitleOnly: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
+  rowTitleDanger: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.red },
+
+  deleteAccountLink: {
+    alignSelf: 'center',
+    marginTop: 24,
+    paddingVertical: 8,
+  },
+  deleteAccountText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.red,
+    textDecorationLine: 'underline',
+  },
 
   // MODAL
   overlay: {
@@ -407,19 +472,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: 'center',
   },
-  settingsButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 10,
-  backgroundColor: COLORS.white,
-  paddingVertical: 14,
-  paddingHorizontal: 16,
-  borderRadius: 14,
-  borderWidth: 1,
-  borderColor: COLORS.border,
-  marginBottom: 12,
-},
-settingsText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
   confirmBtn: {
     flex: 1,

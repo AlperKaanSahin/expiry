@@ -1,9 +1,12 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { View, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Fraunces_500Medium, Fraunces_600SemiBold, Fraunces_700Bold } from '@expo-google-fonts/fraunces';
 import Toast from 'react-native-toast-message';
+
 import { AuthProvider } from './src/context/AuthContext';
+import { WorkspaceProvider } from './src/context/WorkspaceContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import * as Sentry from '@sentry/react-native';
 
@@ -29,13 +32,15 @@ export default function App() {
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer>
-          <RootNavigator />
-        </NavigationContainer>
+        <WorkspaceProvider>
+          <NavigationContainer>
+            <RootNavigator />
+          </NavigationContainer>
+        </WorkspaceProvider>
       </AuthProvider>
       <Toast />
-    </>
+    </SafeAreaProvider>
   );
 }
