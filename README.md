@@ -14,18 +14,18 @@ The platform supports three different roles:
 - **Market** – Manage products, packages, shop information, and incoming orders.
 - **Admin** – Review market applications, manage users and shops, and monitor audit logs.
 
-Market owners and administrators can also switch back to the regular customer experience without creating separate accounts.
+A key architectural decision: roles aren't separate accounts or separate apps. A market owner is a user who has also been granted shop-management permissions — they can switch between browsing as a regular customer and managing their shop with a single tap, without logging in again. The same applies to admins. See [Architecture Highlights](#architecture) below for how this is implemented.
 
 ## Features
 
 - JWT authentication with Access & Refresh Tokens (rotation + revocation support)
 - Role-based authorization (User / Market / Admin)
-- Role-based mobile navigation with a shared codebase for all three roles
+- **Workspace-based navigation** — a single codebase serves three distinct experiences (customer, shop owner, admin), with instant, session-preserving switching between them
 - Market application & approval workflow (including reapplication after rejection)
 - Product and package management with pagination
 - QR-based delivery confirmation — single-scan pickup flow
 - Escrow-style order lifecycle
-- Event-driven, deep-linked in-app notification system
+- Event-driven, type-based in-app notification system (routes to the correct workspace regardless of who triggered it)
 - Shop rating system
 - Admin audit logs
 - Server-side price validation
@@ -76,14 +76,14 @@ Business logic is isolated inside the service layer while side effects such as n
 
 ### Highlights
 
-- **Role-Based Access Control** — three distinct experiences (customer, shop owner, admin) served from a single codebase via conditional root navigators
-- **Event-Driven Notifications & Audit Logs** — order/shop status changes emit events consumed by dedicated handlers, decoupling business logic from side effects
-- **Pagination strategy** — straightforward `LIMIT`/`OFFSET` for most lists; a two-step query (filter + paginate on IDs, then hydrate) for endpoints where filtering depends on an aggregate (e.g. packages with available stock), keeping results accurate without loading full tables into memory
+- **Identity / Permissions / Workspace separation** — the mobile app models these as three distinct concepts instead of conflating them: `AuthContext` handles *who* the user is (identity), the user's `role` determines *what* they're allowed to do (permissions), and a separate `WorkspaceContext` tracks *which experience* they're currently using (workspace). A market or admin user can switch their workspace between "customer" and "management" instantly, on the same session, without any backend involvement — the server only ever trusts the JWT's role claim, never a client-declared mode.
+- **Type-based notification routing** — notifications route based on their *type* rather than the recipient's role, so a shop owner's own customer-side notifications (e.g. rating a shop they bought from) correctly route to the customer workspace instead of being swallowed by their shop-owner context.
+- **Event-Driven Notifications & Audit Logs** — order/shop status changes emit events consumed by dedicated handlers, decoupling business logic from side effects.
+- **Pagination strategy** — straightforward `LIMIT`/`OFFSET` for most lists; a two-step query (filter + paginate on IDs, then hydrate) for endpoints where filtering depends on an aggregate (e.g. packages with available stock), keeping results accurate without loading full tables into memory.
 - **Automatic Refresh Token Flow**
 - **Server-Side Price Validation**
 - **Ownership Validation**
 - **Relational Database Design**
-
   
 ## Project Structure
 
@@ -213,7 +213,7 @@ It covers:
 
 Current development focuses on:
 
-- Finalizing navigation UX ahead of launch
+- Final QA pass ahead of launch
 - Production-ready backend security (rate limiting tuning, domain verification for transactional email)
 - Automated testing
 - Code quality
