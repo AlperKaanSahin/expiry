@@ -15,5 +15,7 @@ router.get('/profile', auth, userController.getProfile);
 router.put('/profile', auth, userController.updateProfile);
 router.put('/change-password', auth, userController.changePassword);
 router.delete('/account', auth, userController.deleteAccount);
+router.post('/devices', auth, userController.registerDevice);
+router.delete('/devices', auth, userController.removeDevice);
 
 module.exports = router;

@@ -15,18 +15,19 @@
     "ios": {
       "supportsTablet": true
     },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
-      ],
-      "package": "com.Expiry"
-    },
+"android": {
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/adaptive-icon.png",
+    "backgroundColor": "#ffffff"
+  },
+  "edgeToEdgeEnabled": true,
+  "permissions": [
+    "android.permission.CAMERA",
+    "android.permission.RECORD_AUDIO"
+  ],
+  "package": "com.expiry.app",
+  "googleServicesFile": "./google-services.json"
+},
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -39,7 +40,9 @@
         {
           "cameraPermission": "Uygulama, teslimat QR kodunu okutmak için kameranıza erişim istiyor."
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     "extra": {
       "eas": {

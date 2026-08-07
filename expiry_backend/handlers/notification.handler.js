@@ -3,8 +3,30 @@ const SHOP_EVENTS = require('../events/shop.events');
 const ORDER_EVENTS = require('../events/order.events');
 const { Shop, User, Order, OrderPackage } = require('../models');
 
-
 const notificationService = require('../services/notificationService');
+const pushNotificationService = require('../services/pushNotificationService');
+
+// Ortak yardımcı: aynı title/message ile hem DB kaydı hem push gönderimi yapar
+async function notify(userId, { type, title, message, targetId, orderId }) {
+  await notificationService.createNotification({
+    userId,
+    type,
+    title,
+    message,
+    targetId,
+    orderId,
+  });
+
+  await pushNotificationService.sendToUser(userId, {
+    title,
+    body: message,
+    data: {
+      type,
+      ...(targetId != null && { targetId }),
+      ...(orderId != null && { orderId }),
+    },
+  });
+}
 
 eventBus.on(SHOP_EVENTS.STATUS_CHANGED, async (data) => {
   try {
@@ -13,8 +35,7 @@ eventBus.on(SHOP_EVENTS.STATUS_CHANGED, async (data) => {
     if (!user?.id) return;
 
     if (status.to === 'active') {
-      await notificationService.createNotification({
-        userId: user.id,
+      await notify(user.id, {
         type: 'SHOP_APPROVED',
         title: 'Market Başvurusu Onaylandı',
         message: `${shop.name} marketiniz onaylandı, artık aktif!`,
@@ -22,19 +43,16 @@ eventBus.on(SHOP_EVENTS.STATUS_CHANGED, async (data) => {
     }
 
     if (status.to === 'rejected') {
-      await notificationService.createNotification({
-        userId: user.id,
+      await notify(user.id, {
         type: 'SHOP_REJECTED',
         title: 'Market Başvurusu Reddedildi',
         message: `${shop.name} marketiniz reddedildi.`,
       });
     }
-
   } catch (err) {
     console.error('NOTIFICATION HANDLER ERROR:', err);
   }
 });
-
 
 // PAID
 eventBus.on(ORDER_EVENTS.PAID, async (data) => {
@@ -54,8 +72,7 @@ eventBus.on(ORDER_EVENTS.PAID, async (data) => {
       : '';
 
     // Kullanıcıya
-    await notificationService.createNotification({
-      userId: data.userId,
+    await notify(data.userId, {
       type: 'ORDER_PAID',
       title: 'Ödemeniz Alındı',
       message: `Siparişiniz onaylandı. ${deliveryText} arasında ${shop.name} marketine gidiniz.`,
@@ -65,8 +82,7 @@ eventBus.on(ORDER_EVENTS.PAID, async (data) => {
     // Market sahibine
     const shopOwner = await User.findOne({ where: { id: shop.ownerId } });
     if (shopOwner) {
-      await notificationService.createNotification({
-        userId: shopOwner.id,
+      await notify(shopOwner.id, {
         type: 'ORDER_NEW',
         title: 'Yeni Sipariş!',
         message: `Yeni bir sipariş aldınız. ${deliveryText} arasında hazır olun.`,
@@ -81,8 +97,7 @@ eventBus.on(ORDER_EVENTS.PAID, async (data) => {
 // DELIVERED
 eventBus.on(ORDER_EVENTS.DELIVERED, async (data) => {
   try {
-    await notificationService.createNotification({
-      userId: data.userId,
+    await notify(data.userId, {
       type: 'ORDER_DELIVERED',
       title: 'Siparişiniz Hazır',
       message: 'Siparişiniz hazırlandı. Teslim aldıysanız lütfen onaylayın.',
@@ -100,8 +115,7 @@ eventBus.on(ORDER_EVENTS.CONFIRMED, async (data) => {
     if (!shop) return;
 
     // Kullanıcıya
-    await notificationService.createNotification({
-      userId: data.userId,
+    await notify(data.userId, {
       type: 'RATE_SHOP',
       title: 'Siparişiniz Tamamlandı',
       message: `${shop.name} marketini değerlendirmek ister misiniz?`,
@@ -112,8 +126,7 @@ eventBus.on(ORDER_EVENTS.CONFIRMED, async (data) => {
     // Market sahibine
     const shopOwner = await User.findOne({ where: { id: shop.ownerId } });
     if (shopOwner) {
-      await notificationService.createNotification({
-        userId: shopOwner.id,
+      await notify(shopOwner.id, {
         type: 'ORDER_CONFIRMED',
         title: 'Sipariş Tamamlandı',
         message: 'Müşteri siparişi teslim aldığını onayladı.',
@@ -133,8 +146,7 @@ eventBus.on(ORDER_EVENTS.RELEASED, async (data) => {
 
     const shopOwner = await User.findOne({ where: { id: shop.ownerId } });
     if (shopOwner) {
-      await notificationService.createNotification({
-        userId: shopOwner.id,
+      await notify(shopOwner.id, {
         type: 'ORDER_RELEASED',
         title: 'Ödeme Aktarıldı',
         message: 'Sipariş ödemesi hesabınıza aktarıldı.',

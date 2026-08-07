@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "356093914546",
+    "project_id": "expiry-d70a2",
+    "storage_bucket": "expiry-d70a2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:356093914546:android:760d478c4ac06cc12688ab",
+        "android_client_info": {
+          "package_name": "com.expiry.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBh7CEKmnEm10JX_dMqEpHjMHitG1xmAWY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

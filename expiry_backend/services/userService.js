@@ -1,4 +1,4 @@
-const { User, Order, RefreshToken } = require('../models');
+const { User, Order, RefreshToken, UserDevice  } = require('../models');
 const jwt = require('jsonwebtoken');
 
 
@@ -220,4 +220,26 @@ exports.deleteAccount = async (userId, password) => {
   await user.save({ paranoid: false });
 
   return { message: 'Hesabınız başarıyla silindi' };
+};
+exports.registerDevice = async (userId, { deviceId, fcmToken, platform, appVersion }) => {
+  if (!deviceId || !fcmToken || !platform) {
+    throw new Error('deviceId, fcmToken ve platform gerekli');
+  }
+
+  const [device] = await UserDevice.upsert({
+    userId,
+    deviceId,
+    fcmToken,
+    platform,
+    appVersion,
+    lastSeenAt: new Date(),
+  }, {
+    conflictFields: ['userId', 'deviceId'],
+  });
+
+  return device;
+};
+
+exports.removeDevice = async (userId, deviceId) => {
+  await UserDevice.destroy({ where: { userId, deviceId } });
 };

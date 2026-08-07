@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginUser, fetchShopProfile, logoutUser } from '../services/api';
 import { authEvents } from '../events/authEvents';
+import { setupPushNotifications } from '../utils/pushNotifications';
+import { removeDevice } from '../services/api';
+import { getDeviceId } from '../utils/deviceId';
 
 const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
@@ -47,40 +50,52 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
-  const login = async (email, password) => {
-    const res = await loginUser({ email, password });
 
-    await AsyncStorage.setItem('@token', res.accessToken);
-    await AsyncStorage.setItem('@refreshToken', res.refreshToken);
-    await AsyncStorage.setItem('@user', JSON.stringify(res.user));
-    await AsyncStorage.setItem('@userId', res.user.id.toString());
 
-    setUserToken(res.accessToken);
-    setUser(res.user);
+// login fonksiyonu içinde, en sonda:
+const login = async (email, password) => {
+  const res = await loginUser({ email, password });
 
-    if (res.user.role === 'market') {
-      const shopData = await fetchShopProfile();
-      setShop(shopData?.shop || shopData);
+  await AsyncStorage.setItem('@token', res.accessToken);
+  await AsyncStorage.setItem('@refreshToken', res.refreshToken);
+  await AsyncStorage.setItem('@user', JSON.stringify(res.user));
+  await AsyncStorage.setItem('@userId', res.user.id.toString());
+
+  setUserToken(res.accessToken);
+  setUser(res.user);
+
+  if (res.user.role === 'market') {
+    const shopData = await fetchShopProfile();
+    setShop(shopData?.shop || shopData);
+  }
+
+  setupPushNotifications();   // ← eklendi, arka planda çalışsın, login'i bloklamasın
+
+  return res.user;
+};
+
+const logout = async () => {
+  try {
+    const refreshToken = await AsyncStorage.getItem('@refreshToken');
+    if (refreshToken) {
+      await logoutUser(refreshToken);
     }
+  } catch (err) {
+    console.log('Backend logout başarısız (yine de devam ediliyor):', err.message);
+  }
 
-    return res.user;
-  };
+  try {
+    const deviceId = await getDeviceId();
+    await removeDevice(deviceId);
+  } catch (err) {
+    console.log('Device kaydı silinemedi:', err.message);
+  }
 
-  const logout = async () => {
-    try {
-      const refreshToken = await AsyncStorage.getItem('@refreshToken');
-      if (refreshToken) {
-        await logoutUser(refreshToken);
-      }
-    } catch (err) {
-      console.log('Backend logout başarısız (yine de devam ediliyor):', err.message);
-    }
-
-    await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
-    setUserToken(null);
-    setUser(null);
-    setShop(null);
-  };
+  await AsyncStorage.multiRemove(['@token', '@refreshToken', '@user', '@userId']);
+  setUserToken(null);
+  setUser(null);
+  setShop(null);
+};
 
   const isAdmin = user?.role === 'admin';
   const isMarket = user?.role === 'market';

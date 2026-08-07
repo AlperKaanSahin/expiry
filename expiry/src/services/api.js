@@ -254,7 +254,15 @@ export const markAllNotificationsAsRead = async () => {
   const res = await api.patch('/notifications/read-all');
   return res.data;
 };
+export const registerDevice = async ({ deviceId, fcmToken, platform, appVersion }) => {
+  const res = await api.post('/users/devices', { deviceId, fcmToken, platform, appVersion });
+  return res.data;
+};
 
+export const removeDevice = async (deviceId) => {
+  const res = await api.delete('/users/devices', { data: { deviceId } });
+  return res.data;
+};
 // ─── ADMIN ───────────────────────────────────────────────
 export const fetchAllUsers = async (page = 1, limit = 10) => {
   const res = await api.get(`/admin/users?page=${page}&limit=${limit}`);

@@ -91,6 +91,25 @@ async deleteAccount(req, res) {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
-}
+},
+async registerDevice(req, res) {
+  try {
+    const device = await userService.registerDevice(req.user.id, req.body);
+    res.json({ message: 'Cihaz kaydedildi', device });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+},
+
+async removeDevice(req, res) {
+  try {
+    const { deviceId } = req.body;
+    await userService.removeDevice(req.user.id, deviceId);
+    res.json({ message: 'Cihaz kaydı silindi' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+},
   
 };
+
