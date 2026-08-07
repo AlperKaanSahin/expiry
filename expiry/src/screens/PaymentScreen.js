@@ -13,6 +13,7 @@ import Toast from 'react-native-toast-message';
 import { simulatePayment } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
+import { CommonActions } from '@react-navigation/native';
 
 const PaymentScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
@@ -29,6 +30,17 @@ const handlePayment = async () => {
   } finally {
     setLoading(false);
   }
+};
+const resetAndNavigate = (tabName, screenName) => {
+  navigation.dispatch(
+    CommonActions.reset({
+      index: 0,
+      routes: [{ name: 'Shops' }],
+    })
+  );
+  setTimeout(() => {
+    navigation.getParent()?.navigate(tabName, screenName ? { screen: screenName } : undefined);
+  }, 0);
 };
 
   return (
@@ -101,7 +113,7 @@ const handlePayment = async () => {
 
             <TouchableOpacity
               style={styles.payButton}
-              onPress={() => navigation.navigate('UserOrders')}
+onPress={() => resetAndNavigate('OrdersTab', 'UserOrders')}
               activeOpacity={0.8}
             >
               <Icon name="receipt-long" size={18} color={COLORS.white} />
@@ -110,7 +122,7 @@ const handlePayment = async () => {
 
             <TouchableOpacity
               style={styles.homeButton}
-              onPress={() => navigation.navigate('Home')}
+              onPress={() => resetAndNavigate('HomeTab', 'Home')}
               activeOpacity={0.7}
             >
               <Text style={styles.homeButtonText}>Ana Sayfaya Dön</Text>

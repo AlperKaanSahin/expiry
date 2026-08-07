@@ -17,6 +17,8 @@ import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
 import EmptyState from '../components/common/EmptyState';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const formatDelivery = (start, end) => {
   if (!start || !end) return 'Teslimat zamanı belirtilmemiş';
@@ -29,6 +31,8 @@ const formatDelivery = (start, end) => {
 };
 
 const PackageDetailScreen = ({ route, navigation }) => {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const { packageId } = route.params;
   const [packageData, setPackageData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -198,7 +202,7 @@ if (!packageData) {
       </ScrollView>
 
       {/* FOOTER */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { bottom: tabBarHeight, paddingBottom: 16 }]}>
         <View style={styles.quantityBox}>
           <TouchableOpacity
             onPress={() => setQuantity(q => Math.max(1, q - 1))}
@@ -215,12 +219,8 @@ if (!packageData) {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.orderButton}
-          onPress={handleOrder}
-          disabled={ordering}
-          activeOpacity={0.8}
-        >
+ <TouchableOpacity style={styles.orderButton} onPress={handleOrder} disabled={ordering} activeOpacity={0.8}>
+    {/* ... aynı */}
           {ordering ? (
             <ActivityIndicator color={COLORS.white} />
           ) : (
@@ -319,18 +319,18 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: COLORS.textMuted },
 
   // FOOTER
-  footer: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
+footer: {
+  position: 'absolute',
+  left: 0, right: 0,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 12,
+  backgroundColor: COLORS.white,
+  paddingHorizontal: 20,
+  paddingVertical: 16,
+  borderTopWidth: 1,
+  borderTopColor: COLORS.border,
+},
   quantityBox: {
     flexDirection: 'row',
     alignItems: 'center',

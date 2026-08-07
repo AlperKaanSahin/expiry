@@ -36,3 +36,5 @@ coverage/
 
 # VSCode Counter
 .VSCodeCounter/
+
+expiry_backend/config/firebase-service-account.json

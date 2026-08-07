@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { WorkspaceProvider } from './src/context/WorkspaceContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import * as Sentry from '@sentry/react-native';
+import { setupTokenRefreshListener } from './src/utils/pushNotifications';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
@@ -22,6 +23,11 @@ export default function App() {
     Fraunces_600SemiBold,
     Fraunces_700Bold,
   });
+
+  useEffect(() => {
+    const unsubscribe = setupTokenRefreshListener();
+    return unsubscribe;
+  }, []);
 
   if (!fontsLoaded) {
     return (
