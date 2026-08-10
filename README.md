@@ -6,9 +6,9 @@ A full-stack mobile marketplace that helps reduce food waste by connecting consu
 
 ## Overview
 
-Food waste is a real, everyday problem — shops throw away perfectly good products because they're a day or two from their expiration date, and price-conscious customers never get the chance to buy them at a discount. Expiry connects the two: local markets list near-expiry products as discounted packages, customers browse and purchase nearby, and pick-up happens in person via a QR-based handoff.
+Expiry connects local markets with customers looking for discounted products nearing their expiration date. Markets can create discounted packages from near-expiry products, while customers can browse, purchase, and pick them up in person using QR-based delivery confirmation.
 
-This started as a way to build something real end-to-end — architecture, backend, mobile UI, the operational details that only show up once actual users are involved — while sharpening my fundamentals. It's grown into a project I intend to genuinely ship if it reaches a state I'm confident in, not just a portfolio piece to point at.
+The project is being developed as a real end-to-end product, with the goal of eventually shipping it rather than keeping it as a portfolio-only project.
 
 The platform supports three roles from a single codebase:
 
