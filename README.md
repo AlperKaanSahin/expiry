@@ -6,15 +6,17 @@ A full-stack mobile marketplace that helps reduce food waste by connecting consu
 
 ## Overview
 
-Expiry enables local markets to create discounted product packages that are close to their expiration date. Customers can browse nearby markets, purchase available packages, and collect their orders in person via a QR-based pickup flow.
+Food waste is a real, everyday problem — shops throw away perfectly good products because they're a day or two from their expiration date, and price-conscious customers never get the chance to buy them at a discount. Expiry connects the two: local markets list near-expiry products as discounted packages, customers browse and purchase nearby, and pick-up happens in person via a QR-based handoff.
 
-The platform supports three different roles:
+This started as a way to build something real end-to-end — architecture, backend, mobile UI, the operational details that only show up once actual users are involved — while sharpening my fundamentals. It's grown into a project I intend to genuinely ship if it reaches a state I'm confident in, not just a portfolio piece to point at.
+
+The platform supports three roles from a single codebase:
 
 - **User** – Browse markets, purchase packages, track orders, and rate shops.
 - **Market** – Manage products, packages, shop information, and incoming orders.
 - **Admin** – Review market applications, manage users and shops, and monitor audit logs.
 
-A key architectural decision: roles aren't separate accounts or separate apps. A market owner is a user who has also been granted shop-management permissions — they can switch between browsing as a regular customer and managing their shop with a single tap, without logging in again. The same applies to admins. See [Architecture Highlights](#architecture) below for how this is implemented.
+A key design decision: roles aren't separate accounts or separate apps. A market owner is a user who has also been granted shop-management permissions — they can switch between browsing as a regular customer and managing their shop with a single tap, without logging in again. The same applies to admins. See [Architecture Highlights](#architecture) below for how this is implemented.
 
 ## Features
 
@@ -26,6 +28,7 @@ A key architectural decision: roles aren't separate accounts or separate apps. A
 - QR-based delivery confirmation — single-scan pickup flow
 - Escrow-style order lifecycle
 - Event-driven, type-based in-app notification system (routes to the correct workspace regardless of who triggered it)
+- **Real-time push notifications** (Firebase Cloud Messaging) alongside in-app notifications, backed by the same event bus
 - Shop rating system
 - Admin audit logs
 - Server-side price validation
@@ -40,11 +43,13 @@ A key architectural decision: roles aren't separate accounts or separate apps. A
 - Expo (EAS Build for development/production builds)
 - React Navigation
 - Axios
+- Firebase Cloud Messaging (`@react-native-firebase/messaging`)
 
 **Backend**
 - Node.js
 - Express.js
 - Sequelize ORM
+- firebase-admin (push delivery)
 
 **Database**
 - MySQL
@@ -77,14 +82,10 @@ Business logic is isolated inside the service layer while side effects such as n
 ### Highlights
 
 - **Identity / Permissions / Workspace separation** — the mobile app models these as three distinct concepts instead of conflating them: `AuthContext` handles *who* the user is (identity), the user's `role` determines *what* they're allowed to do (permissions), and a separate `WorkspaceContext` tracks *which experience* they're currently using (workspace). A market or admin user can switch their workspace between "customer" and "management" instantly, on the same session, without any backend involvement — the server only ever trusts the JWT's role claim, never a client-declared mode.
-- **Type-based notification routing** — notifications route based on their *type* rather than the recipient's role, so a shop owner's own customer-side notifications (e.g. rating a shop they bought from) correctly route to the customer workspace instead of being swallowed by their shop-owner context.
-- **Event-Driven Notifications & Audit Logs** — order/shop status changes emit events consumed by dedicated handlers, decoupling business logic from side effects.
+- **Type-based notification routing** — notifications route based on their *type* rather than the recipient's role, so a shop owner's own customer-side notifications (e.g. rating a shop they bought from) correctly route to the customer workspace instead of being swallowed by their shop-owner context. The same event that writes an in-app notification also triggers the matching push notification, through one shared handler, so the two channels never drift out of sync.
 - **Pagination strategy** — straightforward `LIMIT`/`OFFSET` for most lists; a two-step query (filter + paginate on IDs, then hydrate) for endpoints where filtering depends on an aggregate (e.g. packages with available stock), keeping results accurate without loading full tables into memory.
-- **Automatic Refresh Token Flow**
-- **Server-Side Price Validation**
-- **Ownership Validation**
-- **Relational Database Design**
-  
+- **Ownership and ACL checks live in the service layer**, not scattered across controllers — a market can only ever query or mutate its own products, packages, and orders, enforced the same way regardless of which route triggered the call.
+
 ## Project Structure
 
 ```text
@@ -93,10 +94,10 @@ expiry/
 │   ├── src/
 │   │   ├── components/
 │   │   ├── constants/
-│   │   ├── context/
+│   │   ├── context/         # AuthContext (identity) + WorkspaceContext (workspace switching)
 │   │   ├── data/
 │   │   ├── events/
-│   │   ├── navigation/
+│   │   ├── navigation/      # workspace-scoped navigators (user / shop / admin)
 │   │   ├── screens/
 │   │   ├── services/
 │   │   ├── styles/
@@ -129,7 +130,7 @@ expiry/
 - Node.js 18+
 - MySQL
 - npm
-- Expo Go or Android/iOS Emulator (or an EAS development build for native modules like camera/Sentry)
+- Expo Go or Android/iOS Emulator (or an EAS development build for native modules like camera, Sentry, and push notifications)
 
 ### Backend
 
@@ -198,8 +199,7 @@ It covers:
 
 ## Roadmap
 
-- Firebase Cloud Messaging / push notifications
-- Real payment integration
+- Real payment integration (Iyzico) — sandbox integration planned, hosted checkout form to keep card data off our servers
 - Email verification
 - Automatic order release scheduler
 - Automatic package price scheduler
@@ -212,17 +212,16 @@ It covers:
 
 ## Development Goals
 
-Current development focuses on:
+Current focus, roughly in order:
 
-- Final QA pass ahead of launch
-- Production-ready backend security (rate limiting tuning, domain verification for transactional email)
-- Automated testing
-- Code quality
-- Performance optimization
+- Payment integration (Iyzico), the main gap before this could handle real orders
+- A concurrency pass on stock reservation — verifying package purchases are safe under simultaneous requests
+- Production-ready backend hardening (rate limiting tuned for prod, error responses that don't leak internals)
+- Legal pages and transactional email domain setup
+- Automated testing, currently the weakest part of the project
 
 ## Author
 
 **Alper Kaan Sahin**
 
-- GitHub: https://github.com/AlperKaanSahin
 - LinkedIn: https://www.linkedin.com/in/alperkaansahin/
