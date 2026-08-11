@@ -16,8 +16,15 @@ export default function RootNavigator() {
 
   useEffect(() => {
     const checkOnboarding = async () => {
-      const seen = await AsyncStorage.getItem('@hasSeenOnboarding');
-      setHasSeenOnboarding(seen === 'true');
+      try {
+        console.log('=== ONBOARDING KONTROLÜ BAŞLADI ===');
+        const seen = await AsyncStorage.getItem('@hasSeenOnboarding');
+        console.log('=== ONBOARDING SONUÇ ===', seen);
+        setHasSeenOnboarding(seen === 'true');
+      } catch (err) {
+        console.log('=== ONBOARDING HATASI ===', err);
+        setHasSeenOnboarding(false);
+      }
     };
     checkOnboarding();
   }, [userToken]);
@@ -35,6 +42,8 @@ export default function RootNavigator() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userToken, user?.role]);
+
+  console.log('=== ROOT NAVIGATOR ===', { loading, hasSeenOnboarding, userToken: !!userToken });
 
   if (loading || hasSeenOnboarding === null) {
     return (
