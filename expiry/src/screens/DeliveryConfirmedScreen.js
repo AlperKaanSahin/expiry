@@ -44,7 +44,7 @@ const DeliveryConfirmedScreen = ({ route, navigation }) => {
 
         <TouchableOpacity
           style={styles.doneButton}
-          onPress={() => navigation.navigate('ShopOrders')}
+          onPress={() => navigation.navigate('ShopMain', { screen: 'ShopOrders' })}
           activeOpacity={0.8}
         >
           <Text style={styles.doneButtonText}>Tamam</Text>

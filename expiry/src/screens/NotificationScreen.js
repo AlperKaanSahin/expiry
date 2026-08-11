@@ -101,19 +101,18 @@ const NotificationScreen = ({ navigation }) => {
         return;
       }
 
-      if (CUSTOMER_TYPES.has(item.type)) {
-        let intentParams;
-        if (item.type === 'RATE_SHOP') {
-          intentParams = {
-            screen: 'RateShopScreen',
-            params: { shopId: item.targetId, orderId: item.orderId },
-          };
-        } else {
-          intentParams = { screen: 'UserOrders' };
-        }
-        switchWorkspace('user', { screen: 'OrdersTab', params: intentParams });
-        return;
-      }
+if (CUSTOMER_TYPES.has(item.type)) {
+  let screen, params;
+  if (item.type === 'RATE_SHOP') {
+    screen = 'RateShopScreen';
+    params = { shopId: item.targetId, orderId: item.orderId };
+  } else {
+    screen = 'UserOrders';
+    params = {};
+  }
+  switchWorkspace('user', { screen, params });
+  return;
+}
     } catch (err) {
       showErrorToast(err, Toast);
     }

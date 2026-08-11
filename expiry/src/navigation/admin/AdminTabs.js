@@ -30,16 +30,27 @@ const TARGET_TO_TAB = {
 function AdminHomeWithIntent({ navigation, ...props }) {
   const { pendingIntent, consumeIntent } = useWorkspace();
 
-useEffect(() => {
-  if (pendingIntent && pendingIntent.screen !== 'AdminHome') {
-    const targetTab = TARGET_TO_TAB[pendingIntent.screen] || pendingIntent.screen;
-    const timer = setTimeout(() => {
-      navigation.navigate(targetTab, pendingIntent.params);
-      consumeIntent();
-    }, 0);
-    return () => clearTimeout(timer);
-  }
-}, [pendingIntent]);
+  useEffect(() => {
+    console.log('=== ADMINHOME PENDING INTENT ===', pendingIntent);
+    if (pendingIntent && pendingIntent.screen !== 'AdminHome') {
+      const targetTab = TARGET_TO_TAB[pendingIntent.screen] || pendingIntent.screen;
+      let attempts = 0;
+      let timer;
+      const tryNavigate = () => {
+        const ready = navigation.getState() !== undefined;
+        console.log('=== ADMIN TRY NAVIGATE ===', { ready, attempts, targetTab });
+        if (ready) {
+          navigation.navigate(targetTab, pendingIntent.params);
+          consumeIntent();
+        } else if (attempts < 10) {
+          attempts += 1;
+          timer = setTimeout(tryNavigate, 50);
+        }
+      };
+      tryNavigate();
+      return () => clearTimeout(timer);
+    }
+  }, [pendingIntent]);
 
   return <AdminHomeScreen navigation={navigation} {...props} />;
 }

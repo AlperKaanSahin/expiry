@@ -23,15 +23,26 @@ const TAB_ICONS = {
 function ShopHomeWithIntent({ navigation, ...props }) {
   const { pendingIntent, consumeIntent } = useWorkspace();
 
-useEffect(() => {
-  if (pendingIntent && pendingIntent.screen !== 'ShopHome') {
-    const timer = setTimeout(() => {
-      navigation.navigate(pendingIntent.screen, pendingIntent.params);
-      consumeIntent();
-    }, 0);
-    return () => clearTimeout(timer);
-  }
-}, [pendingIntent]);
+  useEffect(() => {
+    console.log('=== SHOPHOME PENDING INTENT ===', pendingIntent);
+    if (pendingIntent && pendingIntent.screen !== 'ShopHome') {
+      let attempts = 0;
+      let timer;
+      const tryNavigate = () => {
+        const ready = navigation.getState() !== undefined;
+        console.log('=== SHOP TRY NAVIGATE ===', { ready, attempts });
+        if (ready) {
+          navigation.navigate(pendingIntent.screen, pendingIntent.params);
+          consumeIntent();
+        } else if (attempts < 10) {
+          attempts += 1;
+          timer = setTimeout(tryNavigate, 50);
+        }
+      };
+      tryNavigate();
+      return () => clearTimeout(timer);
+    }
+  }, [pendingIntent]);
 
   return <ShopHomeScreen navigation={navigation} {...props} />;
 }

@@ -19,6 +19,9 @@ export const WorkspaceProvider = ({ children }) => {
       setPendingIntent(null);
     }
   }, []);
+  const switchWorkspaceSilently = useCallback((target) => {
+  setCurrentWorkspace(target); // pendingIntent'e dokunmaz
+}, []);
 
   const consumeIntent = useCallback(() => {
     setPendingIntent(null);
@@ -31,7 +34,7 @@ export const WorkspaceProvider = ({ children }) => {
 
   return (
     <WorkspaceContext.Provider
-      value={{ currentWorkspace, pendingIntent, switchWorkspace, consumeIntent, resetToDefault }}
+      value={{ currentWorkspace, pendingIntent, switchWorkspace, switchWorkspaceSilently, consumeIntent, resetToDefault }}
     >
       {children}
     </WorkspaceContext.Provider>
