@@ -79,7 +79,9 @@ async function reserveStock(order, transaction) {
   for (const opkg of orderPackages) {
     const units = await PackageUnit.findAll({
       where: { packageId: opkg.packageId, isSold: false },
+      order: [['id', 'ASC']],
       limit: opkg.quantity,
+      lock: transaction.LOCK.UPDATE,
       transaction
     });
 
@@ -196,7 +198,8 @@ async function simulatePayment(userId, orderId) {
   const t = await sequelize.transaction();
   try {
     const order = await Order.findOne({
-      where: { id: orderId, userId }, // ownership kontrolü korunuyor
+      where: { id: orderId, userId },
+      lock: t.LOCK.UPDATE,
       transaction: t
     });
 
