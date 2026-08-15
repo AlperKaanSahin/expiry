@@ -1,9 +1,10 @@
 const { Package, Shop, PackageProduct, ShopProduct, PackageUnit, sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
+const AppError = require('../utils/AppError');
 
 const getShopByUserId = async (userId) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
-  if (!shop) throw new Error('Market bulunamadı');
+  if (!shop) throw new AppError('Market bulunamadı', 404);
   return shop;
 };
 
@@ -13,35 +14,33 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
 
   const offset = (page - 1) * limit;
 
-  // Adım 1: satılabilir stoğu olan paketlerin ID'lerini bul + sayfala
-const unitCounts = await sequelize.query(`
-  SELECT pu.packageId, COUNT(pu.id) as remaining
-  FROM \`PackageUnits\` pu
-  INNER JOIN \`Packages\` p ON p.id = pu.packageId
-  WHERE p.shopId = :shopId AND pu.isSold = false
-  GROUP BY pu.packageId
-  HAVING COUNT(pu.id) > 0
-  ORDER BY pu.packageId DESC
-  LIMIT :limit OFFSET :offset
-`, {
-  replacements: { shopId: shop.id, limit, offset },
-  type: QueryTypes.SELECT,
-});
-
-  // Toplam sayı (filtre uygulanmış hali)
-const [{ total }] = await sequelize.query(`
-  SELECT COUNT(*) as total FROM (
-    SELECT pu.packageId
+  const unitCounts = await sequelize.query(`
+    SELECT pu.packageId, COUNT(pu.id) as remaining
     FROM \`PackageUnits\` pu
     INNER JOIN \`Packages\` p ON p.id = pu.packageId
     WHERE p.shopId = :shopId AND pu.isSold = false
     GROUP BY pu.packageId
     HAVING COUNT(pu.id) > 0
-  ) as filtered
-`, {
-  replacements: { shopId: shop.id },
-  type: QueryTypes.SELECT,
-});
+    ORDER BY pu.packageId DESC
+    LIMIT :limit OFFSET :offset
+  `, {
+    replacements: { shopId: shop.id, limit, offset },
+    type: QueryTypes.SELECT,
+  });
+
+  const [{ total }] = await sequelize.query(`
+    SELECT COUNT(*) as total FROM (
+      SELECT pu.packageId
+      FROM \`PackageUnits\` pu
+      INNER JOIN \`Packages\` p ON p.id = pu.packageId
+      WHERE p.shopId = :shopId AND pu.isSold = false
+      GROUP BY pu.packageId
+      HAVING COUNT(pu.id) > 0
+    ) as filtered
+  `, {
+    replacements: { shopId: shop.id },
+    type: QueryTypes.SELECT,
+  });
 
   if (unitCounts.length === 0) {
     return { total: Number(total), page, limit, packages: [] };
@@ -50,22 +49,18 @@ const [{ total }] = await sequelize.query(`
   const packageIds = unitCounts.map(u => u.packageId);
   const countMap = new Map(unitCounts.map(u => [u.packageId, Number(u.remaining)]));
 
-  // Adım 2: sadece bu sayfadaki paketler için zengin veriyi çek
   const packages = await Package.findAll({
     where: { id: packageIds },
     include: [
       {
         model: PackageProduct,
-        include: [
-          { model: ShopProduct, attributes: ['id', 'name', 'price'] },
-        ],
+        include: [{ model: ShopProduct, attributes: ['id', 'name', 'price'] }],
       },
     ],
   });
 
   const packageMap = new Map(packages.map(pkg => [pkg.id, pkg]));
 
-  // Adım 1'deki sırayı koru (findAll where-in sırayı garanti etmez)
   const orderedPackages = packageIds
     .map(id => packageMap.get(id))
     .filter(Boolean)
@@ -125,7 +120,7 @@ exports.createPackage = async (userId, data) => {
       : calculatedPrice;
 
   if (isNaN(finalPrice)) {
-    throw new Error('Price hesaplanamadı (NaN)');
+    throw new AppError('Price hesaplanamadı (NaN)', 400);
   }
 
   const t = await sequelize.transaction();
@@ -143,12 +138,11 @@ exports.createPackage = async (userId, data) => {
 
     if (Array.isArray(products)) {
       for (const p of products) {
-        // OWNERSHIP KONTROLÜ
         const product = await ShopProduct.findOne({
           where: { id: p.id, shopId: shop.id },
           transaction: t
         });
-        if (!product) throw new Error(`Geçersiz ürün: ${p.id}`);
+        if (!product) throw new AppError(`Geçersiz ürün: ${p.id}`, 400);
 
         await PackageProduct.create({
           packageId: newPackage.id,
@@ -177,7 +171,7 @@ exports.updatePackage = async (userId, packageId, data) => {
     autoPriceDropEnabled, priceDropAmount, priceDropInterval, minPriceDropLimit, quantity } = data;
 
   const pkg = await Package.findOne({ where: { id: packageId, shopId: shop.id } });
-  if (!pkg) throw new Error('Paket bulunamadı');
+  if (!pkg) throw new AppError('Paket bulunamadı', 404);
 
   let calculatedPrice = 0;
   if (Array.isArray(products)) {
@@ -193,9 +187,8 @@ exports.updatePackage = async (userId, packageId, data) => {
   if (Array.isArray(products)) {
     await PackageProduct.destroy({ where: { packageId: pkg.id } });
     for (const p of products) {
-      // OWNERSHIP KONTROLÜ
       const product = await ShopProduct.findOne({ where: { id: p.id, shopId: shop.id } });
-      if (!product) throw new Error(`Geçersiz ürün: ${p.id}`);
+      if (!product) throw new AppError(`Geçersiz ürün: ${p.id}`, 400);
 
       await PackageProduct.create({
         packageId: pkg.id,
@@ -230,7 +223,7 @@ exports.deletePackage = async (userId, packageId, count) => {
   const shop = await getShopByUserId(userId);
 
   const pkg = await Package.findOne({ where: { id: packageId, shopId: shop.id } });
-  if (!pkg) throw new Error('Paket bulunamadı');
+  if (!pkg) throw new AppError('Paket bulunamadı', 404);
 
   const remainingUnits = await PackageUnit.count({ where: { packageId: pkg.id, isSold: false } });
 

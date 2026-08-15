@@ -4,6 +4,7 @@ const {
 const eventBus = require('../events/eventBus');
 const ORDER_EVENTS = require('../events/order.events');
 const crypto = require('crypto');
+const AppError = require('../utils/AppError');
 
 const transitions = {
   pending: ['paid'],
@@ -24,8 +25,7 @@ async function runSideEffects(order, status, transaction) {
   switch (status) {
     case 'paid':
       await reserveStock(order, transaction);
-      
-      // Teslimat saatini çek
+
       const orderPackages = await OrderPackage.findAll({
         where: { orderId: order.id },
         include: [{ model: Package, attributes: ['deliveryStart', 'deliveryEnd', 'name'] }],
@@ -86,7 +86,7 @@ async function reserveStock(order, transaction) {
     });
 
     if (units.length < opkg.quantity) {
-      throw new Error('Insufficient stock during reserve');
+      throw new AppError('Stok yetersiz', 409);
     }
 
     for (const unit of units) {
@@ -120,14 +120,14 @@ async function createOrder(userId, data) {
         transaction: t
       });
 
-      if (!dbPackage) throw new Error(`Geçersiz paket: ${pkg.packageId}`);
+      if (!dbPackage) throw new AppError(`Geçersiz paket: ${pkg.packageId}`, 400);
 
       const available = await PackageUnit.count({
         where: { packageId: pkg.packageId, isSold: false },
         transaction: t
       });
 
-      if (available < pkg.quantity) throw new Error('Not enough stock');
+      if (available < pkg.quantity) throw new AppError('Yeterli stok yok', 409);
 
       const realPrice = dbPackage.price;
       totalPrice += realPrice * pkg.quantity;
@@ -160,6 +160,7 @@ async function createOrder(userId, data) {
     throw err;
   }
 }
+
 async function confirmByQRCode(marketUserId, deliveryToken) {
   const t = await sequelize.transaction();
   try {
@@ -175,14 +176,14 @@ async function confirmByQRCode(marketUserId, deliveryToken) {
       transaction: t
     });
 
-    if (!order) throw new Error('Geçersiz veya süresi dolmuş QR kod');
+    if (!order) throw new AppError('Geçersiz veya süresi dolmuş QR kod', 404);
 
     const shop = await Shop.findOne({
       where: { id: order.shopId, ownerId: marketUserId },
       transaction: t
     });
 
-    if (!shop) throw new Error('Bu siparişe erişim yetkiniz yok');
+    if (!shop) throw new AppError('Bu siparişe erişim yetkiniz yok', 403);
 
     await changeStatusInternal(order, 'confirmed', 'user', t);
 
@@ -203,10 +204,10 @@ async function simulatePayment(userId, orderId) {
       transaction: t
     });
 
-    if (!order) throw new Error('Sipariş bulunamadı veya erişim yetkiniz yok');
-    if (order.status !== 'pending') throw new Error('Bu sipariş zaten işlenmiş');
+    if (!order) throw new AppError('Sipariş bulunamadı veya erişim yetkiniz yok', 404);
+    if (order.status !== 'pending') throw new AppError('Bu sipariş zaten işlenmiş', 409);
 
-    await changeStatusInternal(order, 'paid', 'system', t); // stok + event emit geri geldi
+    await changeStatusInternal(order, 'paid', 'system', t);
 
     await t.commit();
     return { success: true, order };
@@ -220,27 +221,22 @@ async function changeStatus(orderId, newStatus, actor = 'user', userId = null) {
   const t = await sequelize.transaction();
   try {
     const order = await Order.findOne({ where: { id: orderId }, transaction: t });
-    if (!order) throw new Error('Order not found');
+    if (!order) throw new AppError('Sipariş bulunamadı', 404);
 
-    // BURAYA — yetki kontrolü
     if (actor === 'user' && order.userId !== userId) {
-      throw new Error('Bu siparişe erişim yetkiniz yok');
+      throw new AppError('Bu siparişe erişim yetkiniz yok', 403);
     }
 
-if (actor === 'market') {
-  const shop = await Shop.findOne({
-    where: {
-      id: order.shopId,
-      ownerId: userId // sadece shop owner
-    },
-    transaction: t
-  });
+    if (actor === 'market') {
+      const shop = await Shop.findOne({
+        where: { id: order.shopId, ownerId: userId },
+        transaction: t
+      });
 
-  if (!shop) {
-    throw new Error('Bu siparişe erişim yetkiniz yok');
-  }
-}
-    // admin her şeye erişebilir, kontrol yok
+      if (!shop) {
+        throw new AppError('Bu siparişe erişim yetkiniz yok', 403);
+      }
+    }
 
     await changeStatusInternal(order, newStatus, actor, t);
 
@@ -254,7 +250,7 @@ if (actor === 'market') {
 
 async function changeStatusInternal(order, newStatus, actor, transaction) {
   if (!canTransition(order.status, newStatus)) {
-    throw new Error(`Invalid transition: ${order.status} → ${newStatus}`);
+    throw new AppError(`Geçersiz durum geçişi: ${order.status} → ${newStatus}`, 409);
   }
 
   const now = new Date();
@@ -289,8 +285,6 @@ async function listUserOrders(userId, statusGroup = 'active', page = 1, limit = 
   });
   return { total: orders.length, page: 1, limit: orders.length, orders };
 }
-
-
 
 async function listShopOrders(shopId, statusGroup = 'active', page = 1, limit = 10) {
   const statuses = STATUS_GROUPS[statusGroup] || STATUS_GROUPS.active;

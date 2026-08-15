@@ -1,90 +1,69 @@
 const shopService = require('../services/shopService');
+const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/AppError');
 
-async function getMyShop(req, res) {
-  try {
-    const shop = await shopService.getMyShop(req.user.id);
+const getMyShop = catchAsync(async (req, res) => {
+  const shop = await shopService.getMyShop(req.user.id);
+  if (!shop) throw new AppError('Market bulunamadı', 404);
 
-    if (!shop) {
-      return res.status(404).json({ error: 'Market bulunamadı' });
-    }
+  const status = shop.status === 'pending' ? 'PENDING' : 'ACTIVE';
+  res.json({ status, shop });
+});
 
-    const status = shop.status === 'pending' ? 'PENDING' : 'ACTIVE';
-    res.json({ status, shop });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
-async function getMyShopProfile(req, res) {
-  try {
-    const shop = await shopService.getMyShopProfile(req.user.id);
+const getMyShopProfile = catchAsync(async (req, res) => {
+  const shop = await shopService.getMyShopProfile(req.user.id);
+  if (!shop) throw new AppError('Market bulunamadı', 404);
+  res.json({ shop });
+});
 
-    if (!shop) {
-      return res.status(404).json({ error: 'Market bulunamadı' });
-    }
+const list = catchAsync(async (req, res) => {
+  const shops = await shopService.listActiveShops();
+  res.json(shops);
+});
 
-    res.json({ shop });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
+const getShopWithPackages = catchAsync(async (req, res) => {
+  const shop = await shopService.getShopWithPackages(req.params.id);
+  if (!shop) throw new AppError('Market bulunamadı', 404);
+  res.json(shop);
+});
 
-async function list(req, res) {
-  try {
-    const shops = await shopService.listActiveShops();
-    res.json(shops);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
+const rateShop = catchAsync(async (req, res) => {
+  const result = await shopService.rateShop(
+    req.user.id,
+    req.body.shopId,
+    req.body.rating,
+    req.body.orderId
+  );
+  res.json(result);
+});
 
-async function getShopWithPackages(req, res) {
-  try {
-    const shop = await shopService.getShopWithPackages(req.params.id);
-    if (!shop) return res.status(404).json({ error: 'Shop not found' });
-    res.json(shop);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
+const canRateShop = catchAsync(async (req, res) => {
+  const result = await shopService.canRateShop(req.user.id, req.params.shopId);
+  res.json(result);
+});
 
-async function rateShop(req, res) {
-  try {
-    const result = await shopService.rateShop(
-      req.user.id,
-      req.body.shopId,
-      req.body.rating,
-      req.body.orderId
-    );
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-}
+const applyShop = catchAsync(async (req, res) => {
+  const shop = await shopService.applyShop(req.user.id, req.body);
+  res.json({ message: 'Başvuru alındı', shop });
+});
 
-async function canRateShop(req, res) {
-  try {
-    const result = await shopService.canRateShop(req.user.id, req.params.shopId);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
+const updateShopProfile = catchAsync(async (req, res) => {
+  const shop = await shopService.updateShopProfile(req.user.id, req.body);
+  res.json({ message: 'Profil güncellendi', shop });
+});
 
-async function applyShop(req, res) {
-  try {
-    const shop = await shopService.applyShop(req.user.id, req.body);
-    res.json({ message: 'Başvuru alındı', shop });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-}
-async function updateShopProfile(req, res) {
-  try {
-    const shop = await shopService.updateShopProfile(req.user.id, req.body);
-    res.json({ message: 'Profil güncellendi', shop });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-}
+const getPaymentSettings = catchAsync(async (req, res) => {
+  const settings = await shopService.getPaymentSettings(req.user.id);
+  res.json({ settings });
+});
 
-module.exports = { list, getShopWithPackages, rateShop, canRateShop, applyShop, getMyShop, getMyShopProfile, updateShopProfile };
+const updatePaymentSettings = catchAsync(async (req, res) => {
+  const result = await shopService.updatePaymentSettings(req.user.id, req.body);
+  res.json({ message: 'Ödeme bilgileri güncellendi', ...result });
+});
+
+module.exports = {
+  list, getShopWithPackages, rateShop, canRateShop, applyShop,
+  getMyShop, getMyShopProfile, updateShopProfile,
+  getPaymentSettings, updatePaymentSettings
+};

@@ -1,115 +1,72 @@
 const userService = require('../services/userService');
+const catchAsync = require('../utils/catchAsync');
 
 module.exports = {
-
-  async refreshToken(req, res) {
-  try {
+  refreshToken: catchAsync(async (req, res) => {
     const { refreshToken } = req.body;
     const result = await userService.refreshAccessToken(refreshToken);
     res.json(result);
-  } catch (err) {
-    res.status(401).json({ error: err.message });
-  }
-},
-async register(req, res) {
-  try {
+  }),
+
+  register: catchAsync(async (req, res) => {
     const result = await userService.register(req.body);
     res.status(201).json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
+  }),
 
-async login(req, res) {
-  try {
+  login: catchAsync(async (req, res) => {
     const { email, password } = req.body;
     const result = await userService.login(email, password);
     res.json(result);
-  } catch (err) {
-    res.status(401).json({ error: err.message });
-  }
-},
-async logout(req, res) {
-  try {
+  }),
+
+  logout: catchAsync(async (req, res) => {
     const { refreshToken } = req.body;
     await userService.revokeRefreshToken(refreshToken);
     res.json({ message: 'Çıkış yapıldı' });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
+  }),
 
-  async getProfile(req, res) {
-    try {
-      const user = await userService.getProfile(req.user.id);
-      res.json(user);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-  async changePassword(req, res) {
-  try {
+  getProfile: catchAsync(async (req, res) => {
+    const user = await userService.getProfile(req.user.id);
+    res.json(user);
+  }),
+
+  changePassword: catchAsync(async (req, res) => {
     const { password, newPassword } = req.body;
     await userService.changePassword(req.user.id, password, newPassword);
     res.json({ message: 'Şifre başarıyla değiştirildi' });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
-async updateProfile(req, res) {
-  try {
+  }),
+
+  updateProfile: catchAsync(async (req, res) => {
     const user = await userService.updateProfile(req.user.id, req.body);
     res.json(user);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
-async forgotPassword(req, res) {
-  try {
+  }),
+
+  forgotPassword: catchAsync(async (req, res) => {
     const { email } = req.body;
     const result = await userService.forgotPassword(email);
     res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
+  }),
 
-async resetPassword(req, res) {
-  try {
+  resetPassword: catchAsync(async (req, res) => {
     const { email, token, newPassword } = req.body;
     const result = await userService.resetPassword(email, token, newPassword);
     res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
-async deleteAccount(req, res) {
-  try {
+  }),
+
+  deleteAccount: catchAsync(async (req, res) => {
     const { password } = req.body;
     const result = await userService.deleteAccount(req.user.id, password);
     res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
-async registerDevice(req, res) {
-  try {
+  }),
+
+  registerDevice: catchAsync(async (req, res) => {
     const device = await userService.registerDevice(req.user.id, req.body);
     res.json({ message: 'Cihaz kaydedildi', device });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
+  }),
 
-async removeDevice(req, res) {
-  try {
+  removeDevice: catchAsync(async (req, res) => {
     const { deviceId } = req.body;
     await userService.removeDevice(req.user.id, deviceId);
     res.json({ message: 'Cihaz kaydı silindi' });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-},
-  
+  }),
 };
-

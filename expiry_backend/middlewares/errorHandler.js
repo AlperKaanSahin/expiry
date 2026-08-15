@@ -1,17 +1,17 @@
 const Sentry = require('@sentry/node');
 
 module.exports = (err, req, res, next) => {
-  console.error('ERROR:', err.message);
+  const statusCode = err.statusCode || 500;
 
-  const status = err.status || 500;
-  const message = err.message || 'Sunucu hatası oluştu';
+  console.error('ERROR:', err);
 
-  // Sadece sunucu hatalarını Sentry'ye gönder
-  if (status >= 500) {
+  if (statusCode >= 500) {
     Sentry.captureException(err);
   }
 
-  res.status(status).json({
-    error: message,
-  });
+  if (err.isOperational) {
+    return res.status(statusCode).json({ error: err.message });
+  }
+
+  return res.status(500).json({ error: 'Sunucu hatası oluştu' });
 };

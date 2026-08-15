@@ -1,10 +1,10 @@
-const { User, Shop } = require('../models');
+const { User, Shop, AuditLog } = require('../models');
 const { sequelize } = require('../models');
 const eventBus = require('../events/eventBus');
 const AUDIT_EVENTS = require('../events/audit.events');
 const SHOP_EVENTS = require('../events/shop.events');
+const AppError = require('../utils/AppError');
 
-// USERS
 exports.getAllUsers = async (page = 1, limit = 10) => {
   const offset = (page - 1) * limit;
 
@@ -26,11 +26,11 @@ exports.getUserById = async (id) => {
 exports.updateUserRole = async (userId, role, currentUserId) => {
   const validRoles = ['user', 'market', 'admin'];
   if (!validRoles.includes(role)) {
-    throw new Error('Geçersiz rol');
+    throw new AppError('Geçersiz rol', 400);
   }
 
   const user = await User.findByPk(userId);
-  if (!user) throw new Error('User not found');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
   const oldRole = user.role;
   user.role = role;
@@ -48,11 +48,11 @@ exports.updateUserRole = async (userId, role, currentUserId) => {
 
 exports.deleteUser = async (targetUserId, currentUserId) => {
   if (targetUserId === currentUserId) {
-    throw new Error('You cannot delete your own account');
+    throw new AppError('Kendi hesabınızı silemezsiniz', 400);
   }
 
   const user = await User.findByPk(targetUserId);
-  if (!user) throw new Error('User not found');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
   await user.destroy();
 
@@ -64,7 +64,6 @@ exports.deleteUser = async (targetUserId, currentUserId) => {
   return true;
 };
 
-// MARKETS
 exports.getAllShops = async (page = 1, limit = 10) => {
   const offset = (page - 1) * limit;
 
@@ -86,9 +85,10 @@ exports.getAllShops = async (page = 1, limit = 10) => {
     shops: rows
   };
 };
+
 exports.updateShop = async (id, data, currentUserId) => {
   const shop = await Shop.findByPk(id);
-  if (!shop) return null;
+  if (!shop) throw new AppError('Market bulunamadı', 404);
 
   const oldShop = { ...shop.dataValues };
 
@@ -109,7 +109,7 @@ exports.updateShop = async (id, data, currentUserId) => {
 
 exports.deleteShop = async (id, currentUserId) => {
   const shop = await Shop.findByPk(id);
-  if (!shop) return null;
+  if (!shop) throw new AppError('Market bulunamadı', 404);
 
   const shopSnapshot = {
     id: shop.id,
@@ -144,12 +144,12 @@ exports.deleteShop = async (id, currentUserId) => {
 
 exports.updateShopStatus = async (id, status, currentUserId) => {
   const shop = await Shop.findByPk(id);
-  if (!shop) throw new Error('Shop not found');
+  if (!shop) throw new AppError('Market bulunamadı', 404);
 
-  if (!status) throw new Error('Status is required');
+  if (!status) throw new AppError('Status zorunlu', 400);
 
   const allowed = ['pending', 'active', 'rejected', 'inactive'];
-  if (!allowed.includes(status)) throw new Error('Invalid status');
+  if (!allowed.includes(status)) throw new AppError('Geçersiz status', 400);
 
   const transitions = {
     pending: ['active', 'rejected'],
@@ -159,7 +159,7 @@ exports.updateShopStatus = async (id, status, currentUserId) => {
   };
 
   if (!transitions[shop.status].includes(status)) {
-    throw new Error(`Invalid transition: ${shop.status} → ${status}`);
+    throw new AppError(`Geçersiz geçiş: ${shop.status} → ${status}`, 400);
   }
 
   const fromStatus = shop.status;
