@@ -6,6 +6,7 @@ const {
   ShopProduct,
   PackageUnit,
 } = require('../models');
+const AppError = require('../utils/AppError');
 
 exports.getPackageById = async (id) => {
   const pkg = await Package.findByPk(id, {
@@ -18,7 +19,7 @@ exports.getPackageById = async (id) => {
   });
 
   if (!pkg) {
-    throw new Error('Kutu bulunamadı');
+    throw new AppError('Kutu bulunamadı', 404);
   }
 
   const products = pkg.PackageProducts.map(pp => ({
@@ -58,9 +59,7 @@ exports.getShopPackages = async (shopId) => {
       [fn('COUNT', col('id')), 'remaining'],
     ],
     where: {
-      packageId: {
-        [Op.in]: packageIds,
-      },
+      packageId: { [Op.in]: packageIds },
       isSold: false,
     },
     group: ['packageId'],
@@ -68,10 +67,7 @@ exports.getShopPackages = async (shopId) => {
   });
 
   const counts = new Map(
-    packageCounts.map(item => [
-      item.packageId,
-      Number(item.remaining),
-    ])
+    packageCounts.map(item => [item.packageId, Number(item.remaining)])
   );
 
   return packages

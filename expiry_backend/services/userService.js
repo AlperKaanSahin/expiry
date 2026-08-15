@@ -1,6 +1,8 @@
-const { User, Order, RefreshToken, UserDevice  } = require('../models');
+const { User, Order, RefreshToken, UserDevice } = require('../models');
 const jwt = require('jsonwebtoken');
-
+const crypto = require('crypto');
+const emailService = require('./emailService');
+const AppError = require('../utils/AppError');
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -20,11 +22,7 @@ const generateRefreshToken = async (user) => {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
-  await RefreshToken.create({
-    token,
-    userId: user.id,
-    expiresAt
-  });
+  await RefreshToken.create({ token, userId: user.id, expiresAt });
 
   return token;
 };
@@ -33,11 +31,11 @@ exports.login = async (email, password) => {
   const user = await User.findOne({ where: { email } });
 
   if (!user || !user.validPassword(password)) {
-    throw new Error('Invalid credentials');
+    throw new AppError('Email veya şifre hatalı', 401);
   }
 
   const accessToken = generateAccessToken(user);
-  const refreshToken = await generateRefreshToken(user); // await eklendi
+  const refreshToken = await generateRefreshToken(user);
 
   const safeUser = user.toJSON();
   delete safeUser.password;
@@ -45,13 +43,11 @@ exports.login = async (email, password) => {
   return { user: safeUser, accessToken, refreshToken };
 };
 
-const emailService = require('./emailService');
-
 exports.register = async (data) => {
   const { email, password, firstName, lastName } = data;
 
   const existing = await User.findOne({ where: { email } });
-  if (existing) throw new Error('Bu email zaten kayıtlı');
+  if (existing) throw new AppError('Bu email zaten kayıtlı', 409);
 
   const user = await User.create({ email, password, firstName, lastName });
 
@@ -65,72 +61,67 @@ exports.register = async (data) => {
 
   return { user: safeUser, accessToken, refreshToken };
 };
+
 exports.refreshAccessToken = async (refreshToken) => {
-  if (!refreshToken) throw new Error('Refresh token gerekli');
+  if (!refreshToken) throw new AppError('Refresh token gerekli', 400);
 
   let payload;
   try {
     payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
   } catch {
-    throw new Error('Geçersiz refresh token');
+    throw new AppError('Geçersiz refresh token', 401);
   }
 
   const storedToken = await RefreshToken.findOne({ where: { token: refreshToken } });
 
   if (!storedToken || storedToken.revoked) {
-    throw new Error('Refresh token geçersiz veya iptal edilmiş');
+    throw new AppError('Refresh token geçersiz veya iptal edilmiş', 401);
   }
 
   if (new Date() > storedToken.expiresAt) {
-    throw new Error('Refresh token süresi dolmuş');
+    throw new AppError('Refresh token süresi dolmuş', 401);
   }
 
   const user = await User.findByPk(payload.id);
-  if (!user) throw new Error('Kullanıcı bulunamadı');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
   const accessToken = generateAccessToken(user);
   return { accessToken };
 };
+
 exports.revokeRefreshToken = async (refreshToken) => {
-  await RefreshToken.update(
-    { revoked: true },
-    { where: { token: refreshToken } }
-  );
+  await RefreshToken.update({ revoked: true }, { where: { token: refreshToken } });
 };
 
 exports.revokeAllUserTokens = async (userId) => {
-  await RefreshToken.update(
-    { revoked: true },
-    { where: { userId } }
-  );
+  await RefreshToken.update({ revoked: true }, { where: { userId } });
 };
 
 exports.getProfile = async (userId) => {
-  const user = await User.findByPk(userId, {
-    attributes: { exclude: ['password'] }
-  });
-
-  if (!user) throw new Error('User not found');
+  const user = await User.findByPk(userId, { attributes: { exclude: ['password'] } });
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
   return user;
 };
+
 exports.changePassword = async (userId, currentPassword, newPassword) => {
   const user = await User.findByPk(userId);
-  if (!user) throw new Error('Kullanıcı bulunamadı');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
   if (!user.validPassword(currentPassword)) {
-    throw new Error('Mevcut şifre yanlış');
+    throw new AppError('Mevcut şifre yanlış', 401);
   }
 
   user.password = newPassword;
   await user.save();
 
-  await exports.revokeAllUserTokens(userId); // yeni eklendi
+  await exports.revokeAllUserTokens(userId);
 
   return true;
 };
+
 exports.updateProfile = async (userId, data) => {
   const user = await User.findByPk(userId);
-  if (!user) throw new Error('Kullanıcı bulunamadı');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
   const { firstName, lastName, phone, address } = data;
 
@@ -145,7 +136,6 @@ exports.updateProfile = async (userId, data) => {
   delete safeUser.password;
   return safeUser;
 };
-const crypto = require('crypto');
 
 exports.forgotPassword = async (email) => {
   const user = await User.findOne({ where: { email } });
@@ -170,14 +160,14 @@ exports.forgotPassword = async (email) => {
 
 exports.resetPassword = async (email, token, newPassword) => {
   const user = await User.findOne({ where: { email } });
-  if (!user) throw new Error('Kullanıcı bulunamadı');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
   if (!user.resetToken || user.resetToken !== token) {
-    throw new Error('Geçersiz kod');
+    throw new AppError('Geçersiz kod', 400);
   }
 
   if (new Date() > user.resetTokenExpiry) {
-    throw new Error('Kodun süresi dolmuş, tekrar talep edin');
+    throw new AppError('Kodun süresi dolmuş, tekrar talep edin', 400);
   }
 
   user.password = newPassword;
@@ -187,28 +177,23 @@ exports.resetPassword = async (email, token, newPassword) => {
 
   return { message: 'Şifreniz başarıyla güncellendi' };
 };
+
 exports.deleteAccount = async (userId, password) => {
   const user = await User.findByPk(userId);
-  if (!user) throw new Error('Kullanıcı bulunamadı');
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
-  // Şifre doğrulama
   if (!user.validPassword(password)) {
-    throw new Error('Şifre hatalı');
+    throw new AppError('Şifre hatalı', 401);
   }
 
-  // Aktif sipariş kontrolü
   const activeOrders = await Order.findAll({
-    where: {
-      userId,
-      status: ['pending', 'paid', 'delivered']
-    }
+    where: { userId, status: ['pending', 'paid', 'delivered'] }
   });
 
   if (activeOrders.length > 0) {
-    throw new Error('Aktif siparişleriniz tamamlanmadan hesabınızı silemezsiniz');
+    throw new AppError('Aktif siparişleriniz tamamlanmadan hesabınızı silemezsiniz', 409);
   }
 
-  // Anonimleştir
   user.email = `deleted_user_${userId}@deleted.com`;
   user.firstName = 'Silinmiş';
   user.lastName = 'Kullanıcı';
@@ -221,9 +206,10 @@ exports.deleteAccount = async (userId, password) => {
 
   return { message: 'Hesabınız başarıyla silindi' };
 };
+
 exports.registerDevice = async (userId, { deviceId, fcmToken, platform, appVersion }) => {
   if (!deviceId || !fcmToken || !platform) {
-    throw new Error('deviceId, fcmToken ve platform gerekli');
+    throw new AppError('deviceId, fcmToken ve platform gerekli', 400);
   }
 
   const [device] = await UserDevice.upsert({

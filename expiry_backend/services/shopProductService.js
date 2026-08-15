@@ -1,17 +1,18 @@
 const { ShopProduct, Shop } = require('../models');
+const AppError = require('../utils/AppError');
 
 const getShopByUserId = async (userId) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
-  if (!shop) throw new Error('Market bulunamadı');
+  if (!shop) throw new AppError('Market bulunamadı', 404);
   return shop;
 };
 
-// shopProductService.js'e yeni bir fonksiyon
 exports.listAllProducts = async (userId) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
   if (!shop) return [];
   return ShopProduct.findAll({ where: { shopId: shop.id }, order: [['createdAt', 'DESC']] });
 };
+
 exports.listProducts = async (userId, page = 1, limit = 10) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
   if (!shop) return { total: 0, page, limit, products: [] };
@@ -31,7 +32,6 @@ exports.listProducts = async (userId, page = 1, limit = 10) => {
 exports.createProduct = async (userId, data) => {
   const shop = await getShopByUserId(userId);
   const { name, price, quantity, expiryDate } = data;
-
   return await ShopProduct.create({ name, price, quantity, expiryDate, shopId: shop.id });
 };
 
@@ -40,7 +40,7 @@ exports.updateProduct = async (userId, productId, data) => {
   const { name, price, quantity, expiryDate } = data;
 
   const product = await ShopProduct.findOne({ where: { id: productId, shopId: shop.id } });
-  if (!product) throw new Error('Ürün bulunamadı');
+  if (!product) throw new AppError('Ürün bulunamadı', 404);
 
   await product.update({ name, price, quantity, expiryDate });
   return product;
@@ -50,7 +50,7 @@ exports.deleteProduct = async (userId, productId) => {
   const shop = await getShopByUserId(userId);
 
   const product = await ShopProduct.findOne({ where: { id: productId, shopId: shop.id } });
-  if (!product) throw new Error('Ürün bulunamadı');
+  if (!product) throw new AppError('Ürün bulunamadı', 404);
 
   await product.destroy();
   return true;

@@ -1,43 +1,26 @@
 const shopPackageService = require('../services/ShopPackageService');
+const catchAsync = require('../utils/catchAsync');
 
 module.exports = {
-list: async (req, res) => {
-  try {
+  list: catchAsync(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const result = await shopPackageService.listPackages(req.user.id, page, limit);
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: 'Paketler yüklenemedi' });
-  }
-},
+  }),
 
-  create: async (req, res) => {
-    try {
-      const pkg = await shopPackageService.createPackage(req.user.id, req.body);
-      res.status(201).json(pkg);
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
-  },
+  create: catchAsync(async (req, res) => {
+    const pkg = await shopPackageService.createPackage(req.user.id, req.body);
+    res.status(201).json(pkg);
+  }),
 
-  update: async (req, res) => {
-    try {
-      const pkg = await shopPackageService.updatePackage(req.user.id, req.params.id, req.body);
-      res.json({ success: true, package: pkg });
-    } catch (err) {
-      const status = err.message === 'Paket bulunamadı' ? 404 : 400;
-      res.status(status).json({ error: err.message });
-    }
-  },
+  update: catchAsync(async (req, res) => {
+    const pkg = await shopPackageService.updatePackage(req.user.id, req.params.id, req.body);
+    res.json({ success: true, package: pkg });
+  }),
 
-  delete: async (req, res) => {
-    try {
-      const result = await shopPackageService.deletePackage(req.user.id, req.params.id, req.body.count);
-      res.json({ success: true, ...result });
-    } catch (err) {
-      const status = err.message === 'Paket bulunamadı' ? 404 : 400;
-      res.status(status).json({ error: err.message });
-    }
-  }
+  delete: catchAsync(async (req, res) => {
+    const result = await shopPackageService.deletePackage(req.user.id, req.params.id, req.body.count);
+    res.json({ success: true, ...result });
+  }),
 };

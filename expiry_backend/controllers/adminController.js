@@ -1,118 +1,68 @@
 const adminService = require('../services/adminService');
+const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/AppError');
 
-// USERS
-exports.getAllUsers = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+exports.getAllUsers = catchAsync(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
 
-    const result = await adminService.getAllUsers(page, limit);
+  const result = await adminService.getAllUsers(page, limit);
 
-    res.json({
-      total: result.count,
-      page,
-      limit,
-      users: result.rows
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+  res.json({
+    total: result.count,
+    page,
+    limit,
+    users: result.rows
+  });
+});
 
-exports.getUserById = async (req, res) => {
-  try {
-    const user = await adminService.getUserById(req.params.id);
+exports.getUserById = catchAsync(async (req, res) => {
+  const user = await adminService.getUserById(req.params.id);
+  if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
+  res.json(user);
+});
 
-    if (!user) {
-      return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-    }
+exports.updateUserRole = catchAsync(async (req, res) => {
+  const user = await adminService.updateUserRole(
+    req.params.id,
+    req.body.role,
+    req.user.id
+  );
 
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+  res.json({
+    id: user.id,
+    email: user.email,
+    role: user.role
+  });
+});
 
-exports.updateUserRole = async (req, res) => {
-  try {
-    const user = await adminService.updateUserRole(
-      req.params.id,
-      req.body.role,
-      req.user.id
-    );
+exports.deleteUser = catchAsync(async (req, res) => {
+  await adminService.deleteUser(Number(req.params.id), req.user.id);
+  res.json({ success: true });
+});
 
-    res.json({
-      id: user.id,
-      email: user.email,
-      role: user.role
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
+exports.getAllShops = catchAsync(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const result = await adminService.getAllShops(page, limit);
+  res.json(result);
+});
 
-exports.deleteUser = async (req, res) => {
-  try {
-    await adminService.deleteUser(
-      Number(req.params.id),
-      req.user.id
-    );
+exports.updateShop = catchAsync(async (req, res) => {
+  const updated = await adminService.updateShop(req.params.id, req.body, req.user.id);
+  res.json(updated);
+});
 
-    res.json({ success: true });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
+exports.deleteShop = catchAsync(async (req, res) => {
+  await adminService.deleteShop(req.params.id, req.user.id);
+  res.json({ success: true });
+});
 
-// MARKETS
-exports.getAllShops = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const result = await adminService.getAllShops(page, limit);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+exports.updateShopStatus = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
 
-exports.updateShop = async (req, res) => {
-  try {
-    const updated = await adminService.updateShop(req.params.id, req.body, req.user.id);
+  const shop = await adminService.updateShopStatus(id, status, req.user.id);
 
-    if (!updated) {
-      return res.status(404).json({ error: 'Market bulunamadı' });
-    }
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-exports.deleteShop = async (req, res) => {
-  try {
-    const result = await adminService.deleteShop(req.params.id, req.user.id);
-
-    if (!result) {
-      return res.status(404).json({ error: 'Market bulunamadı' });
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-exports.updateShopStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const shop = await adminService.updateShopStatus(id, status, req.user.id);
-
-    res.json({ message: 'Status updated', shop });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+  res.json({ message: 'Status updated', shop });
+});
