@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'expiry_backend/**'
+      - '.github/workflows/backend-ci.yml'
   push:
     branches:
       - main
     paths:
       - 'expiry_backend/**'
+      - '.github/workflows/backend-ci.yml'
 
 jobs:
   build-and-check:
