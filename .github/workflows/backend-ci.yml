@@ -1,0 +1,34 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - 'expiry_backend/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'expiry_backend/**'
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: expiry_backend
+
+    steps:
+      - name: Kodu checkout et
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Syntax/başlatma kontrolü
+        run: node -e "require('./app.js')"
