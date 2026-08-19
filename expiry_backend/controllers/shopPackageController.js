@@ -1,4 +1,4 @@
-const shopPackageService = require('../services/ShopPackageService');
+const shopPackageService = require('../services/shopPackageService');
 const catchAsync = require('../utils/catchAsync');
 
 module.exports = {
