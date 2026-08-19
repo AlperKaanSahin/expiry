@@ -1,12 +1,20 @@
 const util = require('util');
 const Iyzipay = require('iyzipay');
-const iyzipay = require('../config/iyzico');
-
-const createSubMerchantAsync = util.promisify(iyzipay.subMerchant.create).bind(iyzipay.subMerchant);
-const updateSubMerchantAsync = util.promisify(iyzipay.subMerchant.update).bind(iyzipay.subMerchant);
+const getIyzico = require('../config/iyzico');
 
 async function createOrUpdateSubMerchant(shop, data) {
-  const isCompany = data.subMerchantType === 'LIMITED_OR_JOINT_STOCK_COMPANY';
+  const iyzipay = getIyzico();
+
+  const createSubMerchantAsync = util
+    .promisify(iyzipay.subMerchant.create)
+    .bind(iyzipay.subMerchant);
+
+  const updateSubMerchantAsync = util
+    .promisify(iyzipay.subMerchant.update)
+    .bind(iyzipay.subMerchant);
+
+  const isCompany =
+    data.subMerchantType === 'LIMITED_OR_JOINT_STOCK_COMPANY';
 
   const baseRequest = {
     locale: Iyzipay.LOCALE.TR,
@@ -38,10 +46,12 @@ async function createOrUpdateSubMerchant(shop, data) {
   const isUpdate = !!shop.subMerchantKey;
 
   if (isUpdate) {
-    // Iyzico dokümantasyonuna göre update isteğinde subMerchantType gönderilmiyor,
-    // subMerchantKey ile kimliklendiriliyor.
     const { subMerchantType, ...updateRequest } = request;
-    return updateSubMerchantAsync({ ...updateRequest, subMerchantKey: shop.subMerchantKey });
+
+    return updateSubMerchantAsync({
+      ...updateRequest,
+      subMerchantKey: shop.subMerchantKey,
+    });
   }
 
   return createSubMerchantAsync(request);
