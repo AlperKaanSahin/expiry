@@ -1,10 +1,19 @@
 const { Resend } = require('resend');
 const Sentry = require('@sentry/node');
-const resend = new Resend(process.env.RESEND_API_KEY);
+
+let resend;
+
+function getResend() {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+
+  return resend;
+}
 
 exports.sendWelcomeEmail = async (to, firstName) => {
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: 'Expiry <onboarding@resend.dev>',
       to,
       subject: 'Expiry\'e Hoş Geldin!',
@@ -33,14 +42,14 @@ exports.sendWelcomeEmail = async (to, firstName) => {
       `
     });
   } catch (err) {
-    console.error("RESEND ERROR (welcome):", err);
+    console.error('RESEND ERROR (welcome):', err);
     Sentry.captureException(err);
   }
 };
 
 exports.sendPasswordResetEmail = async (to, firstName, resetToken) => {
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: 'Expiry <onboarding@resend.dev>',
       to,
       subject: 'Şifre Sıfırlama Kodu',
@@ -60,6 +69,6 @@ exports.sendPasswordResetEmail = async (to, firstName, resetToken) => {
   } catch (err) {
     console.error('Reset email gönderilemedi:', err.message);
     Sentry.captureException(err);
-    throw err;   // artık çağıran taraf (forgotPassword) haberdar olacak
+    throw err;
   }
 };
