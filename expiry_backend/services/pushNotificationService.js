@@ -1,6 +1,7 @@
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 const { UserDevice } = require('../models');
+const Sentry = require('@sentry/node');
 
 let messaging;
 
@@ -79,7 +80,8 @@ exports.sendToUser = async (userId, { title, body, data = {} }) => {
         where: { fcmToken: staleTokens },
       });
     }
-  } catch (err) {
-    console.error('PUSH NOTIFICATION SEND ERROR:', err);
-  }
+} catch (err) {
+  console.error('PUSH NOTIFICATION SEND ERROR:', err);
+  Sentry.captureException(err);
+}
 };
