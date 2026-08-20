@@ -50,6 +50,7 @@ A key design decision: roles aren't separate accounts or separate apps. A market
 - Express.js
 - Sequelize ORM
 - firebase-admin (push delivery)
+- iyzipay (Iyzico Node SDK)
 
 **Database**
 - MySQL
@@ -66,6 +67,10 @@ A key design decision: roles aren't separate accounts or separate apps. A market
 - Sentry (error monitoring, backend + frontend)
 - Resend (transactional email)
 - Postman (E2E API test collection)
+
+**Testing & CI**
+- Jest (unit tests)
+- GitHub Actions (CI for backend + mobile — dependency validation, Expo config checks, automated tests)
 
 ## Architecture
 
@@ -85,6 +90,8 @@ Business logic is isolated inside the service layer while side effects such as n
 - **Type-based notification routing** — notifications route based on their *type* rather than the recipient's role, so a shop owner's own customer-side notifications (e.g. rating a shop they bought from) correctly route to the customer workspace instead of being swallowed by their shop-owner context. The same event that writes an in-app notification also triggers the matching push notification, through one shared handler, so the two channels never drift out of sync.
 - **Pagination strategy** — straightforward `LIMIT`/`OFFSET` for most lists; a two-step query (filter + paginate on IDs, then hydrate) for endpoints where filtering depends on an aggregate (e.g. packages with available stock), keeping results accurate without loading full tables into memory.
 - **Ownership and ACL checks live in the service layer**, not scattered across controllers — a market can only ever query or mutate its own products, packages, and orders, enforced the same way regardless of which route triggered the call.
+- **Centralized error handling** — a custom `AppError` class distinguishes operational errors (safe to show users, e.g. "insufficient stock") from unexpected ones (never exposed with internal details), routed through a single Express error-handling middleware via an async wrapper, instead of each controller handling — and often mishandling — its own errors.
+- **Row-level locking on stock reservation** — a `SELECT ... FOR UPDATE` lock (plus deterministic ordering) prevents two concurrent orders from both reserving the same last unit of stock, a race condition that a naive read-then-write would allow.
 
 ## Project Structure
 
@@ -115,6 +122,7 @@ expiry/
 │   ├── routes/
 │   ├── seeders/
 │   ├── services/
+│   ├── tests/               # Jest unit tests
 │   ├── utils/
 │   └── validators/
 │
@@ -139,12 +147,13 @@ cd expiry_backend
 npm install
 ```
 
-Create local configuration files.
+Create the local environment file.
 
 ```bash
 cp .env.example .env
-cp config/config.example.json config/config.json
 ```
+
+Fill in `.env` with your local database credentials (`DB_HOST`, `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_DIALECT`) and any other required secrets.
 
 Run database migrations and seeders.
 
@@ -157,6 +166,12 @@ Start the server.
 
 ```bash
 npm start
+```
+
+Run the test suite.
+
+```bash
+npm test
 ```
 
 ### Mobile
@@ -197,28 +212,35 @@ It covers:
 - Notifications
 - Ratings
 
+## Recently Completed
+
+- Fixed a database race condition in stock reservation using row-level locking
+- Refactored error handling across the entire API into a centralized, consistent pattern
+- Set up CI (GitHub Actions) for both backend and mobile, including dependency and config validation
+- Started unit testing (Jest), prioritizing the highest-risk business logic
+- Push notification tap-routing, correctly workspace-aware (a shop owner's customer-side notifications route to their customer workspace, not their shop panel)
+
 ## Roadmap
 
-- Real payment integration (Iyzico) — sandbox integration planned, hosted checkout form to keep card data off our servers
+- Iyzico payment integration — architecturally complete (submerchant model, hosted checkout form), currently blocked on Iyzico's business-registration requirement for their marketplace product
 - Email verification
 - Automatic order release scheduler
 - Automatic package price scheduler
 - Maps integration
 - Search & filtering
 - Swagger/OpenAPI documentation
-- Unit tests
-- Integration tests
-- CI/CD pipeline
+- Integration tests (Supertest + MySQL service in CI)
+- CD pipeline (automated deploy to VPS)
 
 ## Development Goals
 
 Current focus, roughly in order:
 
-- Payment integration (Iyzico), the main gap before this could handle real orders
-- A concurrency pass on stock reservation — verifying package purchases are safe under simultaneous requests
-- Production-ready backend hardening (rate limiting tuned for prod, error responses that don't leak internals)
 - Legal pages and transactional email domain setup
-- Automated testing, currently the weakest part of the project
+- Production rate limiting values (currently using development-friendly defaults)
+- Expanding automated test coverage — integration tests with a real MySQL service in CI
+- Deployment pipeline: Docker + Nginx + CI/CD to a VPS
+- Iyzico payment integration — blocked externally (business registration), not by remaining code work
 
 ## Author
 
