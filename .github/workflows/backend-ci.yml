@@ -31,6 +31,9 @@ jobs:
 
       - name: Bağımlılıkları kur
         run: npm ci
-
+      
+      - name: Testleri çalıştır
+        run: npm test
+      
       - name: Syntax/başlatma kontrolü
         run: node -e "require('./app.js')"

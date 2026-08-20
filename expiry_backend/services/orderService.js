@@ -318,5 +318,6 @@ module.exports = {
   changeStatus,
   listUserOrders,
   listShopOrders,
-  getShopByOwner
+  getShopByOwner,
+  reserveStock, // test edilebilirlik için export edildi
 };
