@@ -8,18 +8,7 @@ const common = {
 };
 
 module.exports = {
-  development: {
-    ...common,
-    database: process.env.DB_NAME,
-  },
-
-  test: {
-    ...common,
-    database: process.env.DB_TEST_NAME || process.env.DB_NAME,
-  },
-
-  production: {
-    ...common,
-    database: process.env.DB_NAME,
-  },
+  development: { ...common, database: process.env.DB_NAME },
+  test: { ...common, database: process.env.DB_TEST_NAME || process.env.DB_NAME },
+  production: { ...common, database: process.env.DB_NAME },
 };

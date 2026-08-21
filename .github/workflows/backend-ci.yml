@@ -16,9 +16,33 @@ jobs:
   build-and-check:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: expiry_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     defaults:
       run:
         working-directory: expiry_backend
+
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: expiry_test
+      DB_DIALECT: mysql
+      JWT_SECRET: ci-test-secret-not-real
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-not-real
 
     steps:
       - name: Kodu checkout et
@@ -31,9 +55,12 @@ jobs:
 
       - name: Bağımlılıkları kur
         run: npm ci
-      
-      - name: Testleri çalıştır
-        run: npm test
-      
+
+      - name: Migration'ları çalıştır
+        run: npx sequelize-cli db:migrate
+
       - name: Syntax/başlatma kontrolü
         run: node -e "require('./app.js')"
+
+      - name: Testleri çalıştır
+        run: npm test
