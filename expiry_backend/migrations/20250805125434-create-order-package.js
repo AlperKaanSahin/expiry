@@ -1,4 +1,4 @@
-// örnek: c:\Users\alper\Desktop\toogoddtogog\toogoddtogog_backend\migrations\XXXXXXXXXX-create-orderpackage.js
+
 'use strict';
 module.exports = {
   up: async (queryInterface, Sequelize) => {
