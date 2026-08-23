@@ -1,6 +1,8 @@
+const AppError = require('../utils/AppError');
+
 module.exports = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     return next();
   }
-  return res.status(403).json({ error: 'Yetkisiz' });
+  return next(new AppError('Yetkisiz', 403));
 };
