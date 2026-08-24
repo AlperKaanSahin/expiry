@@ -59,6 +59,9 @@ jobs:
       - name: Migration'ları çalıştır
         run: npx sequelize-cli db:migrate
 
+      - name: Seed'leri çalıştır
+        run: npx sequelize-cli db:seed:all
+
       - name: Syntax/başlatma kontrolü
         run: node -e "require('./app.js')"
 
