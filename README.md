@@ -76,7 +76,9 @@ A key design decision: roles aren't separate accounts or separate apps. A market
 
 ## Architecture
 
-The project follows a layered backend architecture:
+The backend follows a layered architecture where controllers handle HTTP concerns, services contain business logic, models represent the data layer, and middleware handles cross-cutting concerns such as authentication and authorization.
+
+The application also uses event-driven patterns for side effects such as notifications and audit logging, while database transactions and row-level locking are used for operations where consistency is critical.
 
 - Controllers
 - Services
@@ -117,7 +119,10 @@ expiry/
 │   │   ├── context/         # AuthContext (identity) + WorkspaceContext (workspace switching)
 │   │   ├── data/
 │   │   ├── events/
-│   │   ├── navigation/      # workspace-scoped navigators (user / shop / admin)
+│   │   ├── navigation/      
+|   │   │   ├── admin/
+|   │   │   ├── shop/
+|   │   │   └── tabs/
 │   │   ├── screens/
 │   │   ├── services/
 │   │   ├── styles/
@@ -125,6 +130,7 @@ expiry/
 │   │   └── utils/
 │
 ├── expiry_backend/         # Express API
+│   ├── config/
 │   ├── controllers/
 │   ├── domain/
 │   ├── events/
@@ -135,7 +141,9 @@ expiry/
 │   ├── routes/
 │   ├── seeders/
 │   ├── services/
-│   ├── tests/               # Jest unit tests
+│   ├── tests/               
+|   │   ├── integration/  # Supertest + real MySQL
+|   │   └── unit/         # Jest + mocked dependencies
 │   ├── utils/
 │   └── validators/
 │
@@ -204,7 +212,7 @@ cp .env.example .env
 Example:
 
 ```env
-EXPO_PUBLIC__URL=http://localhost:5000
+EXPO_PUBLIC_API_URL=http://localhost:5000
 ```
 
 Start Expo.
@@ -213,9 +221,9 @@ Start Expo.
 npx expo start
 ```
 
-##  Testing
+## API Testing
 
-A complete Postman collection is included for testing the application's API.
+A Postman collection is included for manual API testing and development.
 
 It covers:
 
@@ -250,16 +258,6 @@ It covers:
 - Swagger/OpenAPI documentation
 - Expand automated integration and end-to-end test coverage across additional workflows
 - CD pipeline (automated deploy to VPS)
-
-## Development Goals
-
-Current focus, roughly in order:
-
-- Legal pages and transactional email domain setup
-- Production rate limiting values (currently using development-friendly defaults)
-- Expanding automated test coverage across additional critical business workflows
-- Deployment pipeline: Docker + Nginx + CI/CD to a VPS
-- Iyzico payment integration — blocked externally (business registration), not by remaining code work
 
 ## Author
 
