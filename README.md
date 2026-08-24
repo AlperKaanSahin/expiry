@@ -66,11 +66,13 @@ A key design decision: roles aren't separate accounts or separate apps. A market
 **Monitoring & Tooling**
 - Sentry (error monitoring, backend + frontend)
 - Resend (transactional email)
-- Postman (E2E API test collection)
+- Postman (API development and manual testing)
 
 **Testing & CI**
-- Jest (unit tests)
-- GitHub Actions (CI for backend + mobile — dependency validation, Expo config checks, automated tests)
+- Jest (unit testing)
+- Supertest (HTTP integration and end-to-end testing)
+- MySQL service container for database-backed CI testing
+- GitHub Actions (CI for backend + mobile)
 
 ## Architecture
 
@@ -92,6 +94,17 @@ Business logic is isolated inside the service layer while side effects such as n
 - **Ownership and ACL checks live in the service layer**, not scattered across controllers — a market can only ever query or mutate its own products, packages, and orders, enforced the same way regardless of which route triggered the call.
 - **Centralized error handling** — a custom `AppError` class distinguishes operational errors (safe to show users, e.g. "insufficient stock") from unexpected ones (never exposed with internal details), routed through a single Express error-handling middleware via an async wrapper, instead of each controller handling — and often mishandling — its own errors.
 - **Row-level locking on stock reservation** — a `SELECT ... FOR UPDATE` lock (plus deterministic ordering) prevents two concurrent orders from both reserving the same last unit of stock, a race condition that a naive read-then-write would allow.
+
+## Testing Strategy
+
+The backend uses multiple testing layers to validate business logic and real API workflows:
+
+- **Unit tests** — service-layer business logic and authentication middleware are tested in isolation with mocked dependencies.
+- **Integration tests** — HTTP endpoints are tested with Supertest against a real MySQL database.
+- **End-to-end workflows** — critical multi-step business flows are tested across multiple API boundaries, including authentication, shop approval, product and package creation, ordering, payment simulation, delivery, and QR-based confirmation.
+- **CI validation** — GitHub Actions runs the test suite against a temporary MySQL service container, including database migrations.
+
+Testing is prioritized around security-sensitive logic, ownership boundaries, order state transitions, and other high-risk business rules.
 
 ## Project Structure
 
@@ -173,6 +186,7 @@ Run the test suite.
 ```bash
 npm test
 ```
+The backend test suite includes mocked unit tests as well as HTTP integration and end-to-end tests backed by MySQL.
 
 ### Mobile
 
@@ -190,7 +204,7 @@ cp .env.example .env
 Example:
 
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:5000
+EXPO_PUBLIC__URL=http://localhost:5000
 ```
 
 Start Expo.
@@ -199,7 +213,7 @@ Start Expo.
 npx expo start
 ```
 
-## API Testing
+##  Testing
 
 A complete Postman collection is included for testing the application's API.
 
@@ -216,20 +230,25 @@ It covers:
 
 - Fixed a database race condition in stock reservation using row-level locking
 - Refactored error handling across the entire API into a centralized, consistent pattern
+- Built a Jest unit testing layer covering services and authentication middleware
+- Added Supertest integration and end-to-end tests for critical API workflows
+- Added a real MySQL service container to GitHub Actions for database-backed CI testing
+- Fixed Linux case-sensitivity issues in database migrations discovered through CI
+- Fixed a refresh-token collision issue by adding a unique JWT `jti`
+- Refactored seeders to avoid hardcoded database IDs and improve portability across environments
 - Set up CI (GitHub Actions) for both backend and mobile, including dependency and config validation
-- Started unit testing (Jest), prioritizing the highest-risk business logic
-- Push notification tap-routing, correctly workspace-aware (a shop owner's customer-side notifications route to their customer workspace, not their shop panel)
+- Improved workspace-aware push notification routing
 
 ## Roadmap
 
-- Iyzico payment integration — architecturally complete (submerchant model, hosted checkout form), currently blocked on Iyzico's business-registration requirement for their marketplace product
+- Iyzico production payment activation — currently blocked on Iyzico's business-registration requirement for marketplace payments
 - Email verification
 - Automatic order release scheduler
 - Automatic package price scheduler
 - Maps integration
 - Search & filtering
 - Swagger/OpenAPI documentation
-- Integration tests (Supertest + MySQL service in CI)
+- Expand automated integration and end-to-end test coverage across additional workflows
 - CD pipeline (automated deploy to VPS)
 
 ## Development Goals
@@ -238,7 +257,7 @@ Current focus, roughly in order:
 
 - Legal pages and transactional email domain setup
 - Production rate limiting values (currently using development-friendly defaults)
-- Expanding automated test coverage — integration tests with a real MySQL service in CI
+- Expanding automated test coverage across additional critical business workflows
 - Deployment pipeline: Docker + Nginx + CI/CD to a VPS
 - Iyzico payment integration — blocked externally (business registration), not by remaining code work
 
