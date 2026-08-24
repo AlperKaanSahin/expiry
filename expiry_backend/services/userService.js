@@ -14,7 +14,7 @@ const generateAccessToken = (user) => {
 
 const generateRefreshToken = async (user) => {
   const token = jwt.sign(
-    { id: user.id },
+    { id: user.id, jti: crypto.randomUUID() },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: '7d' }
   );
@@ -22,7 +22,11 @@ const generateRefreshToken = async (user) => {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
-  await RefreshToken.create({ token, userId: user.id, expiresAt });
+  await RefreshToken.create({
+    token,
+    userId: user.id,
+    expiresAt
+  });
 
   return token;
 };

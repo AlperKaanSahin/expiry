@@ -1,10 +1,15 @@
 'use strict';
 
 module.exports = {
-  async up (queryInterface, Sequelize) {
+  async up(queryInterface) {
+    const [shops] = await queryInterface.sequelize.query(
+      `SELECT id FROM shops WHERE name = 'Market1' LIMIT 1;`
+    );
+    const shopId = shops[0].id;
+
     await queryInterface.bulkInsert('packages', [
       {
-        shopId: 1,
+        shopId,
         name: 'Kutu1',
         description: 'Taze ve çeşitli kahvaltılık ürünler içerir.',
         createdAt: new Date(),
@@ -13,8 +18,8 @@ module.exports = {
     ], {});
   },
 
-  async down (queryInterface, Sequelize) {
-  await queryInterface.bulkDelete('package_products', null, {}); // Önce ilişkili kayıtları sil
-  await queryInterface.bulkDelete('packages', null, {});
+  async down(queryInterface) {
+    await queryInterface.bulkDelete('package_products', null, {});
+    await queryInterface.bulkDelete('packages', null, {});
   }
 };
