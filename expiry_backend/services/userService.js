@@ -127,11 +127,10 @@ exports.updateProfile = async (userId, data) => {
   const user = await User.findByPk(userId);
   if (!user) throw new AppError('Kullanıcı bulunamadı', 404);
 
-  const { firstName, lastName, phone, address } = data;
+  const { firstName, lastName, address } = data;
 
   user.firstName = firstName || user.firstName;
   user.lastName = lastName || user.lastName;
-  user.phone = phone || user.phone;
   user.address = address || user.address;
 
   await user.save();
@@ -179,6 +178,8 @@ exports.resetPassword = async (email, token, newPassword) => {
   user.resetTokenExpiry = null;
   await user.save();
 
+  await exports.revokeAllUserTokens(user.id);
+
   return { message: 'Şifreniz başarıyla güncellendi' };
 };
 
@@ -198,15 +199,15 @@ exports.deleteAccount = async (userId, password) => {
     throw new AppError('Aktif siparişleriniz tamamlanmadan hesabınızı silemezsiniz', 409);
   }
 
-  user.email = `deleted_user_${userId}@deleted.com`;
-  user.firstName = 'Silinmiş';
-  user.lastName = 'Kullanıcı';
-  user.phone = null;
-  user.address = null;
-  user.password = Math.random().toString(36);
-  user.deletedAt = new Date();
+  await user.update({
+    email: `deleted_user_${userId}@deleted.com`,
+    firstName: 'Silinmiş',
+    lastName: 'Kullanıcı',
+    address: null,
+    password: Math.random().toString(36),
+  });
 
-  await user.save({ paranoid: false });
+  await user.destroy();
 
   return { message: 'Hesabınız başarıyla silindi' };
 };
