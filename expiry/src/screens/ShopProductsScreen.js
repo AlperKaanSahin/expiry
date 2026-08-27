@@ -48,6 +48,7 @@ const [deletingId, setDeletingId] = useState(null);
 const [errors, setErrors] = useState({});
 const [total, setTotal] = useState(0);
 const [page, setPage] = useState(1);
+const [showDatePicker, setShowDatePicker] = useState(false);
 
 const loadProducts = async (pageNumber = 1, isRefresh = false) => {
   if (isRefresh) setRefreshing(true);
@@ -348,16 +349,29 @@ if (error) {
                   {errors.quantity && <Text style={styles.errorText}>{errors.quantity}</Text>}
                 </View>
               </View>
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
+  <TouchableOpacity
+    style={styles.input}
+    onPress={() => setShowDatePicker(true)}
+  >
+    <Text>{expiryDate.toLocaleDateString('tr-TR')}</Text>
+  </TouchableOpacity>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
-                <DateTimePicker
-                  value={expiryDate}
-                  mode="date"
-                  display="default"
-                  onChange={(_, date) => { if (date) setExpiryDate(date); }}
-                />
-              </View>
+  {showDatePicker && (
+    <DateTimePicker
+      value={expiryDate}
+      mode="date"
+      display="default"
+      onChange={(event, date) => {
+        setShowDatePicker(false); // Android'de dialog kapanır kapanmaz picker'ı unmount et
+        if (event.type === 'set' && date) {
+          setExpiryDate(date);
+        }
+      }}
+    />
+  )}
+</View>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>

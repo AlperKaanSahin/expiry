@@ -35,7 +35,7 @@ const authLimiter = rateLimit({
   max: 10
 });
 
-if (process.env.NODE_ENV !== 'development') {
+if (!['development', 'test'].includes(process.env.NODE_ENV)) {
   app.use('/api/users/login', authLimiter);
   app.use('/api/users/register', authLimiter);
 }

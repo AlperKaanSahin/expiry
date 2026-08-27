@@ -12,8 +12,10 @@ router.put('/users/:id/role', auth, isAdmin, adminValidator.updateUserRole, vali
 router.delete('/users/:id', auth, isAdmin, adminController.deleteUser);
 
 router.get('/shops', auth, isAdmin, adminController.getAllShops);
-router.put('/shops/:id', auth, isAdmin, adminController.updateShop);
+router.put('/shops/:id', auth, isAdmin, adminValidator.updateShop, validate, adminController.updateShop);
 router.put('/shops/:id/status', auth, isAdmin, adminValidator.updateShopStatus, validate, adminController.updateShopStatus);
 router.delete('/shops/:id', auth, isAdmin, adminController.deleteShop);
+
+
 
 module.exports = router;

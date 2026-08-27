@@ -17,9 +17,7 @@ describe('Auth akışı: kayıt → giriş → profil → token → şifre → c
   let tokenBeforeReset; // eklendi
   let deviceId;
 
-  afterAll(async () => {
-    await sequelize.close();
-  });
+
 
   it('kullanıcı kayıt olabilir', async () => {
     const res = await request(app)
@@ -48,18 +46,20 @@ describe('Auth akışı: kayıt → giriş → profil → token → şifre → c
     refreshToken = res.body.refreshToken;
   });
 
-  it('aynı email ile tekrar kayıt olunamaz', async () => {
-    const res = await request(app)
-      .post('/api/users/register')
-      .send({
-        email,
-        password,
-        firstName: 'Another',
-        lastName: 'User',
-      });
+it('aynı email ile tekrar kayıt olunamaz', async () => {
+  const res = await request(app)
+    .post('/api/users/register')
+    .send({
+      email,
+      password,
+      firstName: 'Another',
+      lastName: 'User',
+    });
 
-    expect(res.status).toBe(409);
-  });
+  expect(res.status).toBe(409);
+  expect(res.body.error).toBeDefined();
+  expect(typeof res.body.error).toBe('string');
+});
 
   it('kullanıcı doğru bilgilerle giriş yapabilir', async () => {
     const res = await request(app)
@@ -83,17 +83,18 @@ describe('Auth akışı: kayıt → giriş → profil → token → şifre → c
     refreshToken = res.body.refreshToken;
   });
 
-  it('yanlış şifre ile giriş yapılamaz', async () => {
-    const res = await request(app)
-      .post('/api/users/login')
-      .send({
-        email,
-        password: 'wrong-password',
-      });
+it('yanlış şifre ile giriş yapılamaz', async () => {
+  const res = await request(app)
+    .post('/api/users/login')
+    .send({
+      email,
+      password: 'wrong-password',
+    });
 
-    expect(res.status).toBe(401);
-  });
-
+  expect(res.status).toBe(401);
+  expect(res.body.error).toBeDefined();
+  expect(typeof res.body.error).toBe('string');
+});
   it('kullanıcı kendi profilini görüntüleyebilir', async () => {
     const res = await request(app)
       .get('/api/users/profile')
@@ -180,17 +181,19 @@ describe('Auth akışı: kayıt → giriş → profil → token → şifre → c
     newRefreshToken = res.body.refreshToken;
   });
 
-  it('yanlış mevcut şifre ile şifre değiştirilemez', async () => {
-    const res = await request(app)
-      .put('/api/users/change-password')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({
-        password: 'wrong-password',
-        newPassword,
-      });
+it('yanlış mevcut şifre ile şifre değiştirilemez', async () => {
+  const res = await request(app)
+    .put('/api/users/change-password')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({
+      password: 'wrong-password',
+      newPassword,
+    });
 
-    expect(res.status).toBe(401);
-  });
+  expect(res.status).toBe(401);
+  expect(res.body.error).toBeDefined();
+  expect(typeof res.body.error).toBe('string');
+});
 
   it('doğru mevcut şifre ile şifre değiştirilebilir', async () => {
     const res = await request(app)
@@ -319,17 +322,19 @@ it('şifre sıfırlandıktan sonra eski refresh token artık geçersizdir', asyn
   expect(res.status).toBe(401);
 });
 
-  it('geçersiz reset token ile şifre sıfırlanamaz', async () => {
-    const res = await request(app)
-      .post('/api/users/reset-password')
-      .send({
-        email,
-        token: '000000',
-        newPassword: 'another123',
-      });
+it('geçersiz reset token ile şifre sıfırlanamaz', async () => {
+  const res = await request(app)
+    .post('/api/users/reset-password')
+    .send({
+      email,
+      token: '000000',
+      newPassword: 'another123',
+    });
 
-    expect(res.status).toBe(400);
-  });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBeDefined();
+  expect(typeof res.body.error).toBe('string');
+});
 
   it('cihaz kaydı yapılabilir', async () => {
     deviceId = `test-device-${timestamp}`;
@@ -407,4 +412,196 @@ it('şifre sıfırlandıktan sonra eski refresh token artık geçersizdir', asyn
     expect(deletedUser.firstName).toBe('Silinmiş');
     expect(deletedUser.lastName).toBe('Kullanıcı');
   });
+
+});
+
+describe('Auth akışı: validasyon, yetkilendirme, ek senaryolar', () => {
+  const timestamp = Date.now();
+  const email = `auth-extra+${timestamp}@test.com`;
+  const password = '123456';
+
+  let accessToken;
+  let userId;
+
+
+
+  it('kullanıcı kayıt olur (bu describe bloğu için)', async () => {
+    const res = await request(app)
+      .post('/api/users/register')
+      .send({ email, password, firstName: 'Extra', lastName: 'Test' });
+
+    expect(res.status).toBe(201);
+    accessToken = res.body.accessToken;
+    userId = res.body.user.id;
+  });
+
+  // ---------- Validasyon hataları ----------
+
+  it('geçersiz email formatıyla kayıt olunamaz', async () => {
+    const res = await request(app)
+      .post('/api/users/register')
+      .send({ email: 'not-an-email', password: '123456', firstName: 'A', lastName: 'B' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('6 karakterden kısa şifreyle kayıt olunamaz', async () => {
+    const res = await request(app)
+      .post('/api/users/register')
+      .send({ email: `short+${timestamp}@test.com`, password: '123', firstName: 'A', lastName: 'B' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('firstName/lastName eksikse kayıt olunamaz', async () => {
+    const res = await request(app)
+      .post('/api/users/register')
+      .send({ email: `noname+${timestamp}@test.com`, password: '123456' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('şifresiz login denemesi reddedilir', async () => {
+    const res = await request(app)
+      .post('/api/users/login')
+      .send({ email });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('geçersiz email formatıyla forgot-password reddedilir', async () => {
+    const res = await request(app)
+      .post('/api/users/forgot-password')
+      .send({ email: 'not-an-email' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('6 haneden farklı reset kodu reddedilir', async () => {
+    const res = await request(app)
+      .post('/api/users/reset-password')
+      .send({ email, token: '123', newPassword: 'newpass123' });
+
+    expect(res.status).toBe(400);
+  });
+
+  // ---------- Auth olmadan erişim ----------
+
+  it('token olmadan profil görüntülenemez (401)', async () => {
+    const res = await request(app).get('/api/users/profile');
+    expect(res.status).toBe(401);
+  });
+
+  it('token olmadan profil güncellenemez (401)', async () => {
+    const res = await request(app).put('/api/users/profile').send({ firstName: 'X' });
+    expect(res.status).toBe(401);
+  });
+
+  it('token olmadan şifre değiştirilemez (401)', async () => {
+    const res = await request(app)
+      .put('/api/users/change-password')
+      .send({ password, newPassword: 'newpass123' });
+    expect(res.status).toBe(401);
+  });
+
+  it('token olmadan hesap silinemez (401)', async () => {
+    const res = await request(app).delete('/api/users/account').send({ password });
+    expect(res.status).toBe(401);
+  });
+
+  it('token olmadan cihaz kaydı yapılamaz (401)', async () => {
+    const res = await request(app)
+      .post('/api/users/devices')
+      .send({ deviceId: 'x', fcmToken: 'y', platform: 'android' });
+    expect(res.status).toBe(401);
+  });
+
+  // ---------- refreshToken edge case'leri ----------
+
+  it('refreshToken hiç gönderilmezse 400 döner', async () => {
+    const res = await request(app).post('/api/users/refresh').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('bozuk formatlı refreshToken 401 döner', async () => {
+    const res = await request(app)
+      .post('/api/users/refresh')
+      .send({ refreshToken: 'not-a-valid-jwt' });
+    expect(res.status).toBe(401);
+  });
+
+  // ---------- removeDevice edge case ----------
+
+  it('var olmayan bir cihaz silinmeye çalışılırsa yine de 200 döner (idempotent)', async () => {
+    const res = await request(app)
+      .delete('/api/users/devices')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ deviceId: 'never-registered-device' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe('Cihaz kaydı silindi');
+  });
+
+  // ---------- deleteAccount: aktif sipariş varken silinemez ----------
+
+  it('aktif siparişi olan kullanıcı hesabını silemez', async () => {
+    // market sahibi + aktif market + ürün + paket + sipariş oluşturuyoruz,
+    // ödeme yapmadan (status: pending), sonra hesap silmeyi deniyoruz.
+    const shopOwnerRes = await request(app).post('/api/users/register').send({
+      email: `activeorder-shop+${timestamp}@test.com`, password: '123456', firstName: 'Shop', lastName: 'Owner',
+    });
+    const shopOwnerInitialToken = shopOwnerRes.body.accessToken;
+
+    const applyRes = await request(app)
+      .post('/api/shops/apply')
+      .set('Authorization', `Bearer ${shopOwnerInitialToken}`)
+      .send({ name: `Active Order Shop ${timestamp}`, address: 'Adres', phone: '05551239876' });
+    const shopId = applyRes.body.shop.id;
+
+    const adminLogin = await request(app)
+      .post('/api/users/login')
+      .send({ email: 'admin@example.com', password: '1234' });
+
+    await request(app)
+      .put(`/api/admin/shops/${shopId}/status`)
+      .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+      .send({ status: 'active' });
+
+    const shopOwnerLogin = await request(app).post('/api/users/login').send({
+      email: `activeorder-shop+${timestamp}@test.com`, password: '123456',
+    });
+    const shopOwnerToken = shopOwnerLogin.body.accessToken;
+
+    const productRes = await request(app)
+      .post('/api/shop/products')
+      .set('Authorization', `Bearer ${shopOwnerToken}`)
+      .send({ name: 'Active Order Ürün', price: 10, quantity: 10, expiryDate: '2027-01-01' });
+
+    const packageRes = await request(app)
+      .post('/api/shop/packages')
+      .set('Authorization', `Bearer ${shopOwnerToken}`)
+      .send({
+        name: 'Active Order Paket',
+        quantity: 5,
+        deliveryStart: '2027-01-01T10:00:00Z',
+        deliveryEnd: '2027-01-01T18:00:00Z',
+        products: [{ id: productRes.body.id, quantity: 1, price: 10 }],
+      });
+
+    await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ shopId, packages: [{ packageId: packageRes.body.id, quantity: 1 }] });
+
+    const deleteRes = await request(app)
+      .delete('/api/users/account')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ password });
+
+    expect(deleteRes.status).toBe(409);
+    expect(deleteRes.body.error).toBeDefined();
+  });
+});
+afterAll(async () => {
+  await sequelize.close();
 });
