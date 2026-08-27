@@ -11,3 +11,8 @@ exports.updateShopStatus = [
     .isIn(['pending', 'active', 'rejected', 'inactive'])
     .withMessage('Geçersiz market durumu'),
 ];
+exports.updateShop = [
+  body('name').notEmpty().withMessage('Market adı zorunlu'),
+  body('address').notEmpty().withMessage('Adres zorunlu'),
+  body('phone').isMobilePhone().withMessage('Geçerli bir telefon numarası giriniz'),
+];

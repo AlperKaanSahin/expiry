@@ -95,7 +95,15 @@ exports.updateShop = async (id, data, currentUserId) => {
   shop.name = data.name;
   shop.address = data.address;
   shop.phone = data.phone;
-  await shop.save();
+
+  try {
+    await shop.save();
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      throw new AppError('Bu market adı zaten kullanılıyor', 409);
+    }
+    throw err;
+  }
 
   eventBus.emit(AUDIT_EVENTS.SHOP_UPDATED, {
     actorId: currentUserId,
@@ -121,7 +129,7 @@ exports.deleteShop = async (id, currentUserId) => {
   const t = await sequelize.transaction();
   try {
     await User.destroy({ where: { id: shop.ownerId }, transaction: t });
-    await Shop.destroy({ where: { id } }, { transaction: t });
+    await Shop.destroy({ where: { id }, transaction: t }); // düzeltildi
     await t.commit();
   } catch (err) {
     await t.rollback();

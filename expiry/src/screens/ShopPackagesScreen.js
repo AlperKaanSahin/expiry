@@ -76,6 +76,14 @@ const ShopPackagesScreen = () => {
   const [error, setError] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+const formatDateTime = (date) =>
+  date.toLocaleString('tr-TR', {
+    day: '2-digit', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
   
 
 const loadPackages = async (pageNumber = 1, isRefresh = false) => {
@@ -489,26 +497,44 @@ ListEmptyComponent={
                   />
                 </View>
 
-                {/* TESLİMAT */}
-                <Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Başlangıç</Text>
-                  <DateTimePicker
-                    value={deliveryStart}
-                    mode="datetime"
-                    display="default"
-                    onChange={(_, date) => date && setDeliveryStart(date)}
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Bitiş</Text>
-                  <DateTimePicker
-                    value={deliveryEnd}
-                    mode="datetime"
-                    display="default"
-                    onChange={(_, date) => date && setDeliveryEnd(date)}
-                  />
-                </View>
+{/* TESLİMAT */}
+<Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
+
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Başlangıç</Text>
+  <TouchableOpacity style={styles.input} onPress={() => setShowStartPicker(true)}>
+    <Text>{formatDateTime(deliveryStart)}</Text>
+  </TouchableOpacity>
+  {showStartPicker && (
+    <DateTimePicker
+      value={deliveryStart}
+      mode="datetime"
+      display="default"
+      onChange={(event, date) => {
+        setShowStartPicker(false);
+        if (event.type === 'set' && date) setDeliveryStart(date);
+      }}
+    />
+  )}
+</View>
+
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Bitiş</Text>
+  <TouchableOpacity style={styles.input} onPress={() => setShowEndPicker(true)}>
+    <Text>{formatDateTime(deliveryEnd)}</Text>
+  </TouchableOpacity>
+  {showEndPicker && (
+    <DateTimePicker
+      value={deliveryEnd}
+      mode="datetime"
+      display="default"
+      onChange={(event, date) => {
+        setShowEndPicker(false);
+        if (event.type === 'set' && date) setDeliveryEnd(date);
+      }}
+    />
+  )}
+</View>
 
                 {/* OTOMATİK FİYAT DÜŞÜŞÜ */}
                 <Text style={styles.sectionLabel}>Otomatik Fiyat Düşüşü</Text>

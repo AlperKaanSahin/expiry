@@ -2,12 +2,13 @@ const request = require('supertest');
 const app = require('../../app');
 const { sequelize } = require('../../models');
 
-describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/paket → sipariş → ödeme → teslimat → onay', () => {
+describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/paket → sipariş → ödeme → teslimat → onay → release', () => {
   const timestamp = Date.now();
   const shopOwnerEmail = `shopowner+${timestamp}@test.com`;
+  const otherShopOwnerEmail = `othershop+${timestamp}@test.com`;
   const customerEmail = `customer+${timestamp}@test.com`;
 
-  let shopOwnerToken, customerToken, adminToken;
+  let shopOwnerToken, otherShopOwnerToken, customerToken, adminToken;
   let shopId, productId, packageId, orderId, deliveryToken;
 
   afterAll(async () => {
@@ -108,6 +109,16 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     deliveryToken = res.body.deliveryToken;
   });
 
+  // ---------- Yetkilendirme: deliver ----------
+
+  it('müşteri kendi siparişini teslimata hazır işaretleyemez (403)', async () => {
+    const res = await request(app)
+      .post(`/api/orders/${orderId}/deliver`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
   it('müşteri ödemeyi simüle eder, sipariş "paid" durumuna geçer', async () => {
     const res = await request(app)
       .post('/api/orders/simulate-payment')
@@ -118,6 +129,16 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     expect(res.body.order.status).toBe('paid');
   });
 
+  it('paid durumundaki sipariş müşterinin aktif (active) listesinde görünür', async () => {
+  const res = await request(app)
+    .get('/api/orders/user/me?tab=active')
+    .set('Authorization', `Bearer ${customerToken}`);
+
+  expect(res.status).toBe(200);
+  const ids = res.body.orders.map((o) => o.id);
+  expect(ids).toContain(orderId);
+});
+
   it('market sahibi siparişi teslimata hazır işaretler', async () => {
     const res = await request(app)
       .post(`/api/orders/${orderId}/deliver`)
@@ -125,6 +146,47 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('delivered');
+  });
+
+  // ---------- Yetkilendirme: confirm-qr ----------
+
+  it('farklı bir market sahibi başkasının QR kodunu onaylayamaz (403)', async () => {
+    const registerRes = await request(app).post('/api/users/register').send({
+      email: otherShopOwnerEmail, password: '123456', firstName: 'Other', lastName: 'Shop',
+    });
+    const otherToken = registerRes.body.accessToken;
+
+    const applyRes = await request(app)
+      .post('/api/shops/apply')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .send({ name: `Other Market ${timestamp}`, address: 'Adres', phone: '05559998877' });
+    const otherShopId = applyRes.body.shop.id;
+
+    await request(app)
+      .put(`/api/admin/shops/${otherShopId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'active' });
+
+    const loginRes = await request(app).post('/api/users/login').send({
+      email: otherShopOwnerEmail, password: '123456',
+    });
+    otherShopOwnerToken = loginRes.body.accessToken;
+
+    const res = await request(app)
+      .post('/api/orders/confirm-qr')
+      .set('Authorization', `Bearer ${otherShopOwnerToken}`)
+      .send({ deliveryToken });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('müşteri kendi QR kodunu kendisi onaylayamaz (403)', async () => {
+    const res = await request(app)
+      .post('/api/orders/confirm-qr')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ deliveryToken });
+
+    expect(res.status).toBe(403);
   });
 
   it('market sahibi QR kod ile teslimatı onaylar, sipariş "confirmed" olur', async () => {
@@ -137,12 +199,65 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     expect(res.body.status).toBe('confirmed');
   });
 
-  it('başka bir market sahibinin aynı QR kodu tekrar kullanması reddedilir', async () => {
+  it('confirmed durumundaki sipariş artık aktif (active) listede görünmez', async () => {
+  const res = await request(app)
+    .get('/api/orders/user/me?tab=active')
+    .set('Authorization', `Bearer ${customerToken}`);
+
+  expect(res.status).toBe(200);
+  const ids = res.body.orders.map((o) => o.id);
+  expect(ids).not.toContain(orderId);
+});
+
+  it('aynı QR kodu tekrar kullanılamaz (zaten confirmed, artık "delivered" değil)', async () => {
     const res = await request(app)
       .post('/api/orders/confirm-qr')
       .set('Authorization', `Bearer ${shopOwnerToken}`)
       .send({ deliveryToken });
 
     expect(res.status).toBe(404);
+  });
+
+  // ---------- confirmed → released ----------
+
+  it('sipariş release edilir, "released" durumuna geçer', async () => {
+    const res = await request(app)
+      .post(`/api/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${shopOwnerToken}`)
+      .send({ status: 'released' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('released');
+  });
+
+  it('released sonrası geçersiz bir sonraki geçiş denenirse 409 döner', async () => {
+    const res = await request(app)
+      .post(`/api/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${shopOwnerToken}`)
+      .send({ status: 'paid' });
+
+    expect(res.status).toBe(409);
+  });
+
+  // ---------- Listeleme ----------
+
+  it('müşteri geçmiş siparişlerini (past) listeleyebilir, sipariş orada görünür', async () => {
+    const res = await request(app)
+      .get('/api/orders/user/me?tab=past')
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    const ids = res.body.orders.map((o) => o.id);
+    expect(ids).toContain(orderId);
+  });
+
+  it('market sahibi geçmiş siparişlerini (past) listeleyebilir, sipariş orada görünür', async () => {
+    const res = await request(app)
+      .get('/api/orders/shop/me?tab=past')
+      .set('Authorization', `Bearer ${shopOwnerToken}`);
+
+    expect(res.status).toBe(200);
+    const ids = res.body.orders.map((o) => o.id);
+    expect(ids).toContain(orderId);
   });
 });

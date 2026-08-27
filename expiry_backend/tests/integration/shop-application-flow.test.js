@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../../app');
 const { sequelize } = require('../../models');
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('Market başvuru akışı: kayıt → başvuru → red → yeniden başvuru → onay', () => {
   const timestamp = Date.now();
@@ -50,6 +51,26 @@ describe('Market başvuru akışı: kayıt → başvuru → red → yeniden baş
 
     expect(shopId).toBeDefined();
   });
+
+  it('market başvurusu SHOP_CREATED audit logu oluşturur', async () => {
+  await wait(150);
+
+  const adminLogin = await request(app)
+    .post('/api/users/login')
+    .send({ email: 'admin@example.com', password: '1234' });
+
+  const logsRes = await request(app)
+    .get('/api/audit-logs?limit=50')
+    .set('Authorization', `Bearer ${adminLogin.body.accessToken}`);
+
+  const log = logsRes.body.logs.find(
+    (l) => l.action === 'SHOP_CREATED' && l.entityId === shopId
+  );
+
+  expect(log).toBeDefined();
+  expect(log.entityType).toBe('SHOP');
+  expect(log.metadata.shop.name).toBe(`Test Market ${timestamp}`);
+});
 
   it('kullanıcı aynı market için tekrar başvuru yapamaz', async () => {
     const res = await request(app)
@@ -110,6 +131,21 @@ describe('Market başvuru akışı: kayıt → başvuru → red → yeniden baş
     expect(res.body.shop.phone).toBe('05559876543');
     expect(res.body.shop.status).toBe('pending');
   });
+
+  it('yeniden başvuru SHOP_REAPPLIED audit logu oluşturur', async () => {
+  await wait(150);
+
+  const logsRes = await request(app)
+    .get('/api/audit-logs?limit=50')
+    .set('Authorization', `Bearer ${adminToken}`);
+
+  const log = logsRes.body.logs.find(
+    (l) => l.action === 'SHOP_REAPPLIED' && l.entityId === shopId
+  );
+
+  expect(log).toBeDefined();
+  expect(log.metadata.shop.name).toBe(`Test Market Reapply ${timestamp}`);
+});
 
   it('admin yeniden yapılan market başvurusunu onaylar', async () => {
     const res = await request(app)

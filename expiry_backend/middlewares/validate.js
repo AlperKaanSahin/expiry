@@ -1,14 +1,13 @@
 const { validationResult } = require('express-validator');
+const AppError = require('../utils/AppError');
 
 module.exports = (req, res, next) => {
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
-    return res.status(400).json({
-      errors: errors.array().map(e => ({
-        field: e.path,
-        message: e.msg
-      }))
-    });
+    const message = errors.array()[0].msg;
+    return next(new AppError(message, 400));
   }
+
   next();
 };

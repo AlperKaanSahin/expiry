@@ -7,6 +7,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8e896faf-9f5e-448f-8f4e-f057aa2866b4"
+    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,19 +21,19 @@
     "ios": {
       "supportsTablet": true
     },
-"android": {
-  "adaptiveIcon": {
-    "foregroundImage": "./assets/adaptive-icon.png",
-    "backgroundColor": "#ffffff"
-  },
-  "edgeToEdgeEnabled": true,
-  "permissions": [
-    "android.permission.CAMERA",
-    "android.permission.RECORD_AUDIO"
-  ],
-  "package": "com.expiry.app",
-  "googleServicesFile": "./google-services.json"
-},
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.expiry.app",
+      "googleServicesFile": "./google-services.json"
+    },
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -42,7 +48,8 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      "expo-updates"
     ],
     "extra": {
       "eas": {

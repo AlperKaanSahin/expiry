@@ -3,6 +3,8 @@ const { createNotification } = require('./notificationService');
 const { Op } = require('sequelize');
 const iyzicoService = require('./iyzicoService');
 const AppError = require('../utils/AppError');
+const eventBus = require('../events/eventBus');
+const AUDIT_EVENTS = require('../events/audit.events');
 
 exports.applyShop = async (userId, data) => {
   if (!data?.name || !data?.address || !data?.phone) {
@@ -21,6 +23,12 @@ exports.applyShop = async (userId, data) => {
     });
 
     await notifyAdmin(`${data.name} yeni market başvurusu yaptı`, 'SHOP_APPLY');
+
+    eventBus.emit(AUDIT_EVENTS.SHOP_CREATED, {
+      actorId: userId,
+      shop: { id: shop.id, name: shop.name, address: shop.address, phone: shop.phone },
+    });
+
     return shop;
   }
 
@@ -37,6 +45,13 @@ exports.applyShop = async (userId, data) => {
     await existingShop.save();
 
     await notifyAdmin(`${existingShop.name} tekrar başvuru yaptı`, 'SHOP_REAPPLY');
+
+    eventBus.emit(AUDIT_EVENTS.SHOP_CREATED, {
+      actorId: userId,
+      shop: { id: existingShop.id, name: existingShop.name, address: existingShop.address, phone: existingShop.phone },
+      reapplied: true,
+    });
+
     return existingShop;
   }
 
