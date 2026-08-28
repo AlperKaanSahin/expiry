@@ -12,10 +12,60 @@ jest.mock('../../services/notificationService', () => ({
 jest.mock('../../services/iyzicoService', () => ({
   createOrUpdateSubMerchant: jest.fn(),
 }));
+jest.mock('../../events/eventBus', () => ({ emit: jest.fn() }));
 
 const { Shop, User, Order, ShopRating } = require('../../models');
 const iyzicoService = require('../../services/iyzicoService');
 const shopService = require('../../services/shopService');
+const eventBus = require('../../events/eventBus');
+
+describe('shopService.applyShop', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('eksik bilgi ile başvurulursa AppError(400) fırlatır', async () => {
+    await expect(shopService.applyShop(42, { name: '', address: '', phone: '' }))
+      .rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('ilk başvuruda shop oluşturur ve SHOP_CREATED audit event yayınlar', async () => {
+    Shop.findOne.mockResolvedValue(null);
+    Shop.create = jest.fn().mockResolvedValue({ id: 1, name: 'Yeni Market', address: 'Adres', phone: '000' });
+    User.findOne.mockResolvedValue({ id: 99 }); // admin
+
+    await shopService.applyShop(42, { name: 'Yeni Market', address: 'Adres', phone: '000' });
+
+    expect(Shop.create).toHaveBeenCalled();
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ actorId: 42, shop: expect.objectContaining({ id: 1 }) })
+    );
+  });
+
+  it('aktif shopu olan kullanıcı tekrar başvuramaz (AppError 409)', async () => {
+    Shop.findOne.mockResolvedValue({ status: 'active' });
+
+    await expect(
+      shopService.applyShop(42, { name: 'X', address: 'Y', phone: 'Z' })
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('reddedilmiş shop sahibi tekrar başvurunca reapplied: true ile audit event yayınlar', async () => {
+    const mockShop = {
+      id: 1, status: 'rejected', name: 'Eski', address: 'Eski', phone: '000',
+      save: jest.fn().mockResolvedValue(true),
+    };
+    Shop.findOne.mockResolvedValue(mockShop);
+    User.findOne.mockResolvedValue({ id: 99 });
+
+    await shopService.applyShop(42, { name: 'Yeni İsim', address: 'Yeni Adres', phone: '111' });
+
+    expect(mockShop.status).toBe('pending');
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ reapplied: true })
+    );
+  });
+});
 
 describe('shopService.getMyShopProfile — ownership', () => {
   beforeEach(() => jest.clearAllMocks());

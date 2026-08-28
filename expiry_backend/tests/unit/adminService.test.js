@@ -1,6 +1,6 @@
 jest.mock('../../models', () => ({
   User: { findAndCountAll: jest.fn(), findByPk: jest.fn() },
-  Shop: { findByPk: jest.fn(), findAndCountAll: jest.fn() },
+  Shop: { findByPk: jest.fn(), findAndCountAll: jest.fn(), destroy: jest.fn() },
   AuditLog: { findAndCountAll: jest.fn() },
   sequelize: { transaction: jest.fn() },
 }));
@@ -106,6 +106,45 @@ describe('adminService', () => {
     });
   });
 
+  describe('updateShop', () => {
+  it('shop bulunamazsa AppError(404) fırlatır', async () => {
+    Shop.findByPk.mockResolvedValue(null);
+
+    await expect(
+      adminService.updateShop(999, { name: 'X', address: 'Y', phone: 'Z' }, 99)
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('geçerli güncellemede shop kaydedilir ve audit event yayınlanır', async () => {
+    const mockShop = {
+      id: 1, name: 'Eski', address: 'Eski Adres', phone: '000',
+      dataValues: { id: 1, name: 'Eski', address: 'Eski Adres', phone: '000' },
+      save: jest.fn().mockResolvedValue(true),
+    };
+    Shop.findByPk.mockResolvedValue(mockShop);
+
+    await adminService.updateShop(1, { name: 'Yeni', address: 'Yeni Adres', phone: '111' }, 99);
+
+    expect(mockShop.name).toBe('Yeni');
+    expect(mockShop.save).toHaveBeenCalled();
+    expect(eventBus.emit).toHaveBeenCalled();
+  });
+
+  it('unique constraint hatası alınırsa AppError(409) fırlatır', async () => {
+    const mockShop = {
+      id: 1, name: 'Eski', address: 'Eski Adres', phone: '000',
+      save: jest.fn().mockRejectedValue({ name: 'SequelizeUniqueConstraintError' }),
+    };
+    Shop.findByPk.mockResolvedValue(mockShop);
+
+    await expect(
+      adminService.updateShop(1, { name: 'Çakışan İsim', address: 'A', phone: 'B' }, 99)
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(eventBus.emit).not.toHaveBeenCalled();
+  });
+});
+
   describe('deleteShop — transaction rollback', () => {
     it('shop bulunamazsa AppError(404) fırlatır', async () => {
       Shop.findByPk.mockResolvedValue(null);
@@ -123,5 +162,20 @@ describe('adminService', () => {
       expect(t.rollback).toHaveBeenCalled();
       expect(t.commit).not.toHaveBeenCalled();
     });
+
+    it('Shop.destroy başarısız olursa da rollback yapar (transaction parametresinin doğru bağlandığını doğrular)', async () => {
+  const t = mockTransaction();
+  Shop.findByPk.mockResolvedValue({ id: 1, name: 'X', address: 'Y', ownerId: 5 });
+  User.destroy = jest.fn().mockResolvedValue(true);
+  Shop.destroy = jest.fn().mockRejectedValue(new Error('DB hatası'));
+
+  await expect(adminService.deleteShop(1, 99)).rejects.toThrow();
+
+  expect(Shop.destroy).toHaveBeenCalledWith(
+    expect.objectContaining({ where: { id: 1 }, transaction: t })
+  );
+  expect(t.rollback).toHaveBeenCalled();
+  expect(t.commit).not.toHaveBeenCalled();
+});
   });
 });
