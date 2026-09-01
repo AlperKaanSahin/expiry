@@ -61,9 +61,22 @@ const updatePaymentSettings = catchAsync(async (req, res) => {
   const result = await shopService.updatePaymentSettings(req.user.id, req.body);
   res.json({ message: 'Ödeme bilgileri güncellendi', ...result });
 });
+const updateCoverPhoto = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new AppError('Fotoğraf dosyası gerekli', 400);
+  }
 
+  const shop = await shopService.updateCoverPhoto(
+    req.user.id,
+    req.file.buffer,
+    req.file.originalname,
+    req.file.mimetype
+  );
+
+  res.json({ message: 'Kapak fotoğrafı güncellendi', shop });
+});
 module.exports = {
   list, getShopWithPackages, rateShop, canRateShop, applyShop,
   getMyShop, getMyShopProfile, updateShopProfile,
-  getPaymentSettings, updatePaymentSettings
+  getPaymentSettings, updatePaymentSettings, updateCoverPhoto
 };

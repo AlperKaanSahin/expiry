@@ -5,9 +5,10 @@ const iyzicoService = require('./iyzicoService');
 const AppError = require('../utils/AppError');
 const eventBus = require('../events/eventBus');
 const AUDIT_EVENTS = require('../events/audit.events');
+const storageService = require('./storageService');
 
 exports.applyShop = async (userId, data) => {
-  if (!data?.name || !data?.address || !data?.phone) {
+  if (!data?.name || !data?.address || !data?.phone || !data?.category) {
     throw new AppError('Eksik market bilgisi', 400);
   }
 
@@ -18,6 +19,7 @@ exports.applyShop = async (userId, data) => {
       name: data.name,
       address: data.address,
       phone: data.phone,
+      category: data.category,
       ownerId: userId,
       status: 'pending'
     });
@@ -26,7 +28,7 @@ exports.applyShop = async (userId, data) => {
 
     eventBus.emit(AUDIT_EVENTS.SHOP_CREATED, {
       actorId: userId,
-      shop: { id: shop.id, name: shop.name, address: shop.address, phone: shop.phone },
+      shop: { id: shop.id, name: shop.name, address: shop.address, phone: shop.phone, category: shop.category },
     });
 
     return shop;
@@ -41,6 +43,7 @@ exports.applyShop = async (userId, data) => {
     existingShop.name = data.name;
     existingShop.address = data.address;
     existingShop.phone = data.phone;
+    existingShop.category = data.category;
     existingShop.status = 'pending';
     await existingShop.save();
 
@@ -48,7 +51,7 @@ exports.applyShop = async (userId, data) => {
 
     eventBus.emit(AUDIT_EVENTS.SHOP_CREATED, {
       actorId: userId,
-      shop: { id: existingShop.id, name: existingShop.name, address: existingShop.address, phone: existingShop.phone },
+      shop: { id: existingShop.id, name: existingShop.name, address: existingShop.address, phone: existingShop.phone, category: existingShop.category },
       reapplied: true,
     });
 
@@ -253,4 +256,22 @@ exports.updatePaymentSettings = async (userId, data) => {
     subMerchantStatus: shop.subMerchantStatus,
     subMerchantKey: shop.subMerchantKey,
   };
+};
+exports.updateCoverPhoto = async (userId, fileBuffer, originalName, mimetype) => {
+  const shop = await Shop.findOne({ where: { ownerId: userId } });
+  if (!shop) throw new AppError('Market bulunamadı', 404);
+
+  const oldPendingUrl = shop.coverImagePendingUrl;
+
+  const newImageUrl = await storageService.uploadFile(fileBuffer, originalName, mimetype);
+
+  shop.coverImagePendingUrl = newImageUrl;
+  await shop.save();
+
+  // Eğer daha önce onay bekleyen başka bir fotoğraf varsa (değiştirildiyse), onu sil
+  if (oldPendingUrl) {
+    await storageService.deleteFile(oldPendingUrl);
+  }
+
+  return shop;
 };

@@ -13,6 +13,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 
 require('./handlers/notification.handler');
 require('./handlers/audit.handler');
@@ -53,6 +54,7 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/audit-logs', require('./routes/auditRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/', (req, res) => {
   res.send('Backend is running');
