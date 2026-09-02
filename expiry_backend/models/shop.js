@@ -16,6 +16,18 @@ module.exports = (sequelize, DataTypes) => {
     legalCompanyTitle: { type: DataTypes.STRING, allowNull: true },
     subMerchantKey: { type: DataTypes.STRING, allowNull: true },
     subMerchantStatus: { type: DataTypes.ENUM('pending', 'active', 'failed'), allowNull: false, defaultValue: 'pending' },
+    category: {
+  type: DataTypes.ENUM('BAKERY', 'GROCERY', 'MARKET', 'PREPARED_MEALS', 'CAFE', 'DELI', 'OTHER'),
+  allowNull: true,
+},
+coverImageUrl: {
+  type: DataTypes.STRING,
+  allowNull: true,
+},
+coverImagePendingUrl: {
+  type: DataTypes.STRING,
+  allowNull: true,
+},
   }, {
     timestamps: true,
     paranoid: true,

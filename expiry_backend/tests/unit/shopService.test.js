@@ -32,7 +32,7 @@ describe('shopService.applyShop', () => {
     Shop.create = jest.fn().mockResolvedValue({ id: 1, name: 'Yeni Market', address: 'Adres', phone: '000' });
     User.findOne.mockResolvedValue({ id: 99 }); // admin
 
-    await shopService.applyShop(42, { name: 'Yeni Market', address: 'Adres', phone: '000' });
+    await shopService.applyShop(42, { name: 'Yeni Market', address: 'Adres', phone: '000', category: 'MARKET' });
 
     expect(Shop.create).toHaveBeenCalled();
     expect(eventBus.emit).toHaveBeenCalledWith(
@@ -45,7 +45,7 @@ describe('shopService.applyShop', () => {
     Shop.findOne.mockResolvedValue({ status: 'active' });
 
     await expect(
-      shopService.applyShop(42, { name: 'X', address: 'Y', phone: 'Z' })
+      shopService.applyShop(42, { name: 'X', address: 'Y', phone: 'Z', category: 'MARKET' })
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
@@ -57,7 +57,7 @@ describe('shopService.applyShop', () => {
     Shop.findOne.mockResolvedValue(mockShop);
     User.findOne.mockResolvedValue({ id: 99 });
 
-    await shopService.applyShop(42, { name: 'Yeni İsim', address: 'Yeni Adres', phone: '111' });
+    await shopService.applyShop(42, { name: 'Yeni İsim', address: 'Yeni Adres', phone: '111', category: 'MARKET' });
 
     expect(mockShop.status).toBe('pending');
     expect(eventBus.emit).toHaveBeenCalledWith(

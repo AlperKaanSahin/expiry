@@ -224,6 +224,7 @@ it('admin bir kullanıcıyı gerçekten silebilir', async () => {
         name: `Admin Test Market A ${timestamp}`,
         address: 'Test Adres A',
         phone: '05551234567',
+        category: 'MARKET',
       });
 
     expect(applyRes.status).toBe(200);
@@ -252,6 +253,7 @@ it('admin bir kullanıcıyı gerçekten silebilir', async () => {
         name: `Admin Test Market B ${timestamp}`,
         address: 'Test Adres B',
         phone: '05551234568',
+        category: 'MARKET',
       });
 
     expect(applyRes.status).toBe(200);
@@ -278,6 +280,7 @@ it('admin bir kullanıcıyı gerçekten silebilir', async () => {
         name: `Admin Test Market C ${timestamp}`,
         address: 'Test Adres C',
         phone: '05551234569',
+        category: 'MARKET',
       });
 
     expect(applyRes.status).toBe(200);

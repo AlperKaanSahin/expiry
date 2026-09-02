@@ -37,7 +37,7 @@ describe('Paket görüntüleme akışı: getById, shop packages', () => {
     const applyRes = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${initialToken}`)
-      .send({ name: `Pkg Market ${timestamp}`, address: 'Adres', phone: '05551112233' });
+      .send({ name: `Pkg Market ${timestamp}`, address: 'Adres', phone: '05551112233', category: 'MARKET' });
 
     shopId = applyRes.body.shop.id;
 
@@ -143,7 +143,7 @@ describe('Paket görüntüleme akışı: getById, shop packages', () => {
     const applyRes = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${registerRes.body.accessToken}`)
-      .send({ name: `Empty Market ${timestamp}`, address: 'Adres', phone: '05559990000' });
+      .send({ name: `Empty Market ${timestamp}`, address: 'Adres', phone: '05559990000', category: 'MARKET' });
 
     const emptyShopId = applyRes.body.shop.id;
 

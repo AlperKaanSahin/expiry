@@ -10,6 +10,9 @@ exports.applyShop = [
   body('phone')
     .isMobilePhone()
     .withMessage('Geçerli bir telefon numarası giriniz'),
+    body('category')
+  .isIn(['BAKERY', 'GROCERY', 'MARKET', 'PREPARED_MEALS', 'CAFE', 'DELI', 'OTHER'])
+  .withMessage('Geçerli bir kategori seçin'),
 ];
 
 exports.rateShop = [

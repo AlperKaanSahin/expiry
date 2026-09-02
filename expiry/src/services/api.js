@@ -140,6 +140,7 @@ export const deleteShop = async (id) => {
   return res.data;
 };
 
+
 // ─── PACKAGES ────────────────────────────────────────────
 export const fetchShopPackages = async (shopId) => {
 
@@ -153,7 +154,6 @@ export const fetchPackageDetail = async (packageId) => {
 };
 
 // ─── SHOP PRODUCTS ───────────────────────────────────────
-// api.js
 export const fetchAllShopProducts = async () => {
   const response = await api.get('/shop/products/all');
   return response.data;  // düz array
@@ -296,6 +296,36 @@ export const updateShopStatus = async (id, status) => {
 
 export const fetchAuditLogs = async () => {
   return api.get('/audit-logs');
+};
+
+export const uploadShopCoverPhoto = async (imageUri) => {
+  const formData = new FormData();
+  formData.append('photo', {
+    uri: imageUri,
+    name: 'cover.jpg',
+    type: 'image/jpeg',
+  });
+
+  const res = await api.patch('/shops/me/cover-photo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+};
+
+// ─── ADMIN — FOTOĞRAF ONAYI ──────────────────────────────
+export const fetchPendingPhotos = async () => {
+  const res = await api.get('/admin/shops/pending-photos');
+  return res.data;
+};
+
+export const approveShopPhoto = async (shopId) => {
+  const res = await api.patch(`/admin/shops/${shopId}/photo/approve`);
+  return res.data;
+};
+
+export const rejectShopPhoto = async (shopId) => {
+  const res = await api.patch(`/admin/shops/${shopId}/photo/reject`);
+  return res.data;
 };
 
 export { api };

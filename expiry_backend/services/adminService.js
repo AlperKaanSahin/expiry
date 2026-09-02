@@ -4,6 +4,8 @@ const eventBus = require('../events/eventBus');
 const AUDIT_EVENTS = require('../events/audit.events');
 const SHOP_EVENTS = require('../events/shop.events');
 const AppError = require('../utils/AppError');
+const storageService = require('./storageService');
+const { Op } = require('sequelize');
 
 exports.getAllUsers = async (page = 1, limit = 10) => {
   const offset = (page - 1) * limit;
@@ -203,4 +205,55 @@ exports.getAuditLogs = async (page = 1, limit = 20) => {
     limit,
     offset
   });
+};
+
+exports.getPendingPhotos = async () => {
+  return await Shop.findAll({
+    where: { coverImagePendingUrl: { [Op.ne]: null } },
+    attributes: ['id', 'name', 'coverImageUrl', 'coverImagePendingUrl'],
+  });
+};
+
+exports.approveShopPhoto = async (shopId, currentUserId) => {
+  const shop = await Shop.findByPk(shopId);
+  if (!shop) throw new AppError('Market bulunamadı', 404);
+  if (!shop.coverImagePendingUrl) throw new AppError('Onay bekleyen fotoğraf yok', 400);
+
+  const oldImageUrl = shop.coverImageUrl;
+  const approvedUrl = shop.coverImagePendingUrl;
+
+  shop.coverImageUrl = approvedUrl;
+  shop.coverImagePendingUrl = null;
+  await shop.save();
+
+  if (oldImageUrl) {
+    await storageService.deleteFile(oldImageUrl);
+  }
+
+  eventBus.emit(AUDIT_EVENTS.SHOP_PHOTO_APPROVED, {
+    actorId: currentUserId,
+    shop: { id: shop.id, name: shop.name },
+  });
+
+  return shop;
+};
+
+exports.rejectShopPhoto = async (shopId, currentUserId) => {
+  const shop = await Shop.findByPk(shopId);
+  if (!shop) throw new AppError('Market bulunamadı', 404);
+  if (!shop.coverImagePendingUrl) throw new AppError('Onay bekleyen fotoğraf yok', 400);
+
+  const rejectedUrl = shop.coverImagePendingUrl;
+
+  shop.coverImagePendingUrl = null;
+  await shop.save();
+
+  await storageService.deleteFile(rejectedUrl);
+
+  eventBus.emit(AUDIT_EVENTS.SHOP_PHOTO_REJECTED, {
+    actorId: currentUserId,
+    shop: { id: shop.id, name: shop.name },
+  });
+
+  return shop;
 };

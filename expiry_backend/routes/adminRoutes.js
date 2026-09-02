@@ -16,6 +16,10 @@ router.put('/shops/:id', auth, isAdmin, adminValidator.updateShop, validate, adm
 router.put('/shops/:id/status', auth, isAdmin, adminValidator.updateShopStatus, validate, adminController.updateShopStatus);
 router.delete('/shops/:id', auth, isAdmin, adminController.deleteShop);
 
+router.get('/shops/pending-photos', auth, isAdmin, adminController.getPendingPhotos);
+router.patch('/shops/:id/photo/approve', auth, isAdmin, adminController.approveShopPhoto);
+router.patch('/shops/:id/photo/reject', auth, isAdmin, adminController.rejectShopPhoto);
+
 
 
 module.exports = router;

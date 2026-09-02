@@ -107,3 +107,33 @@ eventBus.on(AUDIT_EVENTS.ROLE_CHANGED, async (data) => {
     console.error('AUDIT ROLE_CHANGED ERROR:', err);
   }
 });
+
+eventBus.on(AUDIT_EVENTS.SHOP_PHOTO_APPROVED, async (data) => {
+  try {
+    await auditService.log({
+      actorId: data.actorId,
+      action: 'SHOP_PHOTO_APPROVED',
+      entityType: 'SHOP',
+      entityId: data.shop.id,
+      description: `Shop cover photo approved: ${data.shop.name}`,
+      metadata: { shop: data.shop },
+    });
+  } catch (err) {
+    console.error('AUDIT SHOP_PHOTO_APPROVED ERROR:', err);
+  }
+});
+
+eventBus.on(AUDIT_EVENTS.SHOP_PHOTO_REJECTED, async (data) => {
+  try {
+    await auditService.log({
+      actorId: data.actorId,
+      action: 'SHOP_PHOTO_REJECTED',
+      entityType: 'SHOP',
+      entityId: data.shop.id,
+      description: `Shop cover photo rejected: ${data.shop.name}`,
+      metadata: { shop: data.shop },
+    });
+  } catch (err) {
+    console.error('AUDIT SHOP_PHOTO_REJECTED ERROR:', err);
+  }
+});

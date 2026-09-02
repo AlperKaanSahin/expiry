@@ -19,12 +19,15 @@ import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import { useAuth } from '../context/AuthContext';
+import { CATEGORIES } from '../constants/shopCategories';
 
 const EMPTY_FORM = { name: '', address: '', phone: '' };
+
 
 const ShopApplyScreen = ({ navigation }) => {
   const { user } = useAuth();
   const [form, setForm] = useState(EMPTY_FORM);
+  const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [shopStatus, setShopStatus] = useState(null);
@@ -54,49 +57,49 @@ const ShopApplyScreen = ({ navigation }) => {
   }, []);
 
   const handleChange = (key, value) => {
-  setForm(prev => ({ ...prev, [key]: value }));
-  if (errors[key]) setErrors(prev => ({ ...prev, [key]: null }));
-};
+    setForm(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors(prev => ({ ...prev, [key]: null }));
+  };
 
-const handleSubmit = async () => {
-  const nameError = validateField('name', form.name);
-  const phoneError = validateField('phone', form.phone);
+  const handleSubmit = async () => {
+    const nameError = validateField('name', form.name);
+    const phoneError = validateField('phone', form.phone);
 
-  if (nameError || phoneError) {
-    setErrors({ name: nameError, phone: phoneError });
-    return;
-  }
+    if (nameError || phoneError || !category) {
+      setErrors({ name: nameError, phone: phoneError, category: !category ? 'Kategori seçimi zorunlu' : null });
+      return;
+    }
 
-  try {
-    setLoading(true);
-    await applyForShop(form);
-    Toast.show({ type: 'success', text1: 'Başvuru Alındı', text2: 'Admin onayı bekleniyor' });
-    navigation.navigate('Home');
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      setLoading(true);
+      await applyForShop({ ...form, category });
+      Toast.show({ type: 'success', text1: 'Başvuru Alındı', text2: 'Admin onayı bekleniyor' });
+      navigation.navigate('Home');
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-
-const validateField = (name, value) => {
-  if (name === 'name') return !value.trim() ? 'Market adı zorunlu' : null;
-  if (name === 'phone') {
-    if (!value.trim()) return 'Telefon zorunlu';
-    if (value.length !== 10) return 'Telefon 10 hane olmalı';
+  const validateField = (name, value) => {
+    if (name === 'name') return !value.trim() ? 'Market adı zorunlu' : null;
+    if (name === 'phone') {
+      if (!value.trim()) return 'Telefon zorunlu';
+      if (value.length !== 10) return 'Telefon 10 hane olmalı';
+      return null;
+    }
     return null;
-  }
-  return null;
-};
+  };
 
-const handleBlur = (name) => {
-  const error = validateField(name, form[name]);
-  setErrors(prev => ({ ...prev, [name]: error }));
-};
-if (statusLoading) {
-  return <LoadingState />;
-}
+  const handleBlur = (name) => {
+    const error = validateField(name, form[name]);
+    setErrors(prev => ({ ...prev, [name]: error }));
+  };
+
+  if (statusLoading) {
+    return <LoadingState />;
+  }
 
   if (shopStatus === 'pending') {
     return (
@@ -132,7 +135,6 @@ if (statusLoading) {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.appName}>expiry</Text>
@@ -140,16 +142,12 @@ if (statusLoading) {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={styles.body}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* HERO */}
           <View style={styles.hero}>
             <Text style={styles.heroLabel}>Market Ol</Text>
             <Text style={styles.heroName}>Market Başvurusu</Text>
@@ -158,21 +156,47 @@ if (statusLoading) {
             </Text>
           </View>
 
-          {/* FORM */}
+          {/* KATEGORİ SEÇİMİ */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Kategori *</Text>
+            <View style={styles.categoryGrid}>
+              {CATEGORIES.map((cat) => {
+                const active = category === cat.key;
+                return (
+                  <TouchableOpacity
+                    key={cat.key}
+                    style={[styles.categoryChip, active && styles.categoryChipActive]}
+                    onPress={() => {
+                      setCategory(cat.key);
+                      if (errors.category) setErrors(prev => ({ ...prev, category: null }));
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Icon name={cat.icon} size={16} color={active ? COLORS.white : COLORS.text} />
+                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+          </View>
+
           <View style={styles.form}>
-         <View style={styles.inputGroup}>
-  <Text style={styles.inputLabel}>Market Adı *</Text>
-  <TextInput
-    style={[styles.input, errors.name && styles.inputError]}
-    value={form.name}
-    onChangeText={text => handleChange('name', text)}
-    onBlur={() => handleBlur('name')}
-    placeholder="Market adını girin"
-    placeholderTextColor={COLORS.textMuted}
-    returnKeyType="next"
-  />
-  {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
-</View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Market Adı *</Text>
+              <TextInput
+                style={[styles.input, errors.name && styles.inputError]}
+                value={form.name}
+                onChangeText={text => handleChange('name', text)}
+                onBlur={() => handleBlur('name')}
+                placeholder="Market adını girin"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="next"
+              />
+              {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+            </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Adres</Text>
@@ -188,24 +212,23 @@ if (statusLoading) {
               />
             </View>
 
-<View style={styles.inputGroup}>
-  <Text style={styles.inputLabel}>Telefon *</Text>
-  <TextInput
-    style={[styles.input, errors.phone && styles.inputError]}
-    value={form.phone}
-    onChangeText={text => { if (text.length <= 10) handleChange('phone', text.replace(/[^0-9]/g, '')); }}
-    onBlur={() => handleBlur('phone')}
-    placeholder="05XX XXX XX XX"
-    placeholderTextColor={COLORS.textMuted}
-    keyboardType="phone-pad"
-    maxLength={10}
-    returnKeyType="done"
-  />
-  {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-</View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Telefon *</Text>
+              <TextInput
+                style={[styles.input, errors.phone && styles.inputError]}
+                value={form.phone}
+                onChangeText={text => { if (text.length <= 10) handleChange('phone', text.replace(/[^0-9]/g, '')); }}
+                onBlur={() => handleBlur('phone')}
+                placeholder="05XX XXX XX XX"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="phone-pad"
+                maxLength={10}
+                returnKeyType="done"
+              />
+              {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+            </View>
           </View>
 
-          {/* SUBMIT */}
           <TouchableOpacity
             style={styles.submitButton}
             onPress={handleSubmit}
@@ -253,8 +276,19 @@ const styles = StyleSheet.create({
   heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5, marginBottom: 8 },
   heroSub: { fontSize: 14, color: COLORS.textMuted, lineHeight: 20 },
 
-  form: { gap: 16, marginBottom: 24 },
-  inputGroup: { gap: 6 },
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 18, backgroundColor: COLORS.white,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  categoryChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  categoryChipText: { fontSize: 13, fontWeight: '600', color: COLORS.text },
+  categoryChipTextActive: { color: COLORS.white },
+
+  form: { gap: 16, marginBottom: 24, marginTop: 20 },
+  inputGroup: { gap: 6, marginBottom: 20 },
   inputLabel: { fontSize: 13, fontWeight: '500', color: COLORS.textMuted },
   input: {
     backgroundColor: COLORS.white,
@@ -286,7 +320,6 @@ const styles = StyleSheet.create({
   },
   cancelText: { fontSize: 15, fontWeight: '600', color: COLORS.textMuted },
 
-  // PENDING
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   pendingIcon: {
     width: 80, height: 80,
@@ -299,7 +332,7 @@ const styles = StyleSheet.create({
   pendingTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, textAlign: 'center', marginBottom: 8 },
   pendingSubtitle: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   inputError: { borderColor: COLORS.red },
-errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
+  errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
 });
 
 export default ShopApplyScreen;

@@ -66,3 +66,17 @@ exports.updateShopStatus = catchAsync(async (req, res) => {
 
   res.json({ message: 'Status updated', shop });
 });
+exports.getPendingPhotos = catchAsync(async (req, res) => {
+  const shops = await adminService.getPendingPhotos();
+  res.json({ shops });
+});
+
+exports.approveShopPhoto = catchAsync(async (req, res) => {
+  const shop = await adminService.approveShopPhoto(req.params.id, req.user.id);
+  res.json({ message: 'Fotoğraf onaylandı', shop });
+});
+
+exports.rejectShopPhoto = catchAsync(async (req, res) => {
+  const shop = await adminService.rejectShopPhoto(req.params.id, req.user.id);
+  res.json({ message: 'Fotoğraf reddedildi', shop });
+});

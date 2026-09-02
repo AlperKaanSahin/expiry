@@ -8,6 +8,7 @@ import {
   Alert,
   StyleSheet,
   StatusBar,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
@@ -18,6 +19,9 @@ import Toast from 'react-native-toast-message';
 import { showErrorToast } from '../utils/errorHandler';
 import EmptyState from '../components/common/EmptyState';
 import LoadingState from '../components/common/LoadingState';
+import ErrorState from '../components/common/ErrorState';
+import { getShopImageSource } from '../constants/shopCategories';
+import { approveShopPhoto, rejectShopPhoto } from '../services/api';
 
 const STATUS_CONFIG = {
   active:   { label: 'Aktif',      color: '#16A34A' },
@@ -35,6 +39,7 @@ const ShopListScreen = ({ navigation }) => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [processingPhotoId, setProcessingPhotoId] = useState(null);
 
   
 
@@ -64,6 +69,31 @@ showErrorToast(err, Toast);
       showErrorToast(err, Toast);
     }
   };
+  const handleApprovePhoto = async (shopId) => {
+  try {
+    setProcessingPhotoId(shopId);
+    await approveShopPhoto(shopId);
+    Toast.show({ type: 'success', text1: 'Onaylandı', text2: 'Fotoğraf yayınlandı' });
+    loadShops(page);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setProcessingPhotoId(null);
+  }
+};
+
+const handleRejectPhoto = async (shopId) => {
+  try {
+    setProcessingPhotoId(shopId);
+    await rejectShopPhoto(shopId);
+    Toast.show({ type: 'success', text1: 'Reddedildi', text2: 'Fotoğraf kaldırıldı' });
+    loadShops(page);
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setProcessingPhotoId(null);
+  }
+};
 
   const handleDelete = (id) => {
     Alert.alert(
@@ -90,57 +120,102 @@ showErrorToast(err, Toast);
   const maxPage = Math.ceil(total / LIMIT);
 
   const renderShop = ({ item }) => {
-    const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.primary };
-    const actions = actionsByStatus[item.status] || [];
+      const status = STATUS_CONFIG[item.status] || { label: item.status, color: COLORS.primary };
+  const actions = actionsByStatus[item.status] || [];
 
     return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.shopName}>{item.name}</Text>
-          <View style={[styles.badge, { backgroundColor: status.color + '18' }]}>
-            <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
-          </View>
-        </View>
+    <View style={styles.card}>
+      <Image source={getShopImageSource(item)} style={styles.shopImage} />
 
-        <View style={styles.infoRow}>
-          <Icon name="location-on" size={14} color={COLORS.textMuted} />
-          <Text style={styles.infoText}>{item.address}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Icon name="phone" size={14} color={COLORS.textMuted} />
-          <Text style={styles.infoText}>{item.phone || 'Belirtilmemiş'}</Text>
-        </View>
-        {item.owner && (
-          <View style={styles.infoRow}>
-            <Icon name="person" size={14} color={COLORS.textMuted} />
-            <Text style={styles.infoText}>
-              {item.owner.firstName} {item.owner.lastName} (ID: {item.owner.id})
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.actions}>
-          {actions.map((action) => (
-            <TouchableOpacity
-              key={action}
-              style={[styles.actionButton, { backgroundColor: actionColors[action] + '18', borderColor: actionColors[action] + '40' }]}
-              onPress={() => handleStatus(item.id, actionToStatus[action])}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.actionText, { color: actionColors[action] }]}>
-                {actionLabels[action]}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDelete(item.id)}
-            activeOpacity={0.8}
-          >
-            <Icon name="delete" size={16} color={COLORS.red} />
-          </TouchableOpacity>
+      <View style={styles.cardHeader}>
+        <Text style={styles.shopName}>{item.name}</Text>
+        <View style={[styles.badge, { backgroundColor: status.color + '18' }]}>
+          <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
         </View>
       </View>
+
+      <View style={styles.infoRow}>
+        <Icon name="location-on" size={14} color={COLORS.textMuted} />
+        <Text style={styles.infoText}>{item.address}</Text>
+      </View>
+      <View style={styles.infoRow}>
+        <Icon name="phone" size={14} color={COLORS.textMuted} />
+        <Text style={styles.infoText}>{item.phone || 'Belirtilmemiş'}</Text>
+      </View>
+      {item.owner && (
+        <View style={styles.infoRow}>
+          <Icon name="person" size={14} color={COLORS.textMuted} />
+          <Text style={styles.infoText}>
+            {item.owner.firstName} {item.owner.lastName} (ID: {item.owner.id})
+          </Text>
+        </View>
+      )}
+
+      {/* Onay bekleyen yeni fotoğraf varsa — statüden bağımsız olarak göster */}
+      {item.coverImagePendingUrl && (
+        <View style={styles.pendingPhotoBlock}>
+          <View style={styles.pendingPhotoHeader}>
+            <Icon name="pending-actions" size={14} color="#D97706" />
+            <Text style={styles.pendingPhotoLabel}>Yeni fotoğraf onay bekliyor</Text>
+          </View>
+          <Image source={{ uri: item.coverImagePendingUrl }} style={styles.pendingPhotoImage} />
+          <View style={styles.pendingPhotoActions}>
+            <TouchableOpacity
+              style={styles.pendingRejectButton}
+              onPress={() => handleRejectPhoto(item.id)}
+              disabled={processingPhotoId === item.id}
+              activeOpacity={0.8}
+            >
+              {processingPhotoId === item.id ? (
+                <ActivityIndicator color={COLORS.red} size="small" />
+              ) : (
+                <>
+                  <Icon name="close" size={16} color={COLORS.red} />
+                  <Text style={styles.pendingRejectText}>Reddet</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.pendingApproveButton}
+              onPress={() => handleApprovePhoto(item.id)}
+              disabled={processingPhotoId === item.id}
+              activeOpacity={0.8}
+            >
+              {processingPhotoId === item.id ? (
+                <ActivityIndicator color={COLORS.white} size="small" />
+              ) : (
+                <>
+                  <Icon name="check" size={16} color={COLORS.white} />
+                  <Text style={styles.pendingApproveText}>Onayla</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      <View style={styles.actions}>
+        {actions.map((action) => (
+          <TouchableOpacity
+            key={action}
+            style={[styles.actionButton, { backgroundColor: actionColors[action] + '18', borderColor: actionColors[action] + '40' }]}
+            onPress={() => handleStatus(item.id, actionToStatus[action])}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.actionText, { color: actionColors[action] }]}>
+              {actionLabels[action]}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDelete(item.id)}
+          activeOpacity={0.8}
+        >
+          <Icon name="delete" size={16} color={COLORS.red} />
+        </TouchableOpacity>
+      </View>
+    </View>
     );
   };
 
@@ -173,11 +248,11 @@ if (hasError) {
         </View>
       </View>
 
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Admin Panel</Text>
-        <Text style={styles.heroName}>Shop Yönetimi</Text>
-        <Text style={styles.heroSub}>Toplam {total} shop</Text>
-      </View>
+<View style={styles.hero}>
+  <Text style={styles.heroLabel}>Admin Panel</Text>
+  <Text style={styles.heroName}>Shop Yönetimi</Text>
+  <Text style={styles.heroSub}>Toplam {total} shop</Text>
+</View>
 
 
         <>
@@ -251,6 +326,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -316,6 +392,50 @@ const styles = StyleSheet.create({
   },
   pageBtnDisabled: { backgroundColor: COLORS.border },
   pageInfo: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  pendingPhotosCard: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 12,
+  backgroundColor: '#FFFBEB',
+  borderRadius: 12,
+  padding: 14,
+  marginTop: 14,
+  borderWidth: 1,
+  borderColor: '#FDE68A',
+},
+pendingPhotosIcon: {
+  width: 36, height: 36, borderRadius: 10,
+  backgroundColor: '#FEF3C7',
+  justifyContent: 'center', alignItems: 'center',
+},
+pendingPhotosTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+pendingPhotosSubtitle: { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
+shopImage: {
+  width: '100%', height: 140,
+  borderTopLeftRadius: 14, borderTopRightRadius: 14,
+  marginBottom: 12,
+},
+pendingPhotoBlock: {
+  backgroundColor: '#FFFBEB',
+  borderRadius: 12, padding: 12, marginTop: 12,
+  borderWidth: 1, borderColor: '#FDE68A',
+},
+pendingPhotoHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+pendingPhotoLabel: { fontSize: 12, fontWeight: '700', color: '#92400E' },
+pendingPhotoImage: { width: '100%', height: 120, borderRadius: 10, marginBottom: 10 },
+pendingPhotoActions: { flexDirection: 'row', gap: 8 },
+pendingRejectButton: {
+  flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4,
+  paddingVertical: 9, borderRadius: 10,
+  backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FCA5A5',
+},
+pendingRejectText: { color: COLORS.red, fontWeight: '700', fontSize: 13 },
+pendingApproveButton: {
+  flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4,
+  paddingVertical: 9, borderRadius: 10,
+  backgroundColor: COLORS.primary,
+},
+pendingApproveText: { color: COLORS.white, fontWeight: '700', fontSize: 13 },
 });
 
 export default ShopListScreen;
