@@ -555,7 +555,7 @@ describe('Auth akışı: validasyon, yetkilendirme, ek senaryolar', () => {
     const applyRes = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${shopOwnerInitialToken}`)
-      .send({ name: `Active Order Shop ${timestamp}`, address: 'Adres', phone: '05551239876' });
+      .send({ name: `Active Order Shop ${timestamp}`, address: 'Adres', phone: '05551239876', category: 'MARKET' });
     const shopId = applyRes.body.shop.id;
 
     const adminLogin = await request(app)

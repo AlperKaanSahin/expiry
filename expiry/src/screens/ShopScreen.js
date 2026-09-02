@@ -10,6 +10,7 @@ import {
   RefreshControl,
   StatusBar,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
@@ -18,6 +19,8 @@ import { fetchShops } from '../services/api';
 import { COLORS } from '../theme/colors';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
+
+import { getShopImageSource } from '../constants/shopCategories';
 
 
 const ShopScreen = () => {
@@ -64,13 +67,9 @@ useFocusEffect(
       onPress={() => navigation.navigate('ShopDetail', { shopId: item.id, shopName: item.name })}
       activeOpacity={0.8}
     >
-      <View style={styles.cardLeft}>
-        <View style={styles.shopInitial}>
-          <Text style={styles.shopInitialText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-      </View>
+<View style={styles.cardLeft}>
+  <Image source={getShopImageSource(item)} style={styles.shopImage} />
+</View>
 
       <View style={styles.cardBody}>
         <Text style={styles.shopName}>{item.name}</Text>
@@ -223,18 +222,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardLeft: {},
-  shopInitial: {
-    width: 52, height: 52,
-    borderRadius: 14,
-    backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shopInitialText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
+shopImage: {
+  width: 52, height: 52,
+  borderRadius: 14,
+},
   cardBody: { flex: 1, gap: 4 },
   shopName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },

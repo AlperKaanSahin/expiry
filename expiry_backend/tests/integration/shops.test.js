@@ -32,7 +32,7 @@ describe('GET /api/shops', () => {
     const pendingApply = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${pendingOwner.body.accessToken}`)
-      .send({ name: `Pending Market ${timestamp}`, address: 'Adres', phone: '05551110000' });
+      .send({ name: `Pending Market ${timestamp}`, address: 'Adres', phone: '05551110000', category: 'MARKET' });
     const pendingShopId = pendingApply.body.shop.id;
 
     // active yapılan market
@@ -45,7 +45,7 @@ describe('GET /api/shops', () => {
     const activeApply = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${activeOwner.body.accessToken}`)
-      .send({ name: `Active Market ${timestamp}`, address: 'Adres', phone: '05552220000' });
+      .send({ name: `Active Market ${timestamp}`, address: 'Adres', phone: '05552220000', category: 'MARKET' });
     const activeShopId = activeApply.body.shop.id;
 
     await request(app)

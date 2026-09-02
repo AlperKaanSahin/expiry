@@ -132,6 +132,7 @@ describe('Audit log akışı', () => {
         name: `Audit Test Market ${timestamp}`,
         address: 'Test Adres',
         phone: '05551234567',
+        category: 'MARKET',
       });
 
     expect(applyRes.status).toBe(200);
@@ -241,6 +242,7 @@ describe('Audit log akışı', () => {
         name: `Reject Market ${timestamp}`,
         address: 'Reject Adres',
         phone: '05551112233',
+        category: 'MARKET',
       });
 
     const rejectShopId = applyRes.body.shop.id;

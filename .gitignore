@@ -38,3 +38,6 @@ coverage/
 .VSCodeCounter/
 
 expiry_backend/config/firebase-service-account.json
+
+
+uploads/

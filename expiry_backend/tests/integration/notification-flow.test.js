@@ -198,6 +198,7 @@ describe('Notification akışı: gerçek event → otomatik bildirim', () => {
         name: `Notif Test Market ${timestamp}`,
         address: 'Test Adres',
         phone: '05551234567',
+        category: 'MARKET',
       });
 
     expect(applyRes.status).toBe(200);
@@ -249,6 +250,7 @@ describe('Notification akışı: gerçek event → otomatik bildirim', () => {
         name: `Notif Reject Market ${timestamp}`,
         address: 'Reject Adres',
         phone: '05559998877',
+        category: 'MARKET',
       });
 
     const rejectShopId = applyRes.body.shop.id;

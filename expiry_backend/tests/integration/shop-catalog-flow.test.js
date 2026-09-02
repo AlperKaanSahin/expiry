@@ -27,7 +27,7 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     const applyRes = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${userToken}`)
-      .send({ name: `${shopName} ${timestamp}`, address: 'Adres', phone: '05550000000' });
+      .send({ name: `${shopName} ${timestamp}`, address: 'Adres', phone: '05550000000', category: 'MARKET' });
     const shopId = applyRes.body.shop.id;
 
     await request(app)

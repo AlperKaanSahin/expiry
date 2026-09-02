@@ -39,7 +39,8 @@ describe('Market başvuru akışı: kayıt → başvuru → red → yeniden baş
       .send({
         name: `Test Market ${timestamp}`,
         address: 'Test Adres',
-        phone: '05551234567'
+        phone: '05551234567',
+        category: 'MARKET',
       });
 
     expect(res.status).toBe(200);
@@ -80,6 +81,7 @@ describe('Market başvuru akışı: kayıt → başvuru → red → yeniden baş
         name: `Test Market ${timestamp}`,
         address: 'Test Adres',
         phone: '05551234567',
+        category: 'MARKET',
       });
 
     expect(res.status).toBe(409);
@@ -120,6 +122,7 @@ describe('Market başvuru akışı: kayıt → başvuru → red → yeniden baş
         name: `Test Market Reapply ${timestamp}`,
         address: 'Yeni Test Adres',
         phone: '05559876543',
+        category: 'MARKET',
       });
 
     expect(res.status).toBe(200);
@@ -182,6 +185,7 @@ describe('Market başvuru akışı: kayıt → başvuru → red → yeniden baş
         name: 'Başka Market',
         address: 'Başka Adres',
         phone: '05550000000',
+        category: 'MARKET',
       });
 
     expect(res.status).toBe(409);

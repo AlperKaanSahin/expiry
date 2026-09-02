@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
-import { fetchShopProfile, updateShopProfile, changeShopPassword } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
@@ -21,6 +20,9 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import { useAuth } from '../context/AuthContext';
 import ErrorState from '../components/common/ErrorState';
 import { useWorkspace } from '../context/WorkspaceContext';
+import * as ImagePicker from 'expo-image-picker';
+import { fetchShopProfile, updateShopProfile, changeShopPassword, uploadShopCoverPhoto } from '../services/api';
+import { Image } from 'react-native';
 
 const TABS = [
   { key: 'profile', label: 'Bilgilerim' },
@@ -38,6 +40,9 @@ const { switchWorkspace } = useWorkspace();
   const [formData, setFormData] = useState({ name: '', address: '', phone: '', email: '' });
   const [passwordData, setPasswordData] = useState(EMPTY_PASSWORD);
   const [error, setError] = useState(null);
+  const [coverImageUrl, setCoverImageUrl] = useState(null);
+const [coverImagePendingUrl, setCoverImagePendingUrl] = useState(null);
+const [uploadingPhoto, setUploadingPhoto] = useState(false);
   
 const loadProfile = async () => {
   try {
@@ -52,6 +57,8 @@ const loadProfile = async () => {
       phone: data.shop?.phone || '',
       email: data.shop?.email || '',
     });
+    setCoverImageUrl(data.shop?.coverImageUrl || null);
+setCoverImagePendingUrl(data.shop?.coverImagePendingUrl || null);
   } catch (err) {
     setError(err.message);
   } finally {
@@ -72,6 +79,37 @@ const handleProfileUpdate = async () => {
     showErrorToast(err, Toast);
   } finally {
     setSaving(false);
+  }
+};
+const handlePickPhoto = async () => {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) {
+    Toast.show({ type: 'error', text1: 'İzin gerekli', text2: 'Galeriye erişim izni vermelisin' });
+    return;
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [16, 9],
+    quality: 0.8,
+  });
+
+  if (result.canceled) return;
+
+  try {
+    setUploadingPhoto(true);
+    const res = await uploadShopCoverPhoto(result.assets[0].uri);
+    setCoverImagePendingUrl(res.shop.coverImagePendingUrl);
+    Toast.show({
+      type: 'success',
+      text1: 'Fotoğraf gönderildi',
+      text2: 'Admin onayından sonra yayınlanacak',
+    });
+  } catch (err) {
+    showErrorToast(err, Toast);
+  } finally {
+    setUploadingPhoto(false);
   }
 };
 
@@ -156,6 +194,32 @@ if (error) {
         >
           {activeTab === 'profile' ? (
             <>
+            {/* KAPAK FOTOĞRAFI */}
+<View style={styles.inputGroup}>
+  <Text style={styles.inputLabel}>Kapak Fotoğrafı</Text>
+  <TouchableOpacity style={styles.photoBox} onPress={handlePickPhoto} activeOpacity={0.8} disabled={uploadingPhoto}>
+    {coverImageUrl ? (
+      <Image source={{ uri: coverImageUrl }} style={styles.photoPreview} />
+    ) : (
+      <View style={styles.photoPlaceholder}>
+        <Icon name="add-a-photo" size={28} color={COLORS.textMuted} />
+        <Text style={styles.photoPlaceholderText}>Fotoğraf eklemek için dokun</Text>
+      </View>
+    )}
+    {uploadingPhoto && (
+      <View style={styles.photoUploadingOverlay}>
+        <ActivityIndicator color={COLORS.white} />
+      </View>
+    )}
+  </TouchableOpacity>
+
+  {coverImagePendingUrl && (
+    <View style={styles.pendingBadge}>
+      <Icon name="pending-actions" size={14} color="#D97706" />
+      <Text style={styles.pendingBadgeText}>Yeni fotoğrafın admin onayı bekleniyor</Text>
+    </View>
+  )}
+</View>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Shop Adı</Text>
                 <TextInput
@@ -398,6 +462,24 @@ logoutText: {
   fontWeight: '600',
   fontSize: 14,
 },
+photoBox: {
+  height: 140, borderRadius: 14, overflow: 'hidden',
+  backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border,
+},
+photoPreview: { width: '100%', height: '100%' },
+photoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 6 },
+photoPlaceholderText: { fontSize: 12, color: COLORS.textMuted },
+photoUploadingOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: 'rgba(0,0,0,0.4)',
+  justifyContent: 'center', alignItems: 'center',
+},
+pendingBadge: {
+  flexDirection: 'row', alignItems: 'center', gap: 6,
+  backgroundColor: '#FEF3C7', borderRadius: 8,
+  paddingHorizontal: 10, paddingVertical: 8, marginTop: 8,
+},
+pendingBadgeText: { fontSize: 12, color: '#92400E', fontWeight: '600', flex: 1 },
 });
 
 export default ShopProfileScreen;

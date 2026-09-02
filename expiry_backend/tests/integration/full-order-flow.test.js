@@ -37,7 +37,7 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     const res = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${shopOwnerToken}`)
-      .send({ name: `Test Market ${timestamp}`, address: 'Test Adres', phone: '05551234567' });
+      .send({ name: `Test Market ${timestamp}`, address: 'Test Adres', phone: '05551234567', category: 'MARKET' });
 
     expect(res.status).toBe(200);
     shopId = res.body.shop.id;
@@ -159,7 +159,7 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     const applyRes = await request(app)
       .post('/api/shops/apply')
       .set('Authorization', `Bearer ${otherToken}`)
-      .send({ name: `Other Market ${timestamp}`, address: 'Adres', phone: '05559998877' });
+      .send({ name: `Other Market ${timestamp}`, address: 'Adres', phone: '05559998877', category: 'MARKET' });
     const otherShopId = applyRes.body.shop.id;
 
     await request(app)
