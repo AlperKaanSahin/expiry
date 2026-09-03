@@ -67,3 +67,18 @@ jobs:
 
       - name: Testleri çalıştır
         run: npm test
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-check
+
+    defaults:
+      run:
+        working-directory: expiry_backend
+
+    steps:
+      - name: Kodu checkout et
+        uses: actions/checkout@v4
+
+      - name: Docker image'ı build et (push edilmiyor, sadece build doğrulaması)
+        run: docker build -t expiry_backend:ci-check .
