@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,11 @@ import {
   Switch,
   Keyboard,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import {
   fetchShopOwnPackages,
@@ -27,11 +28,14 @@ import {
   fetchShopProducts,
   fetchAllShopProducts,
 } from '../services/api';
-import { COLORS } from '../theme/colors';
+import { COLORS, SPACING, RADIUS, SHADOWS, TYPE_SCALE } from '../theme';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
 import EmptyState from '../components/common/EmptyState';
+import Card from '../components/common/Card';
+import Chip from '../components/common/Chip';
+import ScreenHeader from '../components/common/ScreenHeader';
 
 const EMPTY_FORM = { name: '', price: '', description: '', quantity: '1' };
 const LIMIT = 10;
@@ -54,6 +58,65 @@ const formatDeliveryRange = (start, end) => {
   return `${dateStr} ${startTime} - ${endDateStr} ${endTime}`;
 };
 
+const formatDateTime = (date) =>
+  date.toLocaleString('tr-TR', {
+    day: '2-digit', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+// Teslimat aralığı için hızlı seçim seçenekleri — sadece deliveryStart/deliveryEnd'i
+// dolduran birer kısayol, hâlâ istenirse aşağıdaki özel tarih seçicilerle üzerine yazılabilir.
+const buildQuickPresets = () => {
+  const now = new Date();
+
+  const in2hStart = new Date(now);
+  const in2hEnd = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+  const eveningStart = new Date(now);
+  eveningStart.setHours(18, 0, 0, 0);
+  const eveningEnd = new Date(now);
+  eveningEnd.setHours(21, 0, 0, 0);
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStart = new Date(tomorrow);
+  tomorrowStart.setHours(9, 0, 0, 0);
+  const tomorrowEnd = new Date(tomorrow);
+  tomorrowEnd.setHours(20, 0, 0, 0);
+
+  return [
+    { key: '2h', label: '2 Saat İçinde', start: in2hStart, end: in2hEnd },
+    { key: 'evening', label: 'Bu Akşam', start: eveningStart, end: eveningEnd },
+    { key: 'tomorrow', label: 'Yarın', start: tomorrowStart, end: tomorrowEnd },
+  ];
+};
+
+// Android'de mode="datetime" için deklaratif <DateTimePicker> kullanmak
+// (önce tarih diyalogu, sonra saat diyalogu arka arkaya) kütüphanenin bilinen
+// bir hatasına yol açıyor ("Cannot read property 'dismiss' of undefined").
+// Android'in kendi önerdiği çözüm: imperative API ile iki diyalogu manuel
+// olarak art arda açmak. iOS'ta tek bir kompakt kontrol olduğu için sorun yok,
+// orada deklaratif component'e devam ediyoruz.
+const openAndroidDateTimePicker = (currentValue, onPicked) => {
+  DateTimePickerAndroid.open({
+    value: currentValue,
+    mode: 'date',
+    onChange: (dateEvent, pickedDate) => {
+      if (dateEvent.type !== 'set' || !pickedDate) return;
+      DateTimePickerAndroid.open({
+        value: pickedDate,
+        mode: 'time',
+        onChange: (timeEvent, pickedTime) => {
+          if (timeEvent.type !== 'set' || !pickedTime) return;
+          const combined = new Date(pickedDate);
+          combined.setHours(pickedTime.getHours(), pickedTime.getMinutes());
+          onPicked(combined);
+        },
+      });
+    },
+  });
+};
+
 const ShopPackagesScreen = () => {
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,11 +126,14 @@ const ShopPackagesScreen = () => {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [deliveryStart, setDeliveryStart] = useState(new Date());
   const [deliveryEnd, setDeliveryEnd] = useState(new Date());
+  const [selectedPresetKey, setSelectedPresetKey] = useState(null);
+  const [quickPresets, setQuickPresets] = useState([]);
   const [autoPriceDropEnabled, setAutoPriceDropEnabled] = useState(false);
   const [priceDropInterval, setPriceDropInterval] = useState('');
   const [priceDropAmount, setPriceDropAmount] = useState('');
   const [minPriceDropLimit, setMinPriceDropLimit] = useState('');
   const [allProducts, setAllProducts] = useState([]);
+  const [productSearch, setProductSearch] = useState('');
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [modalError, setModalError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -79,44 +145,41 @@ const ShopPackagesScreen = () => {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
-const formatDateTime = (date) =>
-  date.toLocaleString('tr-TR', {
-    day: '2-digit', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-  
-
-const loadPackages = async (pageNumber = 1, isRefresh = false) => {
-  if (isRefresh) {
-    setRefreshing(true);
-  } else {
-    setLoading(true);
-  }
-
-  setError(false);
-
-  try {
-    const data = await fetchShopOwnPackages(pageNumber, LIMIT);
-    setPackages(data.packages);
-    setTotal(data.total);
-    setPage(data.page);
-  } catch (err) {
-    setError(true);
-    showErrorToast(err, Toast);
-  } finally {
+  const loadPackages = async (pageNumber = 1, isRefresh = false) => {
     if (isRefresh) {
-      setRefreshing(false);
+      setRefreshing(true);
     } else {
-      setLoading(false);
+      setLoading(true);
     }
-  }
-};
 
-useEffect(() => { loadPackages(1); }, []);
+    setError(false);
+
+    try {
+      const data = await fetchShopOwnPackages(pageNumber, LIMIT);
+      setPackages(data.packages);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (err) {
+      setError(true);
+      showErrorToast(err, Toast);
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  };
+
+  React.useEffect(() => { loadPackages(1); }, []);
 
   const openModal = async (pkg = null) => {
     setModalVisible(true);
     setModalLoading(true);
+    setQuickPresets(buildQuickPresets());
+    setSelectedPresetKey(null);
+    setProductSearch('');
+
     try {
       const products = await fetchAllShopProducts();
       setAllProducts(products);
@@ -157,6 +220,13 @@ useEffect(() => { loadPackages(1); }, []);
     setSelectedPackage(null);
     setFormData(EMPTY_FORM);
     setSelectedProducts([]);
+    setProductSearch('');
+  };
+
+  const applyPreset = (preset) => {
+    setDeliveryStart(preset.start);
+    setDeliveryEnd(preset.end);
+    setSelectedPresetKey(preset.key);
   };
 
   const handleProductSelect = (productId) => {
@@ -182,19 +252,19 @@ useEffect(() => { loadPackages(1); }, []);
         {
           text: 'Sil',
           style: 'destructive',
-onPress: async () => {
-  try {
-    setDeletingId(pkg.id);
-    await deleteShopPackage(pkg.id);
-    Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket başarıyla silindi' });
-    const targetPage = (packages.length === 1 && page > 1) ? page - 1 : page;
-    loadPackages(targetPage);
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setDeletingId(null);
-  }
-}
+          onPress: async () => {
+            try {
+              setDeletingId(pkg.id);
+              await deleteShopPackage(pkg.id);
+              Toast.show({ type: 'success', text1: 'Silindi', text2: 'Paket başarıyla silindi' });
+              const targetPage = (packages.length === 1 && page > 1) ? page - 1 : page;
+              loadPackages(targetPage);
+            } catch (err) {
+              showErrorToast(err, Toast);
+            } finally {
+              setDeletingId(null);
+            }
+          }
         }
       ]
     );
@@ -280,8 +350,8 @@ onPress: async () => {
         await addShopPackage(payload);
         Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Paket başarıyla eklendi' });
       }
-closeModal();
-loadPackages(selectedPackage ? page : 1);
+      closeModal();
+      loadPackages(selectedPackage ? page : 1);
     } catch (err) {
       showErrorToast(err, Toast);
     } finally {
@@ -289,8 +359,12 @@ loadPackages(selectedPackage ? page : 1);
     }
   };
 
+  const filteredProducts = productSearch.trim()
+    ? allProducts.filter(p => (p.name || '').toLowerCase().includes(productSearch.trim().toLowerCase()))
+    : allProducts;
+
   const renderPackage = ({ item }) => (
-    <View style={styles.card}>
+    <Card style={styles.card} shadow="sm">
       <View style={styles.cardBody}>
         <Text style={styles.packageName}>{item.name}</Text>
         <Text style={styles.packagePrice}>
@@ -298,7 +372,7 @@ loadPackages(selectedPackage ? page : 1);
         </Text>
         <View style={styles.metaRow}>
           <Icon name="inventory-2" size={14} color={COLORS.textMuted} />
-          <Text style={styles.metaText}>Kalan: {item.quantity ?? '-'} kutu</Text>
+          <Text style={styles.metaText}>Stok: {item.quantity ?? '-'} kutu</Text>
         </View>
         <View style={styles.metaRow}>
           <Icon name="schedule" size={14} color={COLORS.textMuted} />
@@ -329,90 +403,67 @@ loadPackages(selectedPackage ? page : 1);
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </Card>
   );
 
-if (loading) {
-  return <LoadingState />;
-}
-if (error) {
-  return (
-    <ErrorState
-  onRetry={() => loadPackages(1)}
-/>
-  );
-}
+  if (loading) {
+    return <LoadingState />;
+  }
+  if (error) {
+    return <ErrorState onRetry={() => loadPackages(1)} />;
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.appName}>expiry</Text>
-          <View style={styles.dot} />
+      <ScreenHeader title="Paketlerim" rightIcon="add" onRightPress={() => openModal()} />
+
+      <FlatList
+        data={packages}
+        keyExtractor={item => item.id.toString()}
+        renderItem={renderPackage}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        ItemSeparatorComponent={() => <View style={{ height: SPACING.md }} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadPackages(1, true)}
+            colors={[COLORS.primary]}
+          />
+        }
+        ListEmptyComponent={
+          <EmptyState icon="package-variant-closed" title="Henüz paket eklemediniz">
+            <TouchableOpacity style={styles.emptyButton} onPress={() => openModal()}>
+              <Text style={styles.emptyButtonText}>İlk Paketini Ekle</Text>
+            </TouchableOpacity>
+          </EmptyState>
+        }
+      />
+
+      {total > LIMIT && (
+        <View style={styles.pagination}>
+          <TouchableOpacity
+            style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+            onPress={() => loadPackages(page - 1)}
+            disabled={page === 1}
+          >
+            <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+          </TouchableOpacity>
+
+          <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
+
+          <TouchableOpacity
+            style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
+            onPress={() => loadPackages(page + 1)}
+            disabled={page >= Math.ceil(total / LIMIT)}
+          >
+            <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => openModal()}>
-          <Icon name="add" size={22} color={COLORS.white} />
-        </TouchableOpacity>
-      </View>
+      )}
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Shop Paneli</Text>
-        <Text style={styles.heroName}>Paketlerim</Text>
-      </View>
-
-        <FlatList
-          data={packages}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderPackage}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadPackages(1, true)}
-              colors={[COLORS.primary]}
-            />
-          }
-ListEmptyComponent={
-  <EmptyState
-    icon="inventory-2"
-    title="Henüz paket eklemediniz"
-  >
-    <TouchableOpacity
-      style={styles.emptyButton}
-      onPress={openModal}
-    >
-      <Text style={styles.emptyButtonText}>
-        İlk Paketini Ekle
-      </Text>
-    </TouchableOpacity>
-  </EmptyState>
-}
-        />
-{total > LIMIT && (
-  <View style={styles.pagination}>
-    <TouchableOpacity
-      style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
-      onPress={() => loadPackages(page - 1)}
-      disabled={page === 1}
-    >
-      <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
-    </TouchableOpacity>
-
-    <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
-
-    <TouchableOpacity
-      style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
-      onPress={() => loadPackages(page + 1)}
-      disabled={page >= Math.ceil(total / LIMIT)}
-    >
-      <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
-    </TouchableOpacity>
-  </View>
-)}
       {/* MODAL */}
       <Modal
         visible={modalVisible}
@@ -452,7 +503,7 @@ ListEmptyComponent={
                 </View>
 
                 <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                  <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
                     <Text style={styles.inputLabel}>Fiyat (₺)</Text>
                     <TextInput
                       style={styles.input}
@@ -497,44 +548,89 @@ ListEmptyComponent={
                   />
                 </View>
 
-{/* TESLİMAT */}
-<Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
+                {/* TESLİMAT */}
+                <Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
 
-<View style={styles.inputGroup}>
-  <Text style={styles.inputLabel}>Başlangıç</Text>
-  <TouchableOpacity style={styles.input} onPress={() => setShowStartPicker(true)}>
-    <Text>{formatDateTime(deliveryStart)}</Text>
-  </TouchableOpacity>
-  {showStartPicker && (
-    <DateTimePicker
-      value={deliveryStart}
-      mode="datetime"
-      display="default"
-      onChange={(event, date) => {
-        setShowStartPicker(false);
-        if (event.type === 'set' && date) setDeliveryStart(date);
-      }}
-    />
-  )}
-</View>
+                <Text style={styles.deliverySummary}>
+                  {formatDeliveryRange(deliveryStart, deliveryEnd)}
+                </Text>
 
-<View style={styles.inputGroup}>
-  <Text style={styles.inputLabel}>Bitiş</Text>
-  <TouchableOpacity style={styles.input} onPress={() => setShowEndPicker(true)}>
-    <Text>{formatDateTime(deliveryEnd)}</Text>
-  </TouchableOpacity>
-  {showEndPicker && (
-    <DateTimePicker
-      value={deliveryEnd}
-      mode="datetime"
-      display="default"
-      onChange={(event, date) => {
-        setShowEndPicker(false);
-        if (event.type === 'set' && date) setDeliveryEnd(date);
-      }}
-    />
-  )}
-</View>
+                <View style={styles.presetRow}>
+                  {quickPresets.map(preset => (
+                    <Chip
+                      key={preset.key}
+                      label={preset.label}
+                      active={selectedPresetKey === preset.key}
+                      onPress={() => applyPreset(preset)}
+                    />
+                  ))}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Başlangıç</Text>
+                  <TouchableOpacity
+                    style={styles.input}
+                    onPress={() => {
+                      if (Platform.OS === 'android') {
+                        openAndroidDateTimePicker(deliveryStart, (date) => {
+                          setDeliveryStart(date);
+                          setSelectedPresetKey(null);
+                        });
+                      } else {
+                        setShowStartPicker(true);
+                      }
+                    }}
+                  >
+                    <Text style={styles.inputValueText}>{formatDateTime(deliveryStart)}</Text>
+                  </TouchableOpacity>
+                  {Platform.OS === 'ios' && showStartPicker && (
+                    <DateTimePicker
+                      value={deliveryStart}
+                      mode="datetime"
+                      display="default"
+                      onChange={(event, date) => {
+                        setShowStartPicker(false);
+                        if (event.type === 'set' && date) {
+                          setDeliveryStart(date);
+                          setSelectedPresetKey(null);
+                        }
+                      }}
+                    />
+                  )}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Bitiş</Text>
+                  <TouchableOpacity
+                    style={styles.input}
+                    onPress={() => {
+                      if (Platform.OS === 'android') {
+                        openAndroidDateTimePicker(deliveryEnd, (date) => {
+                          setDeliveryEnd(date);
+                          setSelectedPresetKey(null);
+                        });
+                      } else {
+                        setShowEndPicker(true);
+                      }
+                    }}
+                  >
+                    <Text style={styles.inputValueText}>{formatDateTime(deliveryEnd)}</Text>
+                  </TouchableOpacity>
+                  {Platform.OS === 'ios' && showEndPicker && (
+                    <DateTimePicker
+                      value={deliveryEnd}
+                      mode="datetime"
+                      display="default"
+                      onChange={(event, date) => {
+                        setShowEndPicker(false);
+                        if (event.type === 'set' && date) {
+                          setDeliveryEnd(date);
+                          setSelectedPresetKey(null);
+                        }
+                      }}
+                    />
+                  )}
+                </View>
 
                 {/* OTOMATİK FİYAT DÜŞÜŞÜ */}
                 <Text style={styles.sectionLabel}>Otomatik Fiyat Düşüşü</Text>
@@ -551,7 +647,7 @@ ListEmptyComponent={
                 {autoPriceDropEnabled && (
                   <>
                     <View style={styles.row}>
-                      <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
                         <Text style={styles.inputLabel}>Kaç saatte bir?</Text>
                         <TextInput
                           style={styles.input}
@@ -596,35 +692,63 @@ ListEmptyComponent={
 
                 {/* ÜRÜNLER */}
                 <Text style={styles.sectionLabel}>Ürünler</Text>
+
                 {allProducts.length === 0 ? (
                   <Text style={styles.noProductsText}>
                     Henüz ürün eklemediniz. Önce Ürünlerim ekranından ürün ekleyin.
                   </Text>
                 ) : (
-                  allProducts.map(item => {
-                    const selected = selectedProducts.find(p => p.id === item.id);
-                    return (
-                      <View key={item.id} style={styles.productRow}>
-                        <TouchableOpacity
-                          onPress={() => handleProductSelect(item.id)}
-                          style={[styles.checkbox, selected && styles.checkboxActive]}
-                        >
-                          {selected && <Icon name="check" size={16} color={COLORS.white} />}
-                        </TouchableOpacity>
-                        <Text style={styles.productName}>{item.name}</Text>
-                        {selected && (
-                          <TextInput
-                            value={selected.quantity?.toString() || ''}
-                            onChangeText={q => handleQuantityChange(item.id, q)}
-                            keyboardType="numeric"
-                            style={styles.quantityInput}
-                            placeholder="Adet"
-                            placeholderTextColor={COLORS.textMuted}
-                          />
+                  <>
+                    {allProducts.length > 5 && (
+                      <View style={styles.productSearchBox}>
+                        <Icon name="search" size={18} color={COLORS.textMuted} />
+                        <TextInput
+                          style={styles.productSearchInput}
+                          placeholder="Ürün ara..."
+                          placeholderTextColor={COLORS.textMuted}
+                          value={productSearch}
+                          onChangeText={setProductSearch}
+                        />
+                        {productSearch.length > 0 && (
+                          <TouchableOpacity onPress={() => setProductSearch('')}>
+                            <Icon name="close" size={18} color={COLORS.textMuted} />
+                          </TouchableOpacity>
                         )}
                       </View>
-                    );
-                  })
+                    )}
+
+                    {filteredProducts.length === 0 ? (
+                      <Text style={styles.noProductsText}>Sonuç bulunamadı</Text>
+                    ) : (
+                      filteredProducts.map(item => {
+                        const selected = selectedProducts.find(p => p.id === item.id);
+                        return (
+                          <View key={item.id} style={styles.productRow}>
+                            <TouchableOpacity
+                              onPress={() => handleProductSelect(item.id)}
+                              style={[styles.checkbox, selected && styles.checkboxActive]}
+                            >
+                              {selected && <Icon name="check" size={16} color={COLORS.white} />}
+                            </TouchableOpacity>
+                            <View style={styles.productInfo}>
+                              <Text style={styles.productName}>{item.name}</Text>
+                              <Text style={styles.productStock}>Stok: {item.quantity ?? '-'} adet</Text>
+                            </View>
+                            {selected && (
+                              <TextInput
+                                value={selected.quantity?.toString() || ''}
+                                onChangeText={q => handleQuantityChange(item.id, q)}
+                                keyboardType="numeric"
+                                style={styles.quantityInput}
+                                placeholder="Adet"
+                                placeholderTextColor={COLORS.textMuted}
+                              />
+                            )}
+                          </View>
+                        );
+                      })
+                    )}
+                  </>
                 )}
 
                 {modalError ? (
@@ -662,194 +786,142 @@ ListEmptyComponent={
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: COLORS.bg,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
-  addButton: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center', alignItems: 'center',
-  },
-
-  hero: { paddingHorizontal: 20, marginBottom: 16 },
-  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
-  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
-
-  loader: { marginTop: 40 },
-  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
+  list: { paddingHorizontal: SPACING.xxl, paddingBottom: SPACING.xxxl + SPACING.md },
 
   // CARD
-  card: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+  card: { flexDirection: 'row' },
   cardBody: { flex: 1 },
-  packageName: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  packagePrice: { fontSize: 16, fontWeight: '800', color: COLORS.primary, marginBottom: 8 },
+  packageName: { ...TYPE_SCALE.bodySemiBold, fontSize: 15, color: COLORS.text, marginBottom: 4 },
+  packagePrice: { fontSize: 16, fontWeight: '800', color: COLORS.primary, marginBottom: SPACING.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  metaText: { fontSize: 12, color: COLORS.textMuted },
+  metaText: { ...TYPE_SCALE.captionMuted, fontSize: 12, color: COLORS.textMuted },
   productList: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   description: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   cardActions: { gap: 4 },
   iconButton: { padding: 6, width: 32, alignItems: 'center' },
 
-  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
-  emptyText: { fontSize: 14, color: COLORS.textMuted },
   emptyButton: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.xl,
     backgroundColor: COLORS.primaryLight,
   },
   emptyButtonText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
-  // MODAL
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    gap: SPACING.lg,
   },
+  pageBtn: {
+    width: 40, height: 40, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pageBtnDisabled: { backgroundColor: COLORS.border },
+  pageInfo: { fontSize: 14, fontWeight: '600', color: COLORS.text, minWidth: 50, textAlign: 'center' },
+
+  // MODAL
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modal: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingBottom: 40,
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
+    padding: SPACING.xxl,
+    paddingBottom: SPACING.xxxl + SPACING.md,
     maxHeight: '90%',
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: SPACING.xl,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  modalTitle: { ...TYPE_SCALE.h3, fontSize: 18, color: COLORS.text },
 
   sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-    marginTop: 8,
+    fontSize: 12, fontWeight: '700', color: COLORS.textMuted,
+    letterSpacing: 0.8, textTransform: 'uppercase',
+    marginBottom: SPACING.md, marginTop: SPACING.sm,
   },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500', marginBottom: 6 },
+  inputGroup: { marginBottom: SPACING.lg },
+  inputLabel: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500', marginBottom: SPACING.xs + 2 },
   input: {
     backgroundColor: COLORS.bg,
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
     fontSize: 15,
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  inputValueText: { fontSize: 15, color: COLORS.text },
   multiline: { height: 80, textAlignVertical: 'top' },
   row: { flexDirection: 'row' },
 
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+  // TESLİMAT
+  deliverySummary: {
+    fontSize: 14, fontWeight: '600', color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  presetRow: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: SPACING.sm, marginBottom: SPACING.lg,
   },
 
-  // PRODUCTS
+  switchRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+
+  // ÜRÜNLER
+  productSearchBox: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.bg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    height: 42,
+    marginBottom: SPACING.md,
+  },
+  productSearchInput: { flex: 1, fontSize: 14, color: COLORS.text },
   noProductsText: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginBottom: 16,
-    fontStyle: 'italic',
+    fontSize: 13, color: COLORS.textMuted,
+    marginBottom: SPACING.lg, fontStyle: 'italic',
   },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 10,
-  },
+  productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm + 2, gap: SPACING.sm },
   checkbox: {
-    width: 24, height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 24, height: 24, borderRadius: 6,
+    borderWidth: 2, borderColor: COLORS.primary,
+    justifyContent: 'center', alignItems: 'center',
     backgroundColor: COLORS.white,
   },
   checkboxActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  productName: { flex: 1, fontSize: 14, color: COLORS.text },
+  productInfo: { flex: 1 },
+  productName: { fontSize: 14, color: COLORS.text },
+  productStock: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
   quantityInput: {
-    width: 56,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    padding: 6,
-    textAlign: 'center',
-    fontSize: 14,
-    color: COLORS.text,
-    backgroundColor: COLORS.white,
+    width: 56, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.sm, padding: 6, textAlign: 'center',
+    fontSize: 14, color: COLORS.text, backgroundColor: COLORS.white,
   },
 
-  errorText: {
-    color: COLORS.red,
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
+  errorText: { color: COLORS.red, fontSize: 13, textAlign: 'center', marginBottom: SPACING.md },
 
-  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  modalButtons: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.lg },
   cancelButton: {
-    flex: 1, paddingVertical: 14, borderRadius: 12,
-    backgroundColor: COLORS.bg,
-    borderWidth: 1, borderColor: COLORS.border,
+    flex: 1, paddingVertical: SPACING.md + 2, borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.bg, borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center',
   },
   cancelText: { fontSize: 15, fontWeight: '600', color: COLORS.textMuted },
   submitButton: {
-    flex: 1, paddingVertical: 14, borderRadius: 12,
-    backgroundColor: COLORS.primary, alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, paddingVertical: SPACING.md + 2, borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
   },
   submitText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-  pagination: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingVertical: 12,
-  gap: 16,
-},
-pageBtn: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: COLORS.primary,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-pageBtnDisabled: {
-  backgroundColor: COLORS.border,
-},
-pageInfo: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: COLORS.text,
-  minWidth: 50,
-  textAlign: 'center',
-},
 });
 
 export default ShopPackagesScreen;

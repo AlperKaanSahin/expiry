@@ -21,10 +21,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import { fetchShopProducts, addShopProduct, updateShopProduct, deleteShopProduct } from '../services/api';
-import { COLORS } from '../theme/colors';
+import { COLORS, SPACING, RADIUS, TYPE_SCALE } from '../theme';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
+import EmptyState from '../components/common/EmptyState';
+import Card from '../components/common/Card';
+import ScreenHeader from '../components/common/ScreenHeader';
 
 const EMPTY_FORM = { name: '', price: '', quantity: '' };
 const LIMIT = 10;
@@ -35,40 +38,40 @@ const formatDate = (dateStr) => {
 };
 
 const ShopProductsScreen = () => {
-const [products, setProducts] = useState([]);
-const [loading, setLoading] = useState(true);
-const [refreshing, setRefreshing] = useState(false);
-const [error, setError] = useState(null);
-const [modalVisible, setModalVisible] = useState(false);
-const [selectedProduct, setSelectedProduct] = useState(null);
-const [expiryDate, setExpiryDate] = useState(new Date());
-const [formData, setFormData] = useState(EMPTY_FORM);
-const [submitting, setSubmitting] = useState(false);
-const [deletingId, setDeletingId] = useState(null);
-const [errors, setErrors] = useState({});
-const [total, setTotal] = useState(0);
-const [page, setPage] = useState(1);
-const [showDatePicker, setShowDatePicker] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [expiryDate, setExpiryDate] = useState(new Date());
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-const loadProducts = async (pageNumber = 1, isRefresh = false) => {
-  if (isRefresh) setRefreshing(true);
-  else setLoading(true);
+  const loadProducts = async (pageNumber = 1, isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
-  try {
-    setError(null);
-    const data = await fetchShopProducts(pageNumber, LIMIT);
-    setProducts(data.products);
-    setTotal(data.total);
-    setPage(data.page);
-  } catch (error) {
-    setError(error.message);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
+    try {
+      setError(null);
+      const data = await fetchShopProducts(pageNumber, LIMIT);
+      setProducts(data.products);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-useEffect(() => { loadProducts(1); }, []);
+  useEffect(() => { loadProducts(1); }, []);
 
   const openModal = (product = null) => {
     setSelectedProduct(product);
@@ -122,8 +125,8 @@ useEffect(() => { loadProducts(1); }, []);
         Toast.show({ type: 'success', text1: 'Eklendi', text2: 'Ürün başarıyla eklendi' });
       }
 
-closeModal();
-loadProducts(selectedProduct ? page : 1);
+      closeModal();
+      loadProducts(selectedProduct ? page : 1);
     } catch (error) {
       showErrorToast(error, Toast);
     } finally {
@@ -146,7 +149,7 @@ loadProducts(selectedProduct ? page : 1);
               await deleteShopProduct(product.id);
               Toast.show({ type: 'success', text1: 'Silindi', text2: 'Ürün başarıyla silindi' });
               const targetPage = (products.length === 1 && page > 1) ? page - 1 : page;
-loadProducts(targetPage);
+              loadProducts(targetPage);
             } catch (error) {
               showErrorToast(error, Toast);
             } finally {
@@ -159,7 +162,7 @@ loadProducts(targetPage);
   };
 
   const renderProduct = ({ item }) => (
-    <View style={styles.card}>
+    <Card style={styles.card} shadow="sm">
       <View style={styles.cardBody}>
         <Text style={styles.productName}>{item.name}</Text>
         <View style={styles.metaRow}>
@@ -193,85 +196,72 @@ loadProducts(targetPage);
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </Card>
   );
 
-if (loading) {
-  return <LoadingState />;
-}
+  if (loading) {
+    return <LoadingState text="Yükleniyor..." />;
+  }
 
-if (error) {
-  return (
-    <ErrorState
-      message="Ürünler yüklenirken bir hata oluştu."
-      onRetry={loadProducts}
-    />
-  );
-}
+  if (error) {
+    return (
+      <ErrorState
+        subtitle="Ürünler yüklenirken bir hata oluştu."
+        onRetry={loadProducts}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.appName}>expiry</Text>
-          <View style={styles.dot} />
+      <ScreenHeader title="Ürünlerim" rightIcon="add" onRightPress={() => openModal()} />
+
+      <FlatList
+        data={products}
+        keyExtractor={item => item.id.toString()}
+        renderItem={renderProduct}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        ItemSeparatorComponent={() => <View style={{ height: SPACING.md }} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadProducts(1, true)}
+            colors={[COLORS.primary]}
+          />
+        }
+        ListEmptyComponent={
+          <EmptyState icon="package-variant-closed" title="Henüz ürün eklemediniz">
+            <TouchableOpacity style={styles.emptyButton} onPress={() => openModal()}>
+              <Text style={styles.emptyButtonText}>İlk Ürününü Ekle</Text>
+            </TouchableOpacity>
+          </EmptyState>
+        }
+      />
+
+      {total > LIMIT && (
+        <View style={styles.pagination}>
+          <TouchableOpacity
+            style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+            onPress={() => loadProducts(page - 1)}
+            disabled={page === 1}
+          >
+            <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+          </TouchableOpacity>
+
+          <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
+
+          <TouchableOpacity
+            style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
+            onPress={() => loadProducts(page + 1)}
+            disabled={page >= Math.ceil(total / LIMIT)}
+          >
+            <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => openModal()}>
-          <Icon name="add" size={22} color={COLORS.white} />
-        </TouchableOpacity>
-      </View>
-
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Shop Paneli</Text>
-        <Text style={styles.heroName}>Ürünlerim</Text>
-      </View>
-        <FlatList
-          data={products}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderProduct}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadProducts(1, true)}
-              colors={[COLORS.primary]}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="inventory-2" size={48} color={COLORS.border} />
-              <Text style={styles.emptyText}>Henüz ürün eklemediniz</Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={() => openModal()}>
-                <Text style={styles.emptyButtonText}>İlk Ürününü Ekle</Text>
-              </TouchableOpacity>
-            </View>
-          }
-        />
-        {total > LIMIT && (
-  <View style={styles.pagination}>
-    <TouchableOpacity
-      style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
-      onPress={() => loadProducts(page - 1)}
-      disabled={page === 1}
-    >
-      <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
-    </TouchableOpacity>
-
-    <Text style={styles.pageInfo}>{page} / {Math.ceil(total / LIMIT)}</Text>
-
-    <TouchableOpacity
-      style={[styles.pageBtn, page >= Math.ceil(total / LIMIT) && styles.pageBtnDisabled]}
-      onPress={() => loadProducts(page + 1)}
-      disabled={page >= Math.ceil(total / LIMIT)}
-    >
-      <Icon name="chevron-right" size={20} color={page >= Math.ceil(total / LIMIT) ? COLORS.textMuted : COLORS.white} />
-    </TouchableOpacity>
-  </View>
-)}
+      )}
 
       {/* MODAL */}
       <Modal
@@ -315,7 +305,7 @@ if (error) {
               </View>
 
               <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
                   <Text style={styles.inputLabel}>Fiyat (₺)</Text>
                   <TextInput
                     style={[styles.input, errors.price && styles.inputError]}
@@ -349,29 +339,33 @@ if (error) {
                   {errors.quantity && <Text style={styles.errorText}>{errors.quantity}</Text>}
                 </View>
               </View>
-<View style={styles.inputGroup}>
-  <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
-  <TouchableOpacity
-    style={styles.input}
-    onPress={() => setShowDatePicker(true)}
-  >
-    <Text>{expiryDate.toLocaleDateString('tr-TR')}</Text>
-  </TouchableOpacity>
 
-  {showDatePicker && (
-    <DateTimePicker
-      value={expiryDate}
-      mode="date"
-      display="default"
-      onChange={(event, date) => {
-        setShowDatePicker(false); // Android'de dialog kapanır kapanmaz picker'ı unmount et
-        if (event.type === 'set' && date) {
-          setExpiryDate(date);
-        }
-      }}
-    />
-  )}
-</View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Son Kullanma Tarihi</Text>
+                <TouchableOpacity
+                  style={styles.input}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={styles.inputValueText}>{expiryDate.toLocaleDateString('tr-TR')}</Text>
+                </TouchableOpacity>
+
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={expiryDate}
+                    mode="date"
+                    display="default"
+                    onChange={(event, date) => {
+                      // Tek aşamalı (sadece tarih) native diyalog — mode="datetime" ile
+                      // yaşanan çift-diyalog "dismiss" hatası burada geçerli değil,
+                      // Android'de tek bir DatePickerDialog açılıyor.
+                      setShowDatePicker(false);
+                      if (event.type === 'set' && date) {
+                        setExpiryDate(date);
+                      }
+                    }}
+                  />
+                )}
+              </View>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
@@ -401,137 +395,84 @@ if (error) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: COLORS.bg,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
-  addButton: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center', alignItems: 'center',
-  },
+  list: { paddingHorizontal: SPACING.xxl, paddingBottom: SPACING.xxxl + SPACING.md },
 
-  hero: { paddingHorizontal: 20, marginBottom: 16 },
-  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
-  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
-
-  loader: { marginTop: 40 },
-
-  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
-
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+  card: { flexDirection: 'row', alignItems: 'center' },
   cardBody: { flex: 1 },
-  productName: { fontSize: 15, fontWeight: '600', color: COLORS.text, marginBottom: 8 },
-  metaRow: { flexDirection: 'row', gap: 12 },
+  productName: { ...TYPE_SCALE.bodySemiBold, fontSize: 15, color: COLORS.text, marginBottom: SPACING.sm },
+  metaRow: { flexDirection: 'row', gap: SPACING.md, flexWrap: 'wrap' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metaText: { fontSize: 13, color: COLORS.textMuted },
   cardActions: { flexDirection: 'row', gap: 4 },
   iconButton: { padding: 6, width: 32, alignItems: 'center' },
 
-  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
-  emptyText: { fontSize: 14, color: COLORS.textMuted },
   emptyButton: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.xl,
     backgroundColor: COLORS.primaryLight,
   },
   emptyButtonText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
+  pagination: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: SPACING.md, gap: SPACING.lg,
   },
+  pageBtn: {
+    width: 40, height: 40, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  pageBtnDisabled: { backgroundColor: COLORS.border },
+  pageInfo: { fontSize: 14, fontWeight: '600', color: COLORS.text, minWidth: 50, textAlign: 'center' },
+
+  overlay: { flex: 1, justifyContent: 'flex-end' },
   overlayTouch: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modal: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: 32,
+    borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl,
+    padding: SPACING.xxl, paddingBottom: SPACING.xxxl,
     maxHeight: '85%',
   },
   modalHandle: {
     width: 36, height: 4, borderRadius: 2,
     backgroundColor: COLORS.border,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 20,
+    alignItems: 'center', marginBottom: SPACING.xl,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500', marginBottom: 6 },
+  modalTitle: { ...TYPE_SCALE.h3, fontSize: 18, color: COLORS.text },
+  inputGroup: { marginBottom: SPACING.lg },
+  inputLabel: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500', marginBottom: SPACING.xs + 2 },
   input: {
     backgroundColor: COLORS.bg,
-    borderRadius: 10, padding: 12,
+    borderRadius: RADIUS.md, padding: SPACING.md,
     fontSize: 15, color: COLORS.text,
     borderWidth: 1, borderColor: COLORS.border,
   },
+  inputValueText: { fontSize: 15, color: COLORS.text },
   inputError: { borderColor: COLORS.red },
-  errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
+  errorText: { fontSize: 12, color: COLORS.red, marginTop: SPACING.xs },
   row: { flexDirection: 'row' },
 
-  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  modalButtons: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
   cancelButton: {
-    flex: 1, paddingVertical: 14, borderRadius: 12,
-    backgroundColor: COLORS.bg,
-    borderWidth: 1, borderColor: COLORS.border,
+    flex: 1, paddingVertical: SPACING.md + 2, borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.bg, borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center',
   },
   cancelText: { fontSize: 15, fontWeight: '600', color: COLORS.textMuted },
   submitButton: {
-    flex: 1, paddingVertical: 14, borderRadius: 12,
-    backgroundColor: COLORS.primary, alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, paddingVertical: SPACING.md + 2, borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
   },
-  submitText: { fontSize: 15, fontWeight: '600', color: COLORS.white 
-  },
-  pagination: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingVertical: 12,
-  gap: 16,
-},
-pageBtn: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: COLORS.primary,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-pageBtnDisabled: {
-  backgroundColor: COLORS.border,
-},
-pageInfo: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: COLORS.text,
-  minWidth: 50,
-  textAlign: 'center',
-}
+  submitText: { fontSize: 15, fontWeight: '600', color: COLORS.white },
 });
 
 export default ShopProductsScreen;
