@@ -15,12 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import { getProfile, deleteAccount } from '../services/api';
-import { COLORS } from '../theme/colors';
+import { COLORS, SPACING, RADIUS, SHADOWS, TYPE_SCALE } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
+import ScreenHeader from '../components/common/ScreenHeader';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useWorkspace } from '../context/WorkspaceContext';
 
@@ -32,7 +33,7 @@ const ROLE_LABELS = {
 
 export default function UserProfileScreen({ navigation }) {
   const { logout } = useAuth();
-const { currentWorkspace, switchWorkspace } = useWorkspace();
+  const { currentWorkspace, switchWorkspace } = useWorkspace();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState(false);
@@ -80,7 +81,7 @@ const { currentWorkspace, switchWorkspace } = useWorkspace();
   };
 
   if (loading) {
-    return <LoadingState />;
+    return <LoadingState text="Yükleniyor..." />;
   }
   if (error) {
     return (
@@ -98,16 +99,10 @@ const { currentWorkspace, switchWorkspace } = useWorkspace();
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.appName}>expiry</Text>
-          <View style={styles.dot} />
-        </View>
-      </View>
+      <ScreenHeader title="Profilim" />
 
       <ScrollView
-        contentContainerStyle={[styles.body, { paddingBottom: tabBarHeight + 30 }]}
+        contentContainerStyle={[styles.body, { paddingBottom: tabBarHeight + SPACING.xxxl }]}
         showsVerticalScrollIndicator={false}
       >
         {/* AVATAR */}
@@ -135,69 +130,70 @@ const { currentWorkspace, switchWorkspace } = useWorkspace();
           </View>
         </View>
 
-{/* Admin kendi panelindeyken: normal kullanıcı gibi gezinme seçeneği */}
-{user?.role === 'admin' && currentWorkspace === 'admin' && (
-  <>
-    <Text style={styles.sectionLabel}>YÖNETİM</Text>
-    <View style={styles.list}>
-      <TouchableOpacity
-        style={styles.row}
-        onPress={() => switchWorkspace('user')}
-        activeOpacity={0.6}
-      >
-        <View style={styles.rowIcon}>
-          <Icon name="storefront" size={18} color={COLORS.primary} />
-        </View>
-        <Text style={styles.rowTitleOnly}>Normal Kullanıcı Olarak Gez</Text>
-        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
-      </TouchableOpacity>
-    </View>
-  </>
-)}
+        {/* Admin kendi panelindeyken: normal kullanıcı gibi gezinme seçeneği */}
+        {user?.role === 'admin' && currentWorkspace === 'admin' && (
+          <>
+            <Text style={styles.sectionLabel}>YÖNETİM</Text>
+            <View style={styles.list}>
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => switchWorkspace('user')}
+                activeOpacity={0.6}
+              >
+                <View style={styles.rowIcon}>
+                  <Icon name="storefront" size={18} color={COLORS.primary} />
+                </View>
+                <Text style={styles.rowTitleOnly}>Normal Kullanıcı Olarak Gez</Text>
+                <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
-{/* Market/Admin, normal kullanıcı modunda geziniyorken: panele dönüş */}
-{(user?.role === 'market' || user?.role === 'admin') && currentWorkspace === 'user' && (
-  <>
-    <Text style={styles.sectionLabel}>YÖNETİM</Text>
-    <View style={styles.list}>
-      <TouchableOpacity
-        style={styles.row}
-        onPress={() => switchWorkspace(user.role === 'market' ? 'shop' : 'admin')}
-        activeOpacity={0.6}
-      >
-        <View style={styles.rowIcon}>
-          <Icon
-            name={user.role === 'market' ? 'store' : 'admin-panel-settings'}
-            size={18}
-            color={COLORS.primary}
-          />
-        </View>
-        <Text style={styles.rowTitleOnly}>
-          {user.role === 'market' ? 'Market Panelim' : 'Admin Paneli'}
-        </Text>
-        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
-      </TouchableOpacity>
-    </View>
-  </>
-)}
+        {/* Market/Admin, normal kullanıcı modunda geziniyorken: panele dönüş */}
+        {(user?.role === 'market' || user?.role === 'admin') && currentWorkspace === 'user' && (
+          <>
+            <Text style={styles.sectionLabel}>YÖNETİM</Text>
+            <View style={styles.list}>
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => switchWorkspace(user.role === 'market' ? 'shop' : 'admin')}
+                activeOpacity={0.6}
+              >
+                <View style={styles.rowIcon}>
+                  <Icon
+                    name={user.role === 'market' ? 'store' : 'admin-panel-settings'}
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                </View>
+                <Text style={styles.rowTitleOnly}>
+                  {user.role === 'market' ? 'Market Panelim' : 'Admin Paneli'}
+                </Text>
+                <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         {user?.role === 'user' && (
-  <>
-    <Text style={styles.sectionLabel}>MARKET SAHİBİ MİSİN?</Text>
-    <View style={styles.list}>
-      <TouchableOpacity
-        style={styles.row}
-        onPress={() => navigation.navigate('HomeTab', { screen: 'ShopApply' })}
-        activeOpacity={0.6}
-      >
-        <View style={styles.rowIcon}>
-          <Icon name="storefront" size={18} color={COLORS.primary} />
-        </View>
-        <Text style={styles.rowTitleOnly}>Market Başvurusu Yap</Text>
-        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
-      </TouchableOpacity>
-    </View>
-  </>
-)}
+          <>
+            <Text style={styles.sectionLabel}>MARKET SAHİBİ MİSİN?</Text>
+            <View style={styles.list}>
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => navigation.navigate('HomeTab', { screen: 'ShopApply' })}
+                activeOpacity={0.6}
+              >
+                <View style={styles.rowIcon}>
+                  <Icon name="storefront" size={18} color={COLORS.primary} />
+                </View>
+                <Text style={styles.rowTitleOnly}>Market Başvurusu Yap</Text>
+                <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         {/* GENERAL */}
         <Text style={styles.sectionLabel}>GENEL</Text>
@@ -321,40 +317,24 @@ const { currentWorkspace, switchWorkspace } = useWorkspace();
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: COLORS.bg,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+  body: { paddingHorizontal: SPACING.xxl },
 
-  body: {
-  paddingHorizontal: 20,
-  paddingBottom: 110,   // tab bar yüksekliği (~68) + güvenlik payı + safe area
-},
-
-  avatarSection: { alignItems: 'center', marginTop: 8, marginBottom: 28 },
+  avatarSection: { alignItems: 'center', marginTop: SPACING.sm, marginBottom: SPACING.xxxl - 4 },
   avatar: {
     width: 80, height: 80,
-    borderRadius: 24,
+    borderRadius: RADIUS.xxl,
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   avatarText: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
-  fullName: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
+  fullName: { ...TYPE_SCALE.h1, fontSize: 20, color: COLORS.text, marginBottom: SPACING.sm },
   roleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.xl,
     backgroundColor: COLORS.primaryLight,
-    borderWidth: 1,
-    borderColor: COLORS.primary + '40',
   },
   roleText: { fontSize: 12, fontWeight: '600', color: COLORS.primary },
 
@@ -363,23 +343,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textMuted,
     letterSpacing: 0.6,
-    marginBottom: 10,
-    marginTop: 20,
+    marginBottom: SPACING.sm + 2,
+    marginTop: SPACING.xl,
   },
 
+  // Tasarım sistemindeki "shadow-based, border yok" prensibine göre:
+  // border yerine gölge kullanılıyor.
   list: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
+    ...SHADOWS.sm,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    gap: 12,
+    paddingVertical: SPACING.lg - 2,
+    paddingHorizontal: SPACING.lg - 2,
+    gap: SPACING.md,
   },
   divider: {
     height: 1,
@@ -388,14 +369,14 @@ const styles = StyleSheet.create({
   },
   rowIcon: {
     width: 38, height: 38,
-    borderRadius: 10,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   rowIconDanger: {
     width: 38, height: 38,
-    borderRadius: 10,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.redLight,
     justifyContent: 'center',
     alignItems: 'center',
@@ -408,8 +389,8 @@ const styles = StyleSheet.create({
 
   deleteAccountLink: {
     alignSelf: 'center',
-    marginTop: 24,
-    paddingVertical: 8,
+    marginTop: SPACING.xl,
+    paddingVertical: SPACING.sm,
   },
   deleteAccountText: {
     fontSize: 13,
@@ -427,46 +408,47 @@ const styles = StyleSheet.create({
   },
   modalBox: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: RADIUS.xxl,
+    padding: SPACING.xxl,
     width: '85%',
     alignItems: 'center',
+    ...SHADOWS.lg,
   },
   warningIcon: {
     width: 64, height: 64,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     backgroundColor: '#FEF3C7',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
+  modalTitle: { ...TYPE_SCALE.h3, fontSize: 18, color: COLORS.text, marginBottom: SPACING.sm },
   modalMessage: {
     fontSize: 14,
     color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   modalInputBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.bg,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.lg - 2,
+    paddingVertical: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 10,
+    gap: SPACING.sm + 2,
     width: '100%',
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   modalInput: { flex: 1, fontSize: 15, color: COLORS.text },
-  modalActions: { flexDirection: 'row', gap: 10, width: '100%' },
+  modalActions: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.sm + 2,
     backgroundColor: COLORS.bg,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -475,8 +457,8 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
   confirmBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.sm + 2,
     backgroundColor: COLORS.red,
     alignItems: 'center',
   },
