@@ -235,4 +235,51 @@ describe('changeStatus', () => {
     expect(mockOrder.status).toBe('delivered');
     expect(t.commit).toHaveBeenCalled();
   });
+
+  // --- Actor bazlı yetkilendirme: bir geçiş state olarak "var" olsa bile
+  // (ör. delivered -> confirmed transitions map'inde tanımlı), o geçişi
+  // TALEP EDEN actor izinli değilse 403 dönmeli, 200 değil. Bu testler,
+  // müşterinin kendi siparişini QR olmadan "confirmed" yapabildiği
+  // güvenlik açığının kapandığını doğrular.
+
+  it('actor=user kendi siparişini delivered -> confirmed yapamaz (self-confirm bypass kapalı, 403)', async () => {
+    const t = mockTransaction();
+    const mockOrder = {
+      id: 1, userId: 5, shopId: 7, status: 'delivered',
+      save: jest.fn().mockResolvedValue(true),
+    };
+    Order.findOne.mockResolvedValue(mockOrder);
+
+    await expect(changeStatus(1, 'confirmed', 'user', 5)).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(mockOrder.save).not.toHaveBeenCalled();
+    expect(mockOrder.status).toBe('delivered'); // değişmemiş olmalı
+    expect(t.rollback).toHaveBeenCalled();
+    expect(t.commit).not.toHaveBeenCalled();
+  });
+
+  it('actor=user kendi siparişini paid -> delivered yapamaz (403)', async () => {
+    const t = mockTransaction();
+    const mockOrder = { id: 1, userId: 5, shopId: 7, status: 'paid' };
+    Order.findOne.mockResolvedValue(mockOrder);
+
+    await expect(changeStatus(1, 'delivered', 'user', 5)).rejects.toMatchObject({ statusCode: 403 });
+    expect(t.rollback).toHaveBeenCalled();
+  });
+
+  it('actor=admin, delivered -> confirmed geçişini override olarak yapabilir', async () => {
+    const t = mockTransaction();
+    const mockOrder = {
+      id: 1, shopId: 7, status: 'delivered',
+      save: jest.fn().mockResolvedValue(true),
+    };
+    Order.findOne.mockResolvedValue(mockOrder);
+
+    const result = await changeStatus(1, 'confirmed', 'admin', 999);
+
+    expect(Shop.findOne).not.toHaveBeenCalled();
+    expect(mockOrder.status).toBe('confirmed');
+    expect(t.commit).toHaveBeenCalled();
+    expect(result).toBe(mockOrder);
+  });
 });

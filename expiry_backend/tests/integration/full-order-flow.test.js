@@ -129,6 +129,22 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     expect(res.body.order.status).toBe('paid');
   });
 
+  it('simulate-payment production ortamında 403 ile bloklanır (Iyzico bağlanana kadar güvenlik ağı)', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    try {
+      const res = await request(app)
+        .post('/api/orders/simulate-payment')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .send({ orderId });
+
+      expect(res.status).toBe(403);
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
   it('paid durumundaki sipariş müşterinin aktif (active) listesinde görünür', async () => {
   const res = await request(app)
     .get('/api/orders/user/me?tab=active')
@@ -146,6 +162,20 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('delivered');
+  });
+
+  // ---------- Yetkilendirme: self-confirm bypass kapalı ----------
+
+  it('müşteri kendi siparişini QR olmadan /confirm ile onaylayamaz (403)', async () => {
+    // Bu, önceden var olan bir güvenlik açığının regresyon testi: sipariş
+    // "delivered" durumundayken müşteri kendi kendine "confirmed" diyebiliyordu,
+    // bu da QR doğrulamasını tamamen anlamsız kılıyordu. Artık delivered -> confirmed
+    // geçişi yalnızca market (confirmByQRCode üzerinden) veya admin tarafından yapılabilir.
+    const res = await request(app)
+      .post(`/api/orders/${orderId}/confirm`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(403);
   });
 
   // ---------- Yetkilendirme: confirm-qr ----------
