@@ -6,19 +6,32 @@ const ORDER_EVENTS = require('../events/order.events');
 const crypto = require('crypto');
 const AppError = require('../utils/AppError');
 
-const transitions = {
-  pending: ['paid'],
-  paid: ['delivered'],
-  delivered: ['confirmed'],
-  confirmed: ['released']
+// Her durum geçişi, hangi actor'lerin (rollerin) bu geçişi tetikleyebileceğini
+// açıkça listeler. Bu liste, "kim hangi state'i değiştirebilir" sorusunun tek
+// doğru kaynağıdır — buraya eklenmeyen bir (from, to, actor) kombinasyonu
+// otomatik olarak reddedilir.
+//
+// pending -> paid   : sadece ödeme sağlayıcısı/webhook ('system') ya da admin override
+// paid -> delivered : sadece market (kendi ürününü teslimata hazırladığını işaretler)
+// delivered -> confirmed : sadece market — ve sadece confirmByQRCode üzerinden,
+//   yani alıcının fiziksel olarak QR kodunu göstermesi karşılığında. Müşterinin
+//   kendi kendine "onayla" demesi burada KASITLI olarak izin verilmiyor; aksi
+//   halde QR doğrulamasının hiçbir anlamı kalmaz.
+// confirmed -> released : market (mevcut ürün akışı böyle), admin override
+const TRANSITIONS = {
+  pending: { paid: ['system', 'admin'] },
+  paid: { delivered: ['market', 'admin'] },
+  delivered: { confirmed: ['market', 'admin'] },
+  confirmed: { released: ['market', 'admin'] },
 };
+
 const STATUS_GROUPS = {
   active: ['pending', 'paid', 'delivered'],
   past: ['confirmed', 'released'],
 };
 
-function canTransition(current, next) {
-  return transitions[current]?.includes(next);
+function getTransitionRule(current, next) {
+  return TRANSITIONS[current]?.[next] || null;
 }
 
 async function runSideEffects(order, status, transaction) {
@@ -185,7 +198,9 @@ async function confirmByQRCode(marketUserId, deliveryToken) {
 
     if (!shop) throw new AppError('Bu siparişe erişim yetkiniz yok', 403);
 
-    await changeStatusInternal(order, 'confirmed', 'user', t);
+    // Actor 'market': QR kodu fiziksel olarak gösteren müşteri değil, onu okutup
+    // doğrulayan market — TRANSITIONS.delivered.confirmed kuralıyla tutarlı olması için.
+    await changeStatusInternal(order, 'confirmed', 'market', t);
 
     await t.commit();
     return order;
@@ -249,8 +264,17 @@ async function changeStatus(orderId, newStatus, actor = 'user', userId = null) {
 }
 
 async function changeStatusInternal(order, newStatus, actor, transaction) {
-  if (!canTransition(order.status, newStatus)) {
+  const allowedActors = getTransitionRule(order.status, newStatus);
+
+  if (!allowedActors) {
     throw new AppError(`Geçersiz durum geçişi: ${order.status} → ${newStatus}`, 409);
+  }
+
+  if (!allowedActors.includes(actor)) {
+    throw new AppError(
+      `Bu durum geçişini (${order.status} → ${newStatus}) gerçekleştirme yetkiniz yok`,
+      403
+    );
   }
 
   const now = new Date();

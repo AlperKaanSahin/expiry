@@ -2,13 +2,18 @@ const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
 const auth = require('../middlewares/auth');
+const devOnly = require('../middlewares/devOnly');
 const validate = require('../middlewares/validate');
 const orderValidator = require('../validators/order.validator');
 
 router.get('/user/me', auth, orderController.getMyUserOrders);
 router.get('/shop/me', auth, orderController.getMyShopOrders);
 router.post('/', auth, orderValidator.createOrder, validate, orderController.createOrder);
-router.post('/simulate-payment', auth, orderController.simulatePayment);
+// TODO(iyzico): Iyzico entegrasyonu tamamlanınca bu route'u kaldır, PaymentScreen.js'i
+// gerçek ödeme akışına bağla. devOnly guard'ı bu placeholder'ın production'a kazara
+// sızmasını engelliyor — Iyzico bağlanmadan production build checkout çalışmayacak,
+// bu kasıtlı bir "unutma" önlemi.
+router.post('/simulate-payment', auth, devOnly, orderController.simulatePayment);
 router.post('/:id/status', auth, orderValidator.changeOrderStatus, validate, orderController.changeOrderStatus);
 router.post('/:id/confirm', auth, orderController.confirmOrder);
 router.post('/:id/deliver', auth, orderController.markDelivered);
