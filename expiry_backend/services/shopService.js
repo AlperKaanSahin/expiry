@@ -257,18 +257,17 @@ exports.updatePaymentSettings = async (userId, data) => {
     subMerchantKey: shop.subMerchantKey,
   };
 };
-exports.updateCoverPhoto = async (userId, fileBuffer, originalName, mimetype) => {
+exports.updateCoverPhoto = async (userId, fileBuffer, mimetype) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
   if (!shop) throw new AppError('Market bulunamadı', 404);
 
   const oldPendingUrl = shop.coverImagePendingUrl;
 
-  const newImageUrl = await storageService.uploadFile(fileBuffer, originalName, mimetype);
+  const newImageUrl = await storageService.uploadFile(fileBuffer, mimetype);
 
   shop.coverImagePendingUrl = newImageUrl;
   await shop.save();
 
-  // Eğer daha önce onay bekleyen başka bir fotoğraf varsa (değiştirildiyse), onu sil
   if (oldPendingUrl) {
     await storageService.deleteFile(oldPendingUrl);
   }
