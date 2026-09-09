@@ -69,8 +69,7 @@ const updateCoverPhoto = catchAsync(async (req, res) => {
   const shop = await shopService.updateCoverPhoto(
     req.user.id,
     req.file.buffer,
-    req.file.originalname,
-    req.file.mimetype
+    req.file.verifiedMimetype // validateImageSignature'da gerçek byte içeriğine bakılarak doğrulandı
   );
 
   res.json({ message: 'Kapak fotoğrafı güncellendi', shop });
