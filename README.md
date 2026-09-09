@@ -236,6 +236,9 @@ It covers:
 
 ## Recently Completed
 
+- Hardened order status transitions with actor-based authorization, closing a gap that allowed a buyer to self-confirm delivery without QR verification
+- Added a production safeguard preventing the payment-simulation endpoint from running outside development/test environments
+- Replaced client-supplied MIME-type trust with content-based (magic byte) validation for image uploads, preventing spoofed file types from being stored
 - Fixed a database race condition in stock reservation using row-level locking
 - Refactored error handling across the entire API into a centralized, consistent pattern
 - Built a Jest unit testing layer covering services and authentication middleware
@@ -263,4 +266,4 @@ It covers:
 
 **Alper Kaan Sahin**
 
-- LinkedIn: https://www.linkedin.com/in/alperkaansahin/
+- LinkedIn: [https://www.linkedin.com/in/alperkaansahin/](https://www.linkedin.com/in/alper-kaan-şahin-3341a228a/)
