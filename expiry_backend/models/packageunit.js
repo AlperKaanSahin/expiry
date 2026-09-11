@@ -1,4 +1,4 @@
-// models/packageunit.js
+
 module.exports = (sequelize, DataTypes) => {
   const PackageUnit = sequelize.define('PackageUnit', {
     packageId: {

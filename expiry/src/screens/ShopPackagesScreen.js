@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,15 @@ import Chip from '../components/common/Chip';
 import ScreenHeader from '../components/common/ScreenHeader';
 
 const EMPTY_FORM = { name: '', price: '', description: '', quantity: '1' };
+const EMPTY_NEW_PRODUCT = { name: '', price: '', quantity: '1', expiryDate: null };
 const LIMIT = 10;
+
+const STEPS = [
+  { key: 1, label: 'Ürünler', icon: 'inventory-2' },
+  { key: 2, label: 'Bilgiler', icon: 'edit-note' },
+  { key: 3, label: 'Teslimat', icon: 'schedule' },
+  { key: 4, label: 'Gelişmiş', icon: 'tune' },
+];
 
 const formatDeliveryRange = (start, end) => {
   if (!start || !end) return '-';
@@ -63,6 +71,9 @@ const formatDateTime = (date) =>
     day: '2-digit', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+
+const formatDateOnly = (date) =>
+  date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
 
 // Teslimat aralığı için hızlı seçim seçenekleri — sadece deliveryStart/deliveryEnd'i
 // dolduran birer kısayol, hâlâ istenirse aşağıdaki özel tarih seçicilerle üzerine yazılabilir.
@@ -117,6 +128,23 @@ const openAndroidDateTimePicker = (currentValue, onPicked) => {
   });
 };
 
+// SKT gibi sadece tarih (saat gerektirmeyen) alanlar için Android'de imperative
+// tek diyalog yeterli, datetime bug'ı burada devreye girmiyor ama tutarlılık için
+// aynı imperative API kullanılıyor.
+const openAndroidDatePicker = (currentValue, onPicked) => {
+  DateTimePickerAndroid.open({
+    value: currentValue || new Date(),
+    mode: 'date',
+    onChange: (event, pickedDate) => {
+      if (event.type !== 'set' || !pickedDate) return;
+      onPicked(pickedDate);
+    },
+  });
+};
+
+let tempIdCounter = 0;
+const generateTempId = () => `new-${Date.now()}-${tempIdCounter++}`;
+
 const ShopPackagesScreen = () => {
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +163,6 @@ const ShopPackagesScreen = () => {
   const [allProducts, setAllProducts] = useState([]);
   const [productSearch, setProductSearch] = useState('');
   const [selectedProducts, setSelectedProducts] = useState([]);
-  const [modalError, setModalError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
@@ -144,6 +171,19 @@ const ShopPackagesScreen = () => {
   const [page, setPage] = useState(1);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+
+  // Paket ekleme alanından direkt yeni ürün oluşturma — artık birincil akış
+  const [newProductDraft, setNewProductDraft] = useState(EMPTY_NEW_PRODUCT);
+  const [newProductError, setNewProductError] = useState('');
+  const [showNewProductDatePicker, setShowNewProductDatePicker] = useState(false);
+
+  // Adım 1'deki ürün ekleme modu: null (henüz seçim yapılmadı) | 'new' | 'existing'
+  // İkisi de başta kapalı geliyor; biri seçilince sadece o panel görünüyor.
+  const [productEntryMode, setProductEntryMode] = useState(null);
+
+  // Wizard adımları
+  const [currentStep, setCurrentStep] = useState(1);
+  const [stepError, setStepError] = useState('');
 
   const loadPackages = async (pageNumber = 1, isRefresh = false) => {
     if (isRefresh) {
@@ -179,6 +219,11 @@ const ShopPackagesScreen = () => {
     setQuickPresets(buildQuickPresets());
     setSelectedPresetKey(null);
     setProductSearch('');
+    setNewProductDraft(EMPTY_NEW_PRODUCT);
+    setNewProductError('');
+    setProductEntryMode(null);
+    setCurrentStep(1);
+    setStepError('');
 
     try {
       const products = await fetchAllShopProducts();
@@ -204,8 +249,7 @@ const ShopPackagesScreen = () => {
       setMinPriceDropLimit(pkg?.minPriceDropLimit != null ? pkg.minPriceDropLimit.toString() : '');
       setDeliveryStart(pkg?.deliveryStart ? new Date(pkg.deliveryStart) : new Date());
       setDeliveryEnd(pkg?.deliveryEnd ? new Date(pkg.deliveryEnd) : new Date());
-      setSelectedProducts(pkg?.products ? pkg.products.map(p => ({ id: p.id, quantity: p.quantity })) : []);
-      setModalError('');
+      setSelectedProducts(pkg?.products ? pkg.products.map(p => ({ id: p.id, quantity: p.quantity, name: p.name })) : []);
     } catch (err) {
       showErrorToast(err, Toast);
       setModalVisible(false);
@@ -216,11 +260,15 @@ const ShopPackagesScreen = () => {
 
   const closeModal = () => {
     setModalVisible(false);
-    setModalError('');
     setSelectedPackage(null);
     setFormData(EMPTY_FORM);
     setSelectedProducts([]);
     setProductSearch('');
+    setNewProductDraft(EMPTY_NEW_PRODUCT);
+    setNewProductError('');
+    setProductEntryMode(null);
+    setCurrentStep(1);
+    setStepError('');
   };
 
   const applyPreset = (preset) => {
@@ -229,11 +277,11 @@ const ShopPackagesScreen = () => {
     setSelectedPresetKey(preset.key);
   };
 
-  const handleProductSelect = (productId) => {
-    if (selectedProducts.some(p => p.id === productId)) {
-      setSelectedProducts(selectedProducts.filter(p => p.id !== productId));
+  const handleProductSelect = (product) => {
+    if (selectedProducts.some(p => p.id === product.id)) {
+      setSelectedProducts(selectedProducts.filter(p => p.id !== product.id));
     } else {
-      setSelectedProducts([...selectedProducts, { id: productId, quantity: 1 }]);
+      setSelectedProducts([...selectedProducts, { id: product.id, quantity: 1, name: product.name }]);
     }
   };
 
@@ -241,6 +289,64 @@ const ShopPackagesScreen = () => {
     setSelectedProducts(selectedProducts.map(p =>
       p.id === productId ? { ...p, quantity: quantity.replace(/[^0-9]/g, '') } : p
     ));
+  };
+
+  const handleNewProductQuantityChange = (tempId, quantity) => {
+    setSelectedProducts(selectedProducts.map(p =>
+      p.tempId === tempId ? { ...p, quantity: quantity.replace(/[^0-9]/g, '') } : p
+    ));
+  };
+
+  const handleRemoveProduct = (item) => {
+    if (item.isNew) {
+      setSelectedProducts(selectedProducts.filter(p => p.tempId !== item.tempId));
+    } else {
+      setSelectedProducts(selectedProducts.filter(p => p.id !== item.id));
+    }
+  };
+
+  const handleAddNewProductDraft = () => {
+    setNewProductError('');
+
+    const trimmedName = newProductDraft.name.trim();
+    if (!trimmedName) {
+      setNewProductError('Ürün adı zorunlu');
+      return;
+    }
+
+    const duplicateName = selectedProducts.some(
+      p => (p.name || '').trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (duplicateName) {
+      setNewProductError('Bu isimde bir ürün zaten pakete eklendi');
+      return;
+    }
+
+    const priceNum = parseFloat(newProductDraft.price);
+    if (!newProductDraft.price || isNaN(priceNum) || priceNum < 0) {
+      setNewProductError('Geçerli bir fiyat girin');
+      return;
+    }
+
+    if (!newProductDraft.expiryDate) {
+      setNewProductError('Son kullanma tarihi zorunlu');
+      return;
+    }
+
+    const qtyNum = parseInt(newProductDraft.quantity);
+
+    setSelectedProducts([...selectedProducts, {
+      tempId: generateTempId(),
+      isNew: true,
+      name: trimmedName,
+      price: newProductDraft.price,
+      quantity: qtyNum > 0 ? qtyNum.toString() : '1',
+      expiryDate: newProductDraft.expiryDate,
+    }]);
+
+    Toast.show({ type: 'success', text1: 'Eklendi', text2: `"${trimmedName}" pakete eklendi` });
+
+    setNewProductDraft(EMPTY_NEW_PRODUCT);
   };
 
   const handleDelete = (pkg) => {
@@ -270,21 +376,57 @@ const ShopPackagesScreen = () => {
     );
   };
 
-  const handleSubmit = async () => {
-    setModalError('');
-
-    if (!formData.name.trim()) {
-      setModalError('Paket adı zorunlu');
-      return;
-    }
-
+  // --- Adım bazlı validasyon ---
+  const validateStep1 = () => {
     if (selectedProducts.length === 0) {
-      setModalError('En az bir ürün seçmelisiniz');
-      return;
+      setStepError('En az bir ürün eklemelisiniz');
+      return false;
     }
+    return true;
+  };
 
+  const validateStep2 = () => {
+    // Paket adı artık opsiyonel — boş bırakılırsa backend ürün isimlerinden
+    // otomatik bir ad üretiyor. Bu adımda şu an zorunlu bir alan yok.
+    return true;
+  };
+
+  const validateStep3 = () => {
     if (deliveryEnd <= deliveryStart) {
-      setModalError('Teslimat bitiş zamanı başlangıçtan sonra olmalı');
+      setStepError('Teslimat bitiş zamanı başlangıçtan sonra olmalı');
+      return false;
+    }
+    return true;
+  };
+
+  const goNext = () => {
+    setStepError('');
+    if (currentStep === 1 && !validateStep1()) return;
+    if (currentStep === 2 && !validateStep2()) return;
+    if (currentStep === 3 && !validateStep3()) return;
+    setCurrentStep(Math.min(currentStep + 1, STEPS.length));
+  };
+
+  const goBack = () => {
+    setStepError('');
+    setCurrentStep(Math.max(currentStep - 1, 1));
+  };
+
+  const goToStep = (stepKey) => {
+    // Geriye her zaman gidilebilir; ileriye sadece daha önce açıldıysa (ör. düzenleme modunda)
+    if (stepKey <= currentStep) {
+      setStepError('');
+      setCurrentStep(stepKey);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setStepError('');
+
+    if (!validateStep1() || !validateStep2() || !validateStep3()) {
+      // Hangi adımda sorun varsa oraya geri dön
+      if (selectedProducts.length === 0) { setCurrentStep(1); return; }
+      if (deliveryEnd <= deliveryStart) { setCurrentStep(3); return; }
       return;
     }
 
@@ -292,6 +434,18 @@ const ShopPackagesScreen = () => {
       setSubmitting(true);
 
       const cleanedProducts = selectedProducts.map(p => {
+        if (p.isNew) {
+          return {
+            newProduct: {
+              name: p.name,
+              price: parseFloat(p.price) || 0,
+              expiryDate: p.expiryDate ? p.expiryDate.toISOString() : null,
+            },
+            quantity: p.quantity && parseInt(p.quantity) > 0 ? parseInt(p.quantity) : 1,
+            price: parseFloat(p.price) || 0,
+          };
+        }
+
         const productInfo = allProducts.find(prod => prod.id === p.id);
         return {
           id: p.id,
@@ -300,30 +454,31 @@ const ShopPackagesScreen = () => {
         };
       });
 
-      const totalProductsPrice = cleanedProducts.reduce((sum, p) => {
-        const productInfo = allProducts.find(prod => prod.id === p.id);
-        const price = productInfo ? parseFloat(productInfo.price) : 0;
-        return sum + price * p.quantity;
-      }, 0);
+      const totalProductsPrice = cleanedProducts.reduce(
+        (sum, p) => sum + (p.price || 0) * p.quantity, 0
+      );
 
       if (autoPriceDropEnabled) {
         const minLimit = parseFloat(minPriceDropLimit);
         const packagePrice = formData.price ? parseFloat(formData.price) : null;
 
         if (!minPriceDropLimit || isNaN(minLimit) || minLimit <= 0) {
-          setModalError("Minimum fiyat 0'dan büyük olmalı!");
+          setStepError("Minimum fiyat 0'dan büyük olmalı!");
+          setCurrentStep(4);
           setSubmitting(false);
           return;
         }
 
         if (packagePrice !== null && minLimit > packagePrice) {
-          setModalError("Minimum fiyat, paket fiyatından fazla olamaz!");
+          setStepError("Minimum fiyat, paket fiyatından fazla olamaz!");
+          setCurrentStep(4);
           setSubmitting(false);
           return;
         }
 
         if (packagePrice === null && minLimit > totalProductsPrice) {
-          setModalError("Minimum fiyat, ürünlerin toplam fiyatından fazla olamaz!");
+          setStepError("Minimum fiyat, ürünlerin toplam fiyatından fazla olamaz!");
+          setCurrentStep(4);
           setSubmitting(false);
           return;
         }
@@ -406,6 +561,493 @@ const ShopPackagesScreen = () => {
     </Card>
   );
 
+  // --- WIZARD: adım göstergesi ---
+  const renderStepIndicator = () => (
+    <View style={styles.stepIndicatorRow}>
+      {STEPS.map((step, idx) => {
+        const isActive = step.key === currentStep;
+        const isDone = step.key < currentStep;
+        return (
+          <React.Fragment key={step.key}>
+            <TouchableOpacity
+              style={styles.stepIndicatorItem}
+              onPress={() => goToStep(step.key)}
+              disabled={step.key > currentStep}
+            >
+              <View style={[
+                styles.stepDot,
+                isActive && styles.stepDotActive,
+                isDone && styles.stepDotDone,
+              ]}>
+                {isDone ? (
+                  <Icon name="check" size={14} color={COLORS.white} />
+                ) : (
+                  <Text style={[styles.stepDotText, isActive && styles.stepDotTextActive]}>{step.key}</Text>
+                )}
+              </View>
+              <Text style={[styles.stepLabel, isActive && styles.stepLabelActive]}>{step.label}</Text>
+            </TouchableOpacity>
+            {idx < STEPS.length - 1 && <View style={styles.stepConnector} />}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+
+  // Her adımda görünen "pakete eklenenler" özeti — adım 1'de miktar düzenlenebilir/silinebilir,
+  // sonraki adımlarda da aynı işlevsellik korunuyor ki kullanıcı kararından vazgeçerse
+  // ürünler sayfasına geri dönmek zorunda kalmasın.
+  const renderSelectedProductsSummary = () => {
+    if (selectedProducts.length === 0) return null;
+    return (
+      <View style={styles.selectedSection}>
+        <Text style={styles.selectedLabel}>Pakete Eklenenler ({selectedProducts.length})</Text>
+        {selectedProducts.map(item => (
+          <View key={item.isNew ? item.tempId : item.id} style={styles.productRow}>
+            {item.isNew && (
+              <View style={styles.newBadge}>
+                <Icon name="fiber-new" size={16} color={COLORS.primary} />
+              </View>
+            )}
+            <View style={styles.productInfo}>
+              <Text style={styles.productName}>{item.name}</Text>
+              {item.isNew && <Text style={styles.productStock}>{item.price} ₺ · yeni ürün</Text>}
+            </View>
+            <TextInput
+              value={item.quantity?.toString() || ''}
+              onChangeText={q => item.isNew ? handleNewProductQuantityChange(item.tempId, q) : handleQuantityChange(item.id, q)}
+              keyboardType="numeric"
+              style={styles.quantityInput}
+              placeholder="Adet"
+              placeholderTextColor={COLORS.textMuted}
+            />
+            <TouchableOpacity onPress={() => handleRemoveProduct(item)} style={styles.removeNewButton}>
+              <Icon name="delete-outline" size={20} color={COLORS.red} />
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  // --- ADIM 1: Ürünler ---
+  const renderStep1 = () => (
+    <>
+      <Text style={styles.stepIntro}>
+        Son kullanma tarihi yaklaşan ürünü direkt burada tanımlayıp pakete ekleyin — önceden ürün listesine eklemeniz gerekmez.
+      </Text>
+
+      {renderSelectedProductsSummary()}
+
+      {/* İki seçim kartı — başta ikisi de kapalı, birine dokununca sadece o panel açılır */}
+      {productEntryMode === null && (
+        <View style={styles.entryChoiceRow}>
+          <TouchableOpacity
+            style={styles.entryChoiceCard}
+            onPress={() => setProductEntryMode('new')}
+          >
+            <Icon name="add-circle-outline" size={28} color={COLORS.primary} />
+            <Text style={styles.entryChoiceTitle}>Yeni Ürün Ekle</Text>
+            <Text style={styles.entryChoiceSubtitle}>SKT'si yaklaşan ürünü direkt tanımla</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.entryChoiceCard}
+            onPress={() => setProductEntryMode('existing')}
+          >
+            <Icon name="inventory-2" size={28} color={COLORS.primary} />
+            <Text style={styles.entryChoiceTitle}>Kayıtlı Ürünlerimden Seç</Text>
+            <Text style={styles.entryChoiceSubtitle}>
+              {allProducts.length > 0 ? `${allProducts.length} ürün mevcut` : 'Henüz ürün yok'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* YENİ ÜRÜN PANELİ */}
+      {productEntryMode === 'new' && (
+        <View style={styles.newProductPanel}>
+          <View style={styles.newProductPanelHeader}>
+            <Text style={styles.newProductPanelTitle}>Yeni Ürün</Text>
+            <TouchableOpacity onPress={() => { setProductEntryMode(null); setNewProductError(''); }}>
+              <Icon name="close" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Ürün Adı</Text>
+            <TextInput
+              style={styles.input}
+              value={newProductDraft.name}
+              onChangeText={text => setNewProductDraft({ ...newProductDraft, name: text })}
+              placeholder="Örn: Tam Buğday Ekmek"
+              placeholderTextColor={COLORS.textMuted}
+            />
+          </View>
+
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
+              <Text style={styles.inputLabel}>Fiyat (₺)</Text>
+              <TextInput
+                style={styles.input}
+                value={newProductDraft.price}
+                onChangeText={text => setNewProductDraft({ ...newProductDraft, price: text })}
+                keyboardType="numeric"
+                placeholder="Örn: 25"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.inputLabel}>Pakette Adet</Text>
+              <TextInput
+                style={styles.input}
+                value={newProductDraft.quantity}
+                onChangeText={text => setNewProductDraft({ ...newProductDraft, quantity: text.replace(/[^0-9]/g, '') })}
+                keyboardType="numeric"
+                placeholder="1"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Son Kullanma Tarihi *</Text>
+            <TouchableOpacity
+              style={styles.input}
+              onPress={() => {
+                Keyboard.dismiss();
+                if (Platform.OS === 'android') {
+                  openAndroidDatePicker(newProductDraft.expiryDate, (date) => {
+                    setNewProductDraft({ ...newProductDraft, expiryDate: date });
+                  });
+                } else {
+                  setShowNewProductDatePicker(true);
+                }
+              }}
+            >
+              <Text style={styles.inputValueText}>
+                {newProductDraft.expiryDate ? formatDateOnly(newProductDraft.expiryDate) : 'Seçim yapın'}
+              </Text>
+            </TouchableOpacity>
+            {Platform.OS === 'ios' && showNewProductDatePicker && (
+              <DateTimePicker
+                value={newProductDraft.expiryDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowNewProductDatePicker(false);
+                  if (event.type === 'set' && date) {
+                    setNewProductDraft({ ...newProductDraft, expiryDate: date });
+                  }
+                }}
+              />
+            )}
+          </View>
+
+          {newProductError ? (
+            <Text style={styles.errorText}>{newProductError}</Text>
+          ) : null}
+
+          <TouchableOpacity style={styles.newProductAddButton} onPress={handleAddNewProductDraft}>
+            <Icon name="add" size={18} color={COLORS.white} />
+            <Text style={styles.newProductAddButtonText}>Pakete Ekle</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* VAR OLAN ÜRÜNLER PANELİ */}
+      {productEntryMode === 'existing' && (
+        <View style={styles.newProductPanel}>
+          <View style={styles.newProductPanelHeader}>
+            <Text style={styles.newProductPanelTitle}>Kayıtlı Ürünlerimden Seç</Text>
+            <TouchableOpacity onPress={() => setProductEntryMode(null)}>
+              <Icon name="close" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          {allProducts.length === 0 ? (
+            <Text style={styles.noProductsText}>Henüz kayıtlı ürününüz yok.</Text>
+          ) : (
+            <>
+              {allProducts.length > 5 && (
+                <View style={styles.productSearchBox}>
+                  <Icon name="search" size={18} color={COLORS.textMuted} />
+                  <TextInput
+                    style={styles.productSearchInput}
+                    placeholder="Ürün ara..."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={productSearch}
+                    onChangeText={setProductSearch}
+                  />
+                  {productSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setProductSearch('')}>
+                      <Icon name="close" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {filteredProducts.length === 0 ? (
+                <Text style={styles.noProductsText}>Sonuç bulunamadı</Text>
+              ) : (
+                filteredProducts.map(item => {
+                  const selected = selectedProducts.find(p => !p.isNew && p.id === item.id);
+                  return (
+                    <View key={item.id} style={styles.productRow}>
+                      <TouchableOpacity
+                        onPress={() => handleProductSelect(item)}
+                        style={[styles.checkbox, selected && styles.checkboxActive]}
+                      >
+                        {selected && <Icon name="check" size={16} color={COLORS.white} />}
+                      </TouchableOpacity>
+                      <View style={styles.productInfo}>
+                        <Text style={styles.productName}>{item.name}</Text>
+                        <Text style={styles.productStock}>Stok: {item.quantity ?? '-'} adet</Text>
+                      </View>
+                      {selected && (
+                        <TextInput
+                          value={selected.quantity?.toString() || ''}
+                          onChangeText={q => handleQuantityChange(item.id, q)}
+                          keyboardType="numeric"
+                          style={styles.quantityInput}
+                          placeholder="Adet"
+                          placeholderTextColor={COLORS.textMuted}
+                        />
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </>
+          )}
+        </View>
+      )}
+    </>
+  );
+
+  // --- ADIM 2: Paket Bilgisi ---
+  const renderStep2 = () => (
+    <>
+      {renderSelectedProductsSummary()}
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Paket Adı (opsiyonel)</Text>
+        <TextInput
+          style={styles.input}
+          value={formData.name}
+          onChangeText={text => setFormData({ ...formData, name: text })}
+          placeholder="Boş bırakırsanız ürünlerden otomatik oluşturulur"
+          placeholderTextColor={COLORS.textMuted}
+          returnKeyType="next"
+        />
+      </View>
+
+      <View style={styles.row}>
+        <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
+          <Text style={styles.inputLabel}>Fiyat (₺)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.price}
+            onChangeText={text => setFormData({ ...formData, price: text })}
+            keyboardType="numeric"
+            placeholder="Opsiyonel"
+            placeholderTextColor={COLORS.textMuted}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+          />
+        </View>
+        <View style={[styles.inputGroup, { flex: 1 }]}>
+          <Text style={styles.inputLabel}>Kutu Adedi</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.quantity}
+            onChangeText={text => setFormData({ ...formData, quantity: text.replace(/[^0-9]/g, '') })}
+            keyboardType="numeric"
+            placeholder="1"
+            placeholderTextColor={COLORS.textMuted}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+          />
+        </View>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Açıklama</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={formData.description}
+          onChangeText={text => setFormData({ ...formData, description: text })}
+          placeholder="Paket hakkında kısa bilgi"
+          placeholderTextColor={COLORS.textMuted}
+          multiline
+          numberOfLines={3}
+          maxLength={250}
+          blurOnSubmit
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
+        />
+      </View>
+    </>
+  );
+
+  // --- ADIM 3: Teslimat ---
+  const renderStep3 = () => (
+    <>
+      {renderSelectedProductsSummary()}
+
+      <Text style={styles.deliverySummary}>
+        {formatDeliveryRange(deliveryStart, deliveryEnd)}
+      </Text>
+
+      <View style={styles.presetRow}>
+        {quickPresets.map(preset => (
+          <Chip
+            key={preset.key}
+            label={preset.label}
+            active={selectedPresetKey === preset.key}
+            onPress={() => applyPreset(preset)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Başlangıç</Text>
+        <TouchableOpacity
+          style={styles.input}
+          onPress={() => {
+            if (Platform.OS === 'android') {
+              openAndroidDateTimePicker(deliveryStart, (date) => {
+                setDeliveryStart(date);
+                setSelectedPresetKey(null);
+              });
+            } else {
+              setShowStartPicker(true);
+            }
+          }}
+        >
+          <Text style={styles.inputValueText}>{formatDateTime(deliveryStart)}</Text>
+        </TouchableOpacity>
+        {Platform.OS === 'ios' && showStartPicker && (
+          <DateTimePicker
+            value={deliveryStart}
+            mode="datetime"
+            display="default"
+            onChange={(event, date) => {
+              setShowStartPicker(false);
+              if (event.type === 'set' && date) {
+                setDeliveryStart(date);
+                setSelectedPresetKey(null);
+              }
+            }}
+          />
+        )}
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Bitiş</Text>
+        <TouchableOpacity
+          style={styles.input}
+          onPress={() => {
+            if (Platform.OS === 'android') {
+              openAndroidDateTimePicker(deliveryEnd, (date) => {
+                setDeliveryEnd(date);
+                setSelectedPresetKey(null);
+              });
+            } else {
+              setShowEndPicker(true);
+            }
+          }}
+        >
+          <Text style={styles.inputValueText}>{formatDateTime(deliveryEnd)}</Text>
+        </TouchableOpacity>
+        {Platform.OS === 'ios' && showEndPicker && (
+          <DateTimePicker
+            value={deliveryEnd}
+            mode="datetime"
+            display="default"
+            onChange={(event, date) => {
+              setShowEndPicker(false);
+              if (event.type === 'set' && date) {
+                setDeliveryEnd(date);
+                setSelectedPresetKey(null);
+              }
+            }}
+          />
+        )}
+      </View>
+    </>
+  );
+
+  // --- ADIM 4: Gelişmiş (Otomatik Fiyat Düşüşü) ---
+  const renderStep4 = () => (
+    <>
+      {renderSelectedProductsSummary()}
+
+      <View style={styles.switchRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.inputLabel}>Otomatik Fiyat Düşüşü</Text>
+          <Text style={styles.expiryHint}>İstemiyorsanız kapalı bırakıp doğrudan kaydedebilirsiniz</Text>
+        </View>
+        <Switch
+          value={autoPriceDropEnabled}
+          onValueChange={setAutoPriceDropEnabled}
+          trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
+          thumbColor={autoPriceDropEnabled ? COLORS.primary : COLORS.textMuted}
+        />
+      </View>
+
+      {autoPriceDropEnabled && (
+        <>
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
+              <Text style={styles.inputLabel}>Kaç saatte bir?</Text>
+              <TextInput
+                style={styles.input}
+                value={priceDropInterval}
+                onChangeText={setPriceDropInterval}
+                keyboardType="numeric"
+                placeholder="Örn: 1"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+              />
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.inputLabel}>Kaç TL düşsün?</Text>
+              <TextInput
+                style={styles.input}
+                value={priceDropAmount}
+                onChangeText={setPriceDropAmount}
+                keyboardType="numeric"
+                placeholder="Örn: 5"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+              />
+            </View>
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Minimum Fiyat (₺)</Text>
+            <TextInput
+              style={styles.input}
+              value={minPriceDropLimit}
+              onChangeText={setMinPriceDropLimit}
+              keyboardType="numeric"
+              placeholder="Örn: 50"
+              placeholderTextColor={COLORS.textMuted}
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+            />
+          </View>
+        </>
+      )}
+    </>
+  );
+
   if (loading) {
     return <LoadingState />;
   }
@@ -464,7 +1106,7 @@ const ShopPackagesScreen = () => {
         </View>
       )}
 
-      {/* MODAL */}
+      {/* MODAL — WIZARD */}
       <Modal
         visible={modalVisible}
         transparent
@@ -485,296 +1127,61 @@ const ShopPackagesScreen = () => {
             {modalLoading ? (
               <ActivityIndicator size="large" color={COLORS.primary} style={{ paddingVertical: 60 }} />
             ) : (
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                {/* TEMEL BİLGİLER */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Paket Adı</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.name}
-                    onChangeText={text => setFormData({ ...formData, name: text })}
-                    placeholder="Paket adı girin"
-                    placeholderTextColor={COLORS.textMuted}
-                    returnKeyType="next"
-                  />
-                </View>
+              <>
+                {renderStepIndicator()}
 
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
-                    <Text style={styles.inputLabel}>Fiyat (₺)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={formData.price}
-                      onChangeText={text => setFormData({ ...formData, price: text })}
-                      keyboardType="numeric"
-                      placeholder="Opsiyonel"
-                      placeholderTextColor={COLORS.textMuted}
-                      returnKeyType="done"
-                      onSubmitEditing={Keyboard.dismiss}
-                    />
-                  </View>
-                  <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Text style={styles.inputLabel}>Adet</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={formData.quantity}
-                      onChangeText={text => setFormData({ ...formData, quantity: text.replace(/[^0-9]/g, '') })}
-                      keyboardType="numeric"
-                      placeholder="1"
-                      placeholderTextColor={COLORS.textMuted}
-                      returnKeyType="done"
-                      onSubmitEditing={Keyboard.dismiss}
-                    />
-                  </View>
-                </View>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  style={styles.stepScroll}
+                >
+                  {currentStep === 1 && renderStep1()}
+                  {currentStep === 2 && renderStep2()}
+                  {currentStep === 3 && renderStep3()}
+                  {currentStep === 4 && renderStep4()}
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Açıklama</Text>
-                  <TextInput
-                    style={[styles.input, styles.multiline]}
-                    value={formData.description}
-                    onChangeText={text => setFormData({ ...formData, description: text })}
-                    placeholder="Paket hakkında kısa bilgi"
-                    placeholderTextColor={COLORS.textMuted}
-                    multiline
-                    numberOfLines={3}
-                    maxLength={250}
-                    blurOnSubmit
-                    returnKeyType="done"
-                    onSubmitEditing={Keyboard.dismiss}
-                  />
-                </View>
-
-                {/* TESLİMAT */}
-                <Text style={styles.sectionLabel}>Teslimat Aralığı</Text>
-
-                <Text style={styles.deliverySummary}>
-                  {formatDeliveryRange(deliveryStart, deliveryEnd)}
-                </Text>
-
-                <View style={styles.presetRow}>
-                  {quickPresets.map(preset => (
-                    <Chip
-                      key={preset.key}
-                      label={preset.label}
-                      active={selectedPresetKey === preset.key}
-                      onPress={() => applyPreset(preset)}
-                    />
-                  ))}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Başlangıç</Text>
-                  <TouchableOpacity
-                    style={styles.input}
-                    onPress={() => {
-                      if (Platform.OS === 'android') {
-                        openAndroidDateTimePicker(deliveryStart, (date) => {
-                          setDeliveryStart(date);
-                          setSelectedPresetKey(null);
-                        });
-                      } else {
-                        setShowStartPicker(true);
-                      }
-                    }}
-                  >
-                    <Text style={styles.inputValueText}>{formatDateTime(deliveryStart)}</Text>
-                  </TouchableOpacity>
-                  {Platform.OS === 'ios' && showStartPicker && (
-                    <DateTimePicker
-                      value={deliveryStart}
-                      mode="datetime"
-                      display="default"
-                      onChange={(event, date) => {
-                        setShowStartPicker(false);
-                        if (event.type === 'set' && date) {
-                          setDeliveryStart(date);
-                          setSelectedPresetKey(null);
-                        }
-                      }}
-                    />
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Bitiş</Text>
-                  <TouchableOpacity
-                    style={styles.input}
-                    onPress={() => {
-                      if (Platform.OS === 'android') {
-                        openAndroidDateTimePicker(deliveryEnd, (date) => {
-                          setDeliveryEnd(date);
-                          setSelectedPresetKey(null);
-                        });
-                      } else {
-                        setShowEndPicker(true);
-                      }
-                    }}
-                  >
-                    <Text style={styles.inputValueText}>{formatDateTime(deliveryEnd)}</Text>
-                  </TouchableOpacity>
-                  {Platform.OS === 'ios' && showEndPicker && (
-                    <DateTimePicker
-                      value={deliveryEnd}
-                      mode="datetime"
-                      display="default"
-                      onChange={(event, date) => {
-                        setShowEndPicker(false);
-                        if (event.type === 'set' && date) {
-                          setDeliveryEnd(date);
-                          setSelectedPresetKey(null);
-                        }
-                      }}
-                    />
-                  )}
-                </View>
-
-                {/* OTOMATİK FİYAT DÜŞÜŞÜ */}
-                <Text style={styles.sectionLabel}>Otomatik Fiyat Düşüşü</Text>
-                <View style={styles.switchRow}>
-                  <Text style={styles.inputLabel}>Etkinleştir</Text>
-                  <Switch
-                    value={autoPriceDropEnabled}
-                    onValueChange={setAutoPriceDropEnabled}
-                    trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
-                    thumbColor={autoPriceDropEnabled ? COLORS.primary : COLORS.textMuted}
-                  />
-                </View>
-
-                {autoPriceDropEnabled && (
-                  <>
-                    <View style={styles.row}>
-                      <View style={[styles.inputGroup, { flex: 1, marginRight: SPACING.sm }]}>
-                        <Text style={styles.inputLabel}>Kaç saatte bir?</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={priceDropInterval}
-                          onChangeText={setPriceDropInterval}
-                          keyboardType="numeric"
-                          placeholder="Örn: 1"
-                          placeholderTextColor={COLORS.textMuted}
-                          returnKeyType="done"
-                          onSubmitEditing={Keyboard.dismiss}
-                        />
-                      </View>
-                      <View style={[styles.inputGroup, { flex: 1 }]}>
-                        <Text style={styles.inputLabel}>Kaç TL düşsün?</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={priceDropAmount}
-                          onChangeText={setPriceDropAmount}
-                          keyboardType="numeric"
-                          placeholder="Örn: 5"
-                          placeholderTextColor={COLORS.textMuted}
-                          returnKeyType="done"
-                          onSubmitEditing={Keyboard.dismiss}
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Minimum Fiyat (₺)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={minPriceDropLimit}
-                        onChangeText={setMinPriceDropLimit}
-                        keyboardType="numeric"
-                        placeholder="Örn: 50"
-                        placeholderTextColor={COLORS.textMuted}
-                        returnKeyType="done"
-                        onSubmitEditing={Keyboard.dismiss}
-                      />
-                    </View>
-                  </>
-                )}
-
-                {/* ÜRÜNLER */}
-                <Text style={styles.sectionLabel}>Ürünler</Text>
-
-                {allProducts.length === 0 ? (
-                  <Text style={styles.noProductsText}>
-                    Henüz ürün eklemediniz. Önce Ürünlerim ekranından ürün ekleyin.
-                  </Text>
-                ) : (
-                  <>
-                    {allProducts.length > 5 && (
-                      <View style={styles.productSearchBox}>
-                        <Icon name="search" size={18} color={COLORS.textMuted} />
-                        <TextInput
-                          style={styles.productSearchInput}
-                          placeholder="Ürün ara..."
-                          placeholderTextColor={COLORS.textMuted}
-                          value={productSearch}
-                          onChangeText={setProductSearch}
-                        />
-                        {productSearch.length > 0 && (
-                          <TouchableOpacity onPress={() => setProductSearch('')}>
-                            <Icon name="close" size={18} color={COLORS.textMuted} />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    )}
-
-                    {filteredProducts.length === 0 ? (
-                      <Text style={styles.noProductsText}>Sonuç bulunamadı</Text>
-                    ) : (
-                      filteredProducts.map(item => {
-                        const selected = selectedProducts.find(p => p.id === item.id);
-                        return (
-                          <View key={item.id} style={styles.productRow}>
-                            <TouchableOpacity
-                              onPress={() => handleProductSelect(item.id)}
-                              style={[styles.checkbox, selected && styles.checkboxActive]}
-                            >
-                              {selected && <Icon name="check" size={16} color={COLORS.white} />}
-                            </TouchableOpacity>
-                            <View style={styles.productInfo}>
-                              <Text style={styles.productName}>{item.name}</Text>
-                              <Text style={styles.productStock}>Stok: {item.quantity ?? '-'} adet</Text>
-                            </View>
-                            {selected && (
-                              <TextInput
-                                value={selected.quantity?.toString() || ''}
-                                onChangeText={q => handleQuantityChange(item.id, q)}
-                                keyboardType="numeric"
-                                style={styles.quantityInput}
-                                placeholder="Adet"
-                                placeholderTextColor={COLORS.textMuted}
-                              />
-                            )}
-                          </View>
-                        );
-                      })
-                    )}
-                  </>
-                )}
-
-                {modalError ? (
-                  <Text style={styles.errorText}>{modalError}</Text>
-                ) : null}
+                  {stepError ? (
+                    <Text style={styles.errorText}>{stepError}</Text>
+                  ) : null}
+                </ScrollView>
 
                 <View style={styles.modalButtons}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
-                    <Text style={styles.cancelText}>İptal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.submitButton}
-                    onPress={handleSubmit}
-                    disabled={submitting}
-                    activeOpacity={0.8}
-                  >
-                    {submitting ? (
-                      <ActivityIndicator color={COLORS.white} size="small" />
-                    ) : (
-                      <Text style={styles.submitText}>
-                        {selectedPackage ? 'Güncelle' : 'Ekle'}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
+                  {currentStep > 1 ? (
+                    <TouchableOpacity style={styles.cancelButton} onPress={goBack}>
+                      <Text style={styles.cancelText}>Geri</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
+                      <Text style={styles.cancelText}>İptal</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {currentStep < STEPS.length ? (
+                    <TouchableOpacity
+                      style={styles.submitButton}
+                      onPress={goNext}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.submitText}>İleri</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.submitButton}
+                      onPress={handleSubmit}
+                      disabled={submitting}
+                      activeOpacity={0.8}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator color={COLORS.white} size="small" />
+                      ) : (
+                        <Text style={styles.submitText}>
+                          {selectedPackage ? 'Güncelle' : 'Kaydet'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
-              </ScrollView>
+              </>
             )}
           </View>
         </View>
@@ -836,9 +1243,35 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
   modalTitle: { ...TYPE_SCALE.h3, fontSize: 18, color: COLORS.text },
+
+  // WIZARD STEP INDICATOR
+  stepIndicatorRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  stepIndicatorItem: { alignItems: 'center', gap: 4 },
+  stepDot: {
+    width: 26, height: 26, borderRadius: 13,
+    borderWidth: 1.5, borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepDotActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
+  stepDotDone: { borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  stepDotText: { fontSize: 12, fontWeight: '700', color: COLORS.textMuted },
+  stepDotTextActive: { color: COLORS.primary },
+  stepLabel: { fontSize: 10, color: COLORS.textMuted, fontWeight: '600' },
+  stepLabelActive: { color: COLORS.primary },
+  stepConnector: { flex: 1, height: 1.5, backgroundColor: COLORS.border, marginHorizontal: 4 },
+
+  stepScroll: { flexGrow: 0 },
+  stepIntro: {
+    fontSize: 13, color: COLORS.textMuted, marginBottom: SPACING.lg,
+    lineHeight: 18,
+  },
 
   sectionLabel: {
     fontSize: 12, fontWeight: '700', color: COLORS.textMuted,
@@ -857,6 +1290,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   inputValueText: { fontSize: 15, color: COLORS.text },
+  expiryHint: { fontSize: 11, color: COLORS.textMuted, marginTop: 4, fontStyle: 'italic' },
   multiline: { height: 80, textAlignVertical: 'top' },
   row: { flexDirection: 'row' },
 
@@ -872,10 +1306,62 @@ const styles = StyleSheet.create({
 
   switchRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.lg, gap: SPACING.md,
   },
 
-  // ÜRÜNLER
+  // ÜRÜNLER (ADIM 1)
+  newProductPanel: {
+    backgroundColor: COLORS.bg,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  newProductAddButton: {
+    flexDirection: 'row', gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm + 2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  newProductAddButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  selectedSection: { marginBottom: SPACING.lg },
+  selectedLabel: {
+    fontSize: 11, fontWeight: '700', color: COLORS.text,
+    letterSpacing: 0.6, textTransform: 'uppercase',
+    marginBottom: SPACING.sm,
+  },
+  newBadge: {
+    width: 24, height: 24, borderRadius: 6,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  removeNewButton: { padding: 4 },
+
+  entryChoiceRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
+  entryChoiceCard: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 120,
+    justifyContent: 'center',
+  },
+  entryChoiceTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text, textAlign: 'center' },
+  entryChoiceSubtitle: { fontSize: 11, color: COLORS.textMuted, textAlign: 'center' },
+
+  newProductPanelHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  newProductPanelTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+
   productSearchBox: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     backgroundColor: COLORS.bg,
@@ -884,12 +1370,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     paddingHorizontal: SPACING.md,
     height: 42,
+    marginTop: SPACING.md,
     marginBottom: SPACING.md,
   },
   productSearchInput: { flex: 1, fontSize: 14, color: COLORS.text },
   noProductsText: {
     fontSize: 13, color: COLORS.textMuted,
-    marginBottom: SPACING.lg, fontStyle: 'italic',
+    marginTop: SPACING.md, marginBottom: SPACING.md, fontStyle: 'italic',
   },
   productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm + 2, gap: SPACING.sm },
   checkbox: {
@@ -908,7 +1395,7 @@ const styles = StyleSheet.create({
     fontSize: 14, color: COLORS.text, backgroundColor: COLORS.white,
   },
 
-  errorText: { color: COLORS.red, fontSize: 13, textAlign: 'center', marginBottom: SPACING.md },
+  errorText: { color: COLORS.red, fontSize: 13, textAlign: 'center', marginTop: SPACING.sm, marginBottom: SPACING.md },
 
   modalButtons: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.lg },
   cancelButton: {
