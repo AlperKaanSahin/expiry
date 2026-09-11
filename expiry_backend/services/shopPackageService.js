@@ -1,3 +1,4 @@
+const { Op, fn, col } = require('sequelize');
 const { Package, Shop, PackageProduct, ShopProduct, PackageUnit, sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
 const AppError = require('../utils/AppError');
@@ -6,6 +7,59 @@ const getShopByUserId = async (userId) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
   if (!shop) throw new AppError('Market bulunamadı', 404);
   return shop;
+};
+
+// Bir `products` girdisini (var olan ürün referansı veya yeni ürün taslağı) çözümler.
+// Yeni ürün oluşturuluyorsa stok miktarı client'tan alınmaz; unitCount * perPackageQty
+// olarak sunucu tarafında hesaplanır (bu ürün sadece bu paket için var, tamamen tahsisli).
+// SKT, platformun temel değer önerisi (son kullanmaya yakın ürün) olduğu için burada
+// da zorunlu tutuluyor — client validasyonuna güvenmiyoruz.
+const resolveProductEntry = async (p, shopId, unitCount, t) => {
+  if (p.newProduct) {
+    const { name, price, expiryDate } = p.newProduct;
+    if (!name || !name.trim()) {
+      throw new AppError('Yeni ürün için ad zorunlu', 400);
+    }
+    if (price == null || isNaN(Number(price)) || Number(price) < 0) {
+      throw new AppError('Yeni ürün için geçerli bir fiyat zorunlu', 400);
+    }
+    if (!expiryDate || isNaN(new Date(expiryDate).getTime())) {
+      throw new AppError('Yeni ürün için son kullanma tarihi zorunlu', 400);
+    }
+
+    const perPackageQty = Number(p.quantity) > 0 ? Number(p.quantity) : 1;
+
+    const product = await ShopProduct.create({
+      name: name.trim(),
+      price: Number(price),
+      quantity: unitCount * perPackageQty,
+      expiryDate,
+      shopId,
+    }, { transaction: t });
+
+    return { product, quantity: perPackageQty, price: Number(price), isNew: true };
+  }
+
+  const product = await ShopProduct.findOne({
+    where: { id: p.id, shopId },
+    transaction: t,
+    lock: t.LOCK.UPDATE,
+  });
+  if (!product) throw new AppError(`Geçersiz ürün: ${p.id}`, 400);
+
+  const qty = Number(p.quantity) > 0 ? Number(p.quantity) : 1;
+  return { product, quantity: qty, price: p.price ?? product.price, isNew: false };
+};
+
+// Paket adı boş bırakılırsa ürün isimlerinden otomatik ve müşteriye anlamlı
+// bir ad üretilir — sıra numarası gibi soğuk bir varsayım kullanmıyoruz,
+// çünkü bu ad doğrudan müşteri-yüzü ekranlarında (HomeScreen vb.) görünüyor.
+const buildAutoPackageName = (resolvedProducts) => {
+  const names = resolvedProducts.map(rp => rp.product.name).filter(Boolean);
+  if (names.length === 0) return 'Sürpriz Paket';
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} & ${names[1]}`;
+  return `${names[0]}, ${names[1]} ve ${names.length - 2} ürün daha`;
 };
 
 exports.listPackages = async (userId, page = 1, limit = 10) => {
@@ -102,58 +156,62 @@ exports.createPackage = async (userId, data) => {
   const { name, description, price, products, deliveryStart, deliveryEnd,
     autoPriceDropEnabled, priceDropAmount, priceDropInterval, minPriceDropLimit, quantity } = data;
 
-  let calculatedPrice = 0;
-  if (Array.isArray(products)) {
-    for (const p of products) {
-      const price = Number(p.price) || 0;
-      const qty = Number(p.quantity) || 0;
-      calculatedPrice += price * qty;
-    }
+  if (!Array.isArray(products) || products.length === 0) {
+    throw new AppError('En az bir ürün gerekli', 400);
   }
 
-  const finalPrice =
-    price !== undefined &&
-    price !== null &&
-    String(price).trim() !== '' &&
-    !isNaN(Number(price))
-      ? Number(price)
-      : calculatedPrice;
-
-  if (isNaN(finalPrice)) {
-    throw new AppError('Price hesaplanamadı (NaN)', 400);
-  }
+  const unitCount = Number(quantity) || 1;
 
   const t = await sequelize.transaction();
   try {
+    const resolvedProducts = [];
+    for (const p of products) {
+      resolvedProducts.push(await resolveProductEntry(p, shop.id, unitCount, t));
+    }
+
+    let calculatedPrice = 0;
+    for (const rp of resolvedProducts) {
+      calculatedPrice += (Number(rp.price) || 0) * (Number(rp.quantity) || 0);
+    }
+
+    const finalPrice =
+      price !== undefined &&
+      price !== null &&
+      String(price).trim() !== '' &&
+      !isNaN(Number(price))
+        ? Number(price)
+        : calculatedPrice;
+
+    if (isNaN(finalPrice)) {
+      throw new AppError('Price hesaplanamadı (NaN)', 400);
+    }
+
+    const finalName = name && name.trim() ? name.trim() : buildAutoPackageName(resolvedProducts);
+
     const newPackage = await Package.create({
-      name, description, price: finalPrice, shopId: shop.id,
+      name: finalName, description, price: finalPrice, shopId: shop.id,
       deliveryStart, deliveryEnd, autoPriceDropEnabled,
       priceDropAmount, priceDropInterval, minPriceDropLimit, quantity
     }, { transaction: t });
 
-    const unitCount = Number(quantity) || 1;
-    for (let i = 0; i < unitCount; i++) {
-      await PackageUnit.create({ packageId: newPackage.id, isSold: false }, { transaction: t });
-    }
+    const unitRows = Array.from({ length: unitCount }, () => ({ packageId: newPackage.id, isSold: false }));
+    await PackageUnit.bulkCreate(unitRows, { transaction: t });
 
-    if (Array.isArray(products)) {
-      for (const p of products) {
-        const product = await ShopProduct.findOne({
-          where: { id: p.id, shopId: shop.id },
-          transaction: t
-        });
-        if (!product) throw new AppError(`Geçersiz ürün: ${p.id}`, 400);
+    for (const rp of resolvedProducts) {
+      await PackageProduct.create({
+        packageId: newPackage.id,
+        shopProductId: rp.product.id,
+        quantity: rp.quantity,
+        price: rp.price
+      }, { transaction: t });
 
-        await PackageProduct.create({
-          packageId: newPackage.id,
-          shopProductId: p.id,
-          quantity: p.quantity,
-          price: p.price
-        }, { transaction: t });
-
-        const totalDeduct = unitCount * (Number(p.quantity) || 1);
-        product.quantity = Math.max(0, (product.quantity || 0) - totalDeduct);
-        await product.save({ transaction: t });
+      // Yeni oluşturulan ürünün stoğu zaten unitCount * perPackageQty olarak
+      // create sırasında ayarlandı (bu ürün sadece bu paket için var) — tekrar
+      // düşmüyoruz, aksi halde çift düşüm olur.
+      if (!rp.isNew) {
+        const totalDeduct = unitCount * (Number(rp.quantity) || 1);
+        rp.product.quantity = Math.max(0, (rp.product.quantity || 0) - totalDeduct);
+        await rp.product.save({ transaction: t });
       }
     }
 
@@ -173,50 +231,80 @@ exports.updatePackage = async (userId, packageId, data) => {
   const pkg = await Package.findOne({ where: { id: packageId, shopId: shop.id } });
   if (!pkg) throw new AppError('Paket bulunamadı', 404);
 
-  let calculatedPrice = 0;
-  if (Array.isArray(products)) {
-    calculatedPrice = products.reduce((sum, p) => sum + Number(p.price) * Number(p.quantity), 0);
-  }
-  const finalPrice = price !== undefined && price !== null && price !== '' ? Number(price) : calculatedPrice;
+  const unitCount = Number(quantity) || 1;
 
-  await pkg.update({
-    name, description, price: finalPrice, deliveryStart, deliveryEnd,
-    autoPriceDropEnabled, priceDropAmount, priceDropInterval, minPriceDropLimit, quantity
-  });
+  const t = await sequelize.transaction();
+  try {
+    let resolvedProducts = [];
+    if (Array.isArray(products)) {
+      for (const p of products) {
+        resolvedProducts.push(await resolveProductEntry(p, shop.id, unitCount, t));
+      }
+    }
 
-  if (Array.isArray(products)) {
-    await PackageProduct.destroy({ where: { packageId: pkg.id } });
-    for (const p of products) {
-      const product = await ShopProduct.findOne({ where: { id: p.id, shopId: shop.id } });
-      if (!product) throw new AppError(`Geçersiz ürün: ${p.id}`, 400);
+    let calculatedPrice = 0;
+    for (const rp of resolvedProducts) {
+      calculatedPrice += Number(rp.price) * Number(rp.quantity);
+    }
+    const finalPrice = price !== undefined && price !== null && price !== ''
+      ? Number(price)
+      : calculatedPrice;
 
-      await PackageProduct.create({
-        packageId: pkg.id,
-        shopProductId: p.id,
-        quantity: p.quantity,
-        price: p.price
+    let finalName;
+    if (name && name.trim()) {
+      finalName = name.trim();
+    } else if (resolvedProducts.length > 0) {
+      finalName = buildAutoPackageName(resolvedProducts);
+    } else {
+      finalName = pkg.name;
+    }
+
+    await pkg.update({
+      name: finalName, description, price: finalPrice, deliveryStart, deliveryEnd,
+      autoPriceDropEnabled, priceDropAmount, priceDropInterval, minPriceDropLimit, quantity
+    }, { transaction: t });
+
+    if (Array.isArray(products)) {
+      await PackageProduct.destroy({ where: { packageId: pkg.id }, transaction: t });
+      for (const rp of resolvedProducts) {
+        await PackageProduct.create({
+          packageId: pkg.id,
+          shopProductId: rp.product.id,
+          quantity: rp.quantity,
+          price: rp.price
+        }, { transaction: t });
+
+        if (!rp.isNew) {
+          const totalDeduct = unitCount * (Number(rp.quantity) || 1);
+          rp.product.quantity = Math.max(0, (rp.product.quantity || 0) - totalDeduct);
+          await rp.product.save({ transaction: t });
+        }
+      }
+    }
+
+    const currentCount = await PackageUnit.count({ where: { packageId: pkg.id }, transaction: t });
+    if (quantity > currentCount) {
+      const rows = Array.from({ length: quantity - currentCount }, () => ({ packageId: pkg.id, isSold: false }));
+      await PackageUnit.bulkCreate(rows, { transaction: t });
+    } else if (quantity < currentCount) {
+      const unitsToDelete = await PackageUnit.findAll({
+        where: { packageId: pkg.id, isSold: false },
+        order: [['id', 'DESC']],
+        limit: currentCount - quantity,
+        transaction: t,
       });
+      for (const unit of unitsToDelete) await unit.destroy({ transaction: t });
     }
+
+    const remainingUnits = await PackageUnit.count({ where: { packageId: pkg.id, isSold: false }, transaction: t });
+    await pkg.update({ quantity: remainingUnits }, { transaction: t });
+
+    await t.commit();
+    return pkg;
+  } catch (err) {
+    await t.rollback();
+    throw err;
   }
-
-  const currentCount = await PackageUnit.count({ where: { packageId: pkg.id } });
-  if (quantity > currentCount) {
-    for (let i = 0; i < quantity - currentCount; i++) {
-      await PackageUnit.create({ packageId: pkg.id, isSold: false });
-    }
-  } else if (quantity < currentCount) {
-    const unitsToDelete = await PackageUnit.findAll({
-      where: { packageId: pkg.id, isSold: false },
-      order: [['id', 'DESC']],
-      limit: currentCount - quantity
-    });
-    for (const unit of unitsToDelete) await unit.destroy();
-  }
-
-  const remainingUnits = await PackageUnit.count({ where: { packageId: pkg.id, isSold: false } });
-  await pkg.update({ quantity: remainingUnits });
-
-  return pkg;
 };
 
 exports.deletePackage = async (userId, packageId, count) => {
