@@ -3,6 +3,8 @@ jest.mock('../../models', () => ({
   OrderPackage: { findAll: jest.fn(), create: jest.fn() },
   PackageUnit: { findAll: jest.fn(), count: jest.fn() },
   Package: { update: jest.fn(), findOne: jest.fn() },
+  PackageProduct: { findAll: jest.fn() },
+  ShopProduct: {},
   Shop: { findOne: jest.fn() },
   User: {},
   sequelize: { transaction: jest.fn() },
@@ -11,12 +13,12 @@ jest.mock('../../models', () => ({
 jest.mock('../../events/eventBus', () => ({ emit: jest.fn() }));
 
 const {
-  Order, OrderPackage, PackageUnit, Package, Shop, sequelize,
+  Order, OrderPackage, PackageUnit, Package, PackageProduct, Shop, sequelize,
 } = require('../../models');
 const eventBus = require('../../events/eventBus');
 const ORDER_EVENTS = require('../../events/order.events');
 const {
-  reserveStock, createOrder, confirmByQRCode, changeStatus,
+  reserveStock, createOrder, confirmByQRCode, changeStatus, assertPackageProductsNotExpired,
 } = require('../../services/orderService');
 const AppError = require('../../utils/AppError');
 
@@ -29,6 +31,12 @@ function mockTransaction() {
   sequelize.transaction.mockResolvedValue(t);
   return t;
 }
+
+const daysFromNow = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+};
 
 describe('reserveStock', () => {
   const fakeTransaction = { LOCK: { UPDATE: 'UPDATE' } };
@@ -74,6 +82,67 @@ describe('reserveStock', () => {
   });
 });
 
+describe('assertPackageProductsNotExpired — SKT (son kullanma tarihi) kontrolü', () => {
+  const fakeTransaction = {};
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('SKT dünse (geçmişse) AppError(409) fırlatır', async () => {
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Bayat Ekmek', expiryDate: daysFromNow(-1) } },
+    ]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('hata mesajında ilgili ürünün adı geçer', async () => {
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Bayat Poğaça', expiryDate: daysFromNow(-1) } },
+    ]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).rejects.toThrow('Bayat Poğaça');
+  });
+
+  it('SKT bugünse izin verir (mevzuata göre son tüketim günü hâlâ satılabilir)', async () => {
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Taze Simit', expiryDate: daysFromNow(0) } },
+    ]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).resolves.toBeUndefined();
+  });
+
+  it('SKT gelecekteyse izin verir', async () => {
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Konserve', expiryDate: daysFromNow(7) } },
+    ]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).resolves.toBeUndefined();
+  });
+
+  it('expiryDate tanımlı olmayan (null) ürünleri görmezden gelir', async () => {
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'SKT Girilmemiş Ürün', expiryDate: null } },
+    ]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).resolves.toBeUndefined();
+  });
+
+  it('birden fazla üründen biri bile SKT geçmişse tüm paketi reddeder', async () => {
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Taze Ürün', expiryDate: daysFromNow(7) } },
+      { ShopProduct: { name: 'Bayat Ürün', expiryDate: daysFromNow(-1) } },
+    ]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('hiç ürün yoksa (boş dizi) sorun çıkarmaz', async () => {
+    PackageProduct.findAll.mockResolvedValue([]);
+
+    await expect(assertPackageProductsNotExpired(1, fakeTransaction)).resolves.toBeUndefined();
+  });
+});
+
 describe('createOrder', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -88,11 +157,14 @@ describe('createOrder', () => {
     expect(t.rollback).toHaveBeenCalled();
     expect(t.commit).not.toHaveBeenCalled();
     expect(Order.create).not.toHaveBeenCalled();
+    // Paket zaten bulunamadığı için SKT kontrolüne hiç gidilmemeli.
+    expect(PackageProduct.findAll).not.toHaveBeenCalled();
   });
 
   it('stok yetersizse AppError(409) fırlatır', async () => {
     const t = mockTransaction();
     Package.findOne.mockResolvedValue({ id: 1, price: 10 });
+    PackageProduct.findAll.mockResolvedValue([]); // SKT kontrolünden geçsin, asıl test stok için
     PackageUnit.count.mockResolvedValue(0);
 
     await expect(
@@ -105,6 +177,7 @@ describe('createOrder', () => {
   it('geçerli veriyle siparişi doğru toplam fiyatla oluşturur', async () => {
     const t = mockTransaction();
     Package.findOne.mockResolvedValue({ id: 1, price: 15 });
+    PackageProduct.findAll.mockResolvedValue([]); // SKT kontrolünden geçsin
     PackageUnit.count.mockResolvedValue(10);
     Order.create.mockResolvedValue({ id: 100 });
     OrderPackage.create.mockResolvedValue({});
@@ -121,6 +194,52 @@ describe('createOrder', () => {
     );
     expect(t.commit).toHaveBeenCalled();
     expect(result).toEqual({ id: 100 });
+  });
+
+  it('SKT geçmiş ürün içeren paket satın alınamaz (409), Order.create çağrılmaz, rollback yapılır', async () => {
+    const t = mockTransaction();
+    Package.findOne.mockResolvedValue({ id: 1, price: 10 });
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Bayat Ekmek', expiryDate: daysFromNow(-1) } },
+    ]);
+
+    await expect(
+      createOrder(5, { shopId: 1, packages: [{ packageId: 1, quantity: 1 }] })
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(Order.create).not.toHaveBeenCalled();
+    expect(t.rollback).toHaveBeenCalled();
+  });
+
+  it('SKT kontrolü stok kontrolünden önce çalışır — geçersizse stok sorgusuna hiç gidilmez', async () => {
+    mockTransaction();
+    Package.findOne.mockResolvedValue({ id: 1, price: 10 });
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Bayat Ekmek', expiryDate: daysFromNow(-1) } },
+    ]);
+
+    await expect(
+      createOrder(5, { shopId: 1, packages: [{ packageId: 1, quantity: 1 }] })
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(PackageUnit.count).not.toHaveBeenCalled();
+  });
+
+  it('SKT bugün olan ürün içeren paket satın alınabilir (mevzuata göre hâlâ geçerli)', async () => {
+    const t = mockTransaction();
+    Package.findOne.mockResolvedValue({ id: 1, price: 10 });
+    PackageProduct.findAll.mockResolvedValue([
+      { ShopProduct: { name: 'Taze Simit', expiryDate: daysFromNow(0) } },
+    ]);
+    PackageUnit.count.mockResolvedValue(5);
+    Order.create.mockResolvedValue({ id: 200 });
+    OrderPackage.create.mockResolvedValue({});
+
+    const result = await createOrder(5, { shopId: 1, packages: [{ packageId: 1, quantity: 1 }] });
+
+    expect(Order.create).toHaveBeenCalled();
+    expect(t.commit).toHaveBeenCalled();
+    expect(result).toEqual({ id: 200 });
   });
 });
 

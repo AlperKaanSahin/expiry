@@ -21,6 +21,11 @@ const list = catchAsync(async (req, res) => {
   res.json(shops);
 });
 
+const getShopById = catchAsync(async (req, res) => {
+  const shop = await shopService.getShopPublicProfile(req.params.id);
+  res.json({ shop });
+});
+
 const getShopWithPackages = catchAsync(async (req, res) => {
   const shop = await shopService.getShopWithPackages(req.params.id);
   if (!shop) throw new AppError('Market bulunamadı', 404);
@@ -75,7 +80,7 @@ const updateCoverPhoto = catchAsync(async (req, res) => {
   res.json({ message: 'Kapak fotoğrafı güncellendi', shop });
 });
 module.exports = {
-  list, getShopWithPackages, rateShop, canRateShop, applyShop,
+  list, getShopById, getShopWithPackages, rateShop, canRateShop, applyShop,
   getMyShop, getMyShopProfile, updateShopProfile,
   getPaymentSettings, updatePaymentSettings, updateCoverPhoto
 };

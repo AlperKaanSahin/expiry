@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,29 +6,52 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@expo/vector-icons/MaterialIcons';
-import { fetchAuditLogs } from '../services/api';
-import { COLORS } from '../theme/colors';
 import Toast from 'react-native-toast-message';
-import { showErrorToast } from '../utils/errorHandler';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
-
+import { fetchAuditLogs } from '../services/api';
+import { COLORS, SPACING, RADIUS, SHADOWS, TYPE_SCALE } from '../theme';
+import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
 import EmptyState from '../components/common/EmptyState';
 import ErrorState from '../components/common/ErrorState';
+import ScreenHeader from '../components/common/ScreenHeader';
+import Card from '../components/common/Card';
+import Chip from '../components/common/Chip';
 
-import { RefreshControl } from 'react-native';
-
+// Gerçek AuditLog.action değerleri handlers/audit.handler.js'deki auditService.log()
+// çağrılarından alındı. Her biri ayrı bir chip olarak gösterilirse (12 tekil değer)
+// üst satır ekran genişliğini aşıp kesiliyor — bu yüzden mantıksal gruplara toplanıp
+// Op.in ile filtreleniyor (bkz. auditService.getLogs). Badge rengi hâlâ tekil action
+// değerine göre belirleniyor, gruplama sadece filtre seçimi için.
 const ACTION_COLORS = {
-  CREATE: '#16A34A',
-  UPDATE: '#D97706',
-  DELETE: '#DC2626',
-  LOGIN:  '#2563EB',
+  SHOP_CREATED: '#16A34A',
+  SHOP_REAPPLIED: '#16A34A',
+  SHOP_APPROVED: '#16A34A',
+  SHOP_PHOTO_APPROVED: '#16A34A',
+  SHOP_UPDATED: '#D97706',
+  ROLE_CHANGED: '#2563EB',
+  SHOP_STATUS_CHANGED: '#D97706',
+  SHOP_REJECTED: '#DC2626',
+  SHOP_DEACTIVATED: '#DC2626',
+  SHOP_DELETED: '#DC2626',
+  USER_DELETED: '#DC2626',
+  SHOP_PHOTO_REJECTED: '#DC2626',
 };
 
+const ACTION_GROUPS = [
+  { label: 'Tümü', actions: null },
+  { label: 'Market Başvurusu', actions: ['SHOP_CREATED', 'SHOP_REAPPLIED'] },
+  { label: 'Market Durumu', actions: ['SHOP_APPROVED', 'SHOP_REJECTED', 'SHOP_DEACTIVATED', 'SHOP_UPDATED', 'SHOP_DELETED'] },
+  { label: 'Fotoğraf Onayı', actions: ['SHOP_PHOTO_APPROVED', 'SHOP_PHOTO_REJECTED'] },
+  { label: 'Kullanıcı', actions: ['ROLE_CHANGED', 'USER_DELETED'] },
+];
+
+const LIMIT = 20;
 
 const formatDate = (dateString) => {
   const diff = Date.now() - new Date(dateString);
@@ -46,17 +69,17 @@ const formatDate = (dateString) => {
 const LogCard = ({ item }) => {
   const [expanded, setExpanded] = useState(false);
 
-const actor = item.actor
-  ? `${item.actor.firstName} ${item.actor.lastName}`
-  : item.actorSnapshot
-    ? `${item.actorSnapshot.name} (silinmiş kullanıcı)`
-    : `ID: ${item.actorId}`;
+  const actor = item.actor
+    ? `${item.actor.firstName} ${item.actor.lastName}`
+    : item.actorSnapshot
+      ? `${item.actorSnapshot.name} (silinmiş kullanıcı)`
+      : `ID: ${item.actorId}`;
 
   const actionColor = ACTION_COLORS[item.action] || COLORS.primary;
   const hasMetadata = item.metadata && Object.keys(item.metadata).length > 0;
 
   return (
-    <View style={styles.card}>
+    <Card style={styles.card} shadow="sm">
       <View style={styles.cardHeader}>
         <View style={[styles.badge, { backgroundColor: actionColor + '18' }]}>
           <Text style={[styles.badgeText, { color: actionColor }]}>
@@ -93,11 +116,15 @@ const actor = item.actor
           </TouchableOpacity>
 
           {expanded && (
-            <View style={styles.jsonBox}>
+            <ScrollView
+              style={styles.jsonBox}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={true}
+            >
               <Text style={styles.jsonText}>
                 {JSON.stringify(item.metadata, null, 2)}
               </Text>
-            </View>
+            </ScrollView>
           )}
         </View>
       )}
@@ -105,109 +132,144 @@ const actor = item.actor
       <Text style={styles.fullDate}>
         {new Date(item.createdAt).toLocaleString('tr-TR')}
       </Text>
-    </View>
+    </Card>
   );
 };
 
 const AuditLogsScreen = () => {
   const [logs, setLogs] = useState([]);
-const [loading, setLoading] = useState(true);
-const [refreshing, setRefreshing] = useState(false);
-const [error, setError] = useState(false);
-const loadLogs = async (isRefresh = false) => {
-  if (isRefresh) {
-    setRefreshing(true);
-  } else {
-    setLoading(true);
-  }
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [activeGroupIndex, setActiveGroupIndex] = useState(0); // 0 = 'Tümü'
 
-  setError(false);
+  const loadLogs = async (pageNumber = 1, groupIndex = activeGroupIndex, isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
-  try {
-    const res = await fetchAuditLogs();
+    setError(false);
 
-    const data = res.data?.logs || [];
+    try {
+      const group = ACTION_GROUPS[groupIndex];
+      const res = await fetchAuditLogs(pageNumber, LIMIT, group.actions);
+      const data = res.data || {};
 
-    setLogs(
-      [...data].sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      )
+      setLogs(data.logs || []);
+      setTotal(data.total || 0);
+      setPage(data.page || pageNumber);
+    } catch (err) {
+      setError(true);
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadLogs(1, activeGroupIndex);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
+
+  const handleFilterChange = (groupIndex) => {
+    setActiveGroupIndex(groupIndex);
+    loadLogs(1, groupIndex);
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <LoadingState text="Kayıtlar yükleniyor..." />
+      </SafeAreaView>
     );
-  } catch (err) {
-    setError(true);
-    showErrorToast(err, Toast);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
   }
-};
 
-useFocusEffect(
-  useCallback(() => {
-    loadLogs();
-  }, [])
-);
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ErrorState
+          title="Denetim kayıtları yüklenemedi"
+          subtitle="Lütfen tekrar deneyin."
+          onRetry={() => loadLogs(page, activeGroupIndex)}
+        />
+      </SafeAreaView>
+    );
+  }
 
-if (loading) {
-  return (
-    <SafeAreaView style={styles.safe}>
-      <LoadingState text="Kayıtlar yükleniyor..." />
-    </SafeAreaView>
-  );
-}
-
-if (error) {
-  return (
-    <SafeAreaView style={styles.safe}>
-      <ErrorState
-        title="Denetim kayıtları yüklenemedi"
-        subtitle="Lütfen tekrar deneyin."
-        onRetry={() => loadLogs()}
-      />
-    </SafeAreaView>
-  );
-}
+  const totalPages = Math.max(Math.ceil(total / LIMIT), 1);
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.appName}>expiry</Text>
-          <View style={styles.dot} />
+      <ScreenHeader title="Denetim Kayıtları" />
+
+      {/* AKSİYON FİLTRESİ — flexWrap: chip kenarda kesilmez, sığmayan alt satıra iner */}
+      <View style={styles.filterRow}>
+        {ACTION_GROUPS.map((group, index) => (
+          <Chip
+            key={group.label}
+            label={group.label}
+            active={activeGroupIndex === index}
+            onPress={() => handleFilterChange(index)}
+          />
+        ))}
+      </View>
+
+      <FlatList
+        data={logs}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => <LogCard item={item} />}
+        contentContainerStyle={[
+          styles.list,
+          logs.length === 0 && { flexGrow: 1 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        ItemSeparatorComponent={() => <View style={{ height: SPACING.md }} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadLogs(1, activeGroupIndex, true)}
+            colors={[COLORS.primary]}
+          />
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon="clipboard-text-outline"
+            title="Henüz kayıt bulunmuyor"
+            subtitle="Gerçekleşen işlemler burada listelenecek."
+          />
+        }
+      />
+
+      {total > LIMIT && (
+        <View style={styles.pagination}>
+          <TouchableOpacity
+            style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+            onPress={() => loadLogs(page - 1, activeGroupIndex)}
+            disabled={page === 1}
+          >
+            <Icon name="chevron-left" size={20} color={page === 1 ? COLORS.textMuted : COLORS.white} />
+          </TouchableOpacity>
+
+          <Text style={styles.pageInfo}>{page} / {totalPages}</Text>
+
+          <TouchableOpacity
+            style={[styles.pageBtn, page >= totalPages && styles.pageBtnDisabled]}
+            onPress={() => loadLogs(page + 1, activeGroupIndex)}
+            disabled={page >= totalPages}
+          >
+            <Icon name="chevron-right" size={20} color={page >= totalPages ? COLORS.textMuted : COLORS.white} />
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Yönetim</Text>
-        <Text style={styles.heroName}>Denetim Kayıtları</Text>
-      </View>
-
-<FlatList
-  data={logs}
-  keyExtractor={(item) => item.id.toString()}
-  renderItem={({ item }) => <LogCard item={item} />}
-  contentContainerStyle={[
-    styles.list,
-    logs.length === 0 && { flexGrow: 1 },
-  ]}
-  showsVerticalScrollIndicator={false}
-  refreshControl={
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={() => loadLogs(true)}
-      colors={[COLORS.primary]}
-    />
-  }
-  ListEmptyComponent={
-    <EmptyState
-      icon="assignment"
-      title="Henüz kayıt bulunmuyor"
-      subtitle="Gerçekleşen işlemler burada listelenecek."
-    />
-  }
-/>
+      )}
     </SafeAreaView>
   );
 };
@@ -215,64 +277,61 @@ if (error) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  header: {
+  filterRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: COLORS.bg,
+    flexWrap: 'wrap',
+    paddingHorizontal: SPACING.xxl,
+    gap: SPACING.sm,
+    paddingBottom: SPACING.lg,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
 
-  hero: { paddingHorizontal: 20, marginBottom: 16 },
-  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
-  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+  list: { paddingHorizontal: SPACING.xxl, paddingBottom: SPACING.xxxl + SPACING.md },
 
-  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
-
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 12,
+    marginBottom: SPACING.md,
+    paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  badge: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.sm },
   badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   timeText: { fontSize: 12, color: COLORS.textMuted },
 
-  row: { flexDirection: 'row', marginBottom: 6, gap: 8 },
+  row: { flexDirection: 'row', marginBottom: SPACING.xs + 2, gap: SPACING.sm },
   rowLabel: { width: 90, fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
   rowValue: { flex: 1, fontSize: 13, color: COLORS.text },
 
-  metaSection: { marginTop: 10 },
+  metaSection: { marginTop: SPACING.sm + 2 },
   metaToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
   metaToggleText: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
   jsonBox: {
-    marginTop: 10,
-    padding: 12,
+    marginTop: SPACING.sm + 2,
+    maxHeight: 160,
+    padding: SPACING.md,
     backgroundColor: COLORS.bg,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
   },
   jsonText: { fontSize: 11, color: COLORS.text, fontFamily: 'monospace' },
 
-  fullDate: { fontSize: 11, color: COLORS.textMuted, marginTop: 10, textAlign: 'right' },
+  fullDate: { fontSize: 11, color: COLORS.textMuted, marginTop: SPACING.sm + 2, textAlign: 'right' },
 
-  empty: { alignItems: 'center', paddingVertical: 80, gap: 12 },
-  emptyText: { fontSize: 14, color: COLORS.textMuted },
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    gap: SPACING.lg,
+  },
+  pageBtn: {
+    width: 40, height: 40, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pageBtnDisabled: { backgroundColor: COLORS.border },
+  pageInfo: { fontSize: 14, fontWeight: '600', color: COLORS.text, minWidth: 50, textAlign: 'center' },
 });
 
 export default AuditLogsScreen;

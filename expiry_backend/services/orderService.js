@@ -1,5 +1,5 @@
 const {
-  Order, OrderPackage, Package, PackageUnit, Shop, User, sequelize
+  Order, OrderPackage, Package, PackageUnit, PackageProduct, ShopProduct, Shop, User, sequelize
 } = require('../models');
 const eventBus = require('../events/eventBus');
 const ORDER_EVENTS = require('../events/order.events');
@@ -32,6 +32,37 @@ const STATUS_GROUPS = {
 
 function getTransitionRule(current, next) {
   return TRANSITIONS[current]?.[next] || null;
+}
+
+// STT (Son Tüketim Tarihi) geçmiş ürün içeren bir paketin satışa sunulması/satılması
+// 5996 sayılı Kanun m.41/1(d) kapsamında idari para cezası riski taşır. Kural: SKT'nin
+// GEÇTİĞİ gün (bugünün takvim günü > SKT'nin takvim günü) satış yasak; SKT bugünse
+// hâlâ satılabilir (STT, "tüketilebileceği son tarih" olduğu için o günü kapsar).
+// Paketteki ürünlerden biri bile bu kurala takılırsa tüm paket reddedilir.
+async function assertPackageProductsNotExpired(packageId, transaction) {
+  const packageProducts = await PackageProduct.findAll({
+    where: { packageId },
+    include: [{ model: ShopProduct, attributes: ['id', 'name', 'expiryDate'] }],
+    transaction,
+  });
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  for (const pp of packageProducts) {
+    const expiryDate = pp.ShopProduct?.expiryDate;
+    if (!expiryDate) continue;
+
+    const expiryDay = new Date(expiryDate);
+    expiryDay.setHours(0, 0, 0, 0);
+
+    if (expiryDay < todayStart) {
+      throw new AppError(
+        `"${pp.ShopProduct.name}" ürününün son kullanma tarihi geçtiği için bu paket satın alınamaz`,
+        409
+      );
+    }
+  }
 }
 
 async function runSideEffects(order, status, transaction) {
@@ -134,6 +165,10 @@ async function createOrder(userId, data) {
       });
 
       if (!dbPackage) throw new AppError(`Geçersiz paket: ${pkg.packageId}`, 400);
+
+      // SKT kontrolü stok kontrolünden önce yapılıyor: geçersiz (tarihi geçmiş)
+      // bir paket için stok sorgulamaya bile gerek yok, doğrudan reddedilmeli.
+      await assertPackageProductsNotExpired(pkg.packageId, t);
 
       const available = await PackageUnit.count({
         where: { packageId: pkg.packageId, isSold: false },
@@ -344,4 +379,5 @@ module.exports = {
   listShopOrders,
   getShopByOwner,
   reserveStock, // test edilebilirlik için export edildi
+  assertPackageProductsNotExpired, // test edilebilirlik için export edildi
 };

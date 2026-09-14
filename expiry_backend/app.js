@@ -49,10 +49,12 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/shops', require('./routes/shopRoutes'));
 app.use('/api/shop/products', require('./routes/shopProductRoutes'));
 app.use('/api/shop/packages', require('./routes/shopPackageRoutes'));
+app.use('/api/shop/dashboard', require('./routes/shopDashboardRoutes'));
 app.use('/api/packages', require('./routes/packageRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/audit-logs', require('./routes/auditRoutes'));
+app.use('/api/admin/dashboard', require('./routes/adminDashboardRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
