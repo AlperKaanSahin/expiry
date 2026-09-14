@@ -10,222 +10,328 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
-import { COLORS } from '../theme/colors';
+import Icon from '@expo/vector-icons/MaterialIcons';
+import * as ImagePicker from 'expo-image-picker';
+import { COLORS, SPACING, RADIUS, SHADOWS, TYPE_SCALE } from '../theme';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
-import Icon from '@expo/vector-icons/MaterialIcons';
-import { useAuth } from '../context/AuthContext';
 import ErrorState from '../components/common/ErrorState';
+import ScreenHeader from '../components/common/ScreenHeader';
+import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import * as ImagePicker from 'expo-image-picker';
 import { fetchShopProfile, updateShopProfile, changeShopPassword, uploadShopCoverPhoto } from '../services/api';
-import { Image } from 'react-native';
-
-const TABS = [
-  { key: 'profile', label: 'Bilgilerim' },
-  { key: 'password', label: 'Şifre Değiştir' },
-];
 
 const EMPTY_PASSWORD = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
 const ShopProfileScreen = () => {
   const { logout } = useAuth();
-const { switchWorkspace } = useWorkspace();
+  const { switchWorkspace } = useWorkspace();
+
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('profile');
-  const [formData, setFormData] = useState({ name: '', address: '', phone: '', email: '' });
-  const [passwordData, setPasswordData] = useState(EMPTY_PASSWORD);
   const [error, setError] = useState(null);
+
+  // Salt-okunur kaynak veri — bilgi satırlarında gösterilen bu, form değil.
+  const [shopInfo, setShopInfo] = useState({ name: '', address: '', phone: '', email: '' });
+
   const [coverImageUrl, setCoverImageUrl] = useState(null);
-const [coverImagePendingUrl, setCoverImagePendingUrl] = useState(null);
-const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  
-const loadProfile = async () => {
-  try {
-    setLoading(true);
-    setError(null);
+  const [coverImagePendingUrl, setCoverImagePendingUrl] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-    const data = await fetchShopProfile();
+  // Düzenleme modalı — shopInfo'dan ayrı bir taslak, iptal edilirse gerçek veri bozulmaz.
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editDraft, setEditDraft] = useState({ name: '', address: '', phone: '', email: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
 
-    setFormData({
-      name: data.shop?.name || '',
-      address: data.shop?.address || '',
-      phone: data.shop?.phone || '',
-      email: data.shop?.email || '',
+  // Şifre değiştirme modalı
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordData, setPasswordData] = useState(EMPTY_PASSWORD);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await fetchShopProfile();
+
+      setShopInfo({
+        name: data.shop?.name || '',
+        address: data.shop?.address || '',
+        phone: data.shop?.phone || '',
+        email: data.shop?.email || '',
+      });
+      setCoverImageUrl(data.shop?.coverImageUrl || null);
+      setCoverImagePendingUrl(data.shop?.coverImagePendingUrl || null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const openEditModal = () => {
+    setEditDraft(shopInfo);
+    setEditModalVisible(true);
+  };
+
+  const closeEditModal = () => {
+    setEditModalVisible(false);
+  };
+
+  const handleProfileUpdate = async () => {
+    try {
+      setSavingEdit(true);
+      await updateShopProfile(editDraft);
+      setShopInfo(editDraft);
+      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profil bilgileri güncellendi' });
+      setEditModalVisible(false);
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Toast.show({ type: 'error', text1: 'İzin gerekli', text2: 'Galeriye erişim izni vermelisin' });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
     });
-    setCoverImageUrl(data.shop?.coverImageUrl || null);
-setCoverImagePendingUrl(data.shop?.coverImagePendingUrl || null);
-  } catch (err) {
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-};
 
-useEffect(() => {
-  loadProfile();
-}, []);
+    if (result.canceled) return;
 
-const handleProfileUpdate = async () => {
-  try {
-    setSaving(true);
-    await updateShopProfile(formData);
-    Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Profil bilgileri güncellendi' });
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setSaving(false);
-  }
-};
-const handlePickPhoto = async () => {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    Toast.show({ type: 'error', text1: 'İzin gerekli', text2: 'Galeriye erişim izni vermelisin' });
-    return;
-  }
+    try {
+      setUploadingPhoto(true);
+      const res = await uploadShopCoverPhoto(result.assets[0].uri);
+      setCoverImagePendingUrl(res.shop.coverImagePendingUrl);
+      Toast.show({
+        type: 'success',
+        text1: 'Fotoğraf gönderildi',
+        text2: 'Admin onayından sonra yayınlanacak',
+      });
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [16, 9],
-    quality: 0.8,
-  });
-
-  if (result.canceled) return;
-
-  try {
-    setUploadingPhoto(true);
-    const res = await uploadShopCoverPhoto(result.assets[0].uri);
-    setCoverImagePendingUrl(res.shop.coverImagePendingUrl);
-    Toast.show({
-      type: 'success',
-      text1: 'Fotoğraf gönderildi',
-      text2: 'Admin onayından sonra yayınlanacak',
-    });
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setUploadingPhoto(false);
-  }
-};
-
-const handlePasswordChange = async () => {
-  if (passwordData.newPassword !== passwordData.confirmPassword) {
-    Toast.show({ type: 'error', text1: 'Hata', text2: 'Yeni şifreler eşleşmiyor' });
-    return;
-  }
-  if (passwordData.newPassword.length < 6) {
-    Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre en az 6 karakter olmalı' });
-    return;
-  }
-  try {
-    setSaving(true);
-    await changeShopPassword({
-      password: passwordData.currentPassword,
-      newPassword: passwordData.newPassword,
-    });
-    Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Şifre başarıyla değiştirildi' });
+  const openPasswordModal = () => {
     setPasswordData(EMPTY_PASSWORD);
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setSaving(false);
-  }
-};
+    setPasswordModalVisible(true);
+  };
 
-if (loading) {
-  return <LoadingState />;
-}
-if (error) {
-  return (
-    <ErrorState
-      message="Shop bilgileri yüklenirken bir hata oluştu."
-      onRetry={loadProfile}
-    />
-  );
-}
+  const closePasswordModal = () => {
+    setPasswordModalVisible(false);
+    setPasswordData(EMPTY_PASSWORD);
+  };
+
+  const handlePasswordChange = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'Yeni şifreler eşleşmiyor' });
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      Toast.show({ type: 'error', text1: 'Hata', text2: 'Şifre en az 6 karakter olmalı' });
+      return;
+    }
+    try {
+      setSavingPassword(true);
+      await changeShopPassword({
+        password: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      Toast.show({ type: 'success', text1: 'Güncellendi', text2: 'Şifre başarıyla değiştirildi' });
+      setPasswordModalVisible(false);
+      setPasswordData(EMPTY_PASSWORD);
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingState />;
+  }
+  if (error) {
+    return (
+      <ErrorState
+        subtitle="Shop bilgileri yüklenirken bir hata oluştu."
+        onRetry={loadProfile}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.appName}>expiry</Text>
-          <View style={styles.dot} />
-        </View>
-      </View>
+      <ScreenHeader title="Profilim" />
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Shop Paneli</Text>
-        <Text style={styles.heroName}>Profil</Text>
-      </View>
-
-      {/* TABS */}
-      <View style={styles.tabs}>
-        {TABS.map(t => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tabItem, activeTab === t.key && styles.tabItemActive]}
-            onPress={() => setActiveTab(t.key)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          contentContainerStyle={styles.body}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {activeTab === 'profile' ? (
-            <>
-            {/* KAPAK FOTOĞRAFI */}
-<View style={styles.inputGroup}>
-  <Text style={styles.inputLabel}>Kapak Fotoğrafı</Text>
-  <TouchableOpacity style={styles.photoBox} onPress={handlePickPhoto} activeOpacity={0.8} disabled={uploadingPhoto}>
-    {coverImageUrl ? (
-      <Image source={{ uri: coverImageUrl }} style={styles.photoPreview} />
-    ) : (
-      <View style={styles.photoPlaceholder}>
-        <Icon name="add-a-photo" size={28} color={COLORS.textMuted} />
-        <Text style={styles.photoPlaceholderText}>Fotoğraf eklemek için dokun</Text>
-      </View>
-    )}
-    {uploadingPhoto && (
-      <View style={styles.photoUploadingOverlay}>
-        <ActivityIndicator color={COLORS.white} />
-      </View>
-    )}
-  </TouchableOpacity>
+        {/* KAPAK FOTOĞRAFI + SHOP ADI */}
+        <View style={styles.coverSection}>
+          <TouchableOpacity
+            style={styles.coverBox}
+            onPress={handlePickPhoto}
+            activeOpacity={0.8}
+            disabled={uploadingPhoto}
+          >
+            {coverImageUrl ? (
+              <Image source={{ uri: coverImageUrl }} style={styles.coverPreview} />
+            ) : (
+              <View style={styles.coverPlaceholder}>
+                <Icon name="add-a-photo" size={26} color={COLORS.textMuted} />
+                <Text style={styles.coverPlaceholderText}>Fotoğraf eklemek için dokun</Text>
+              </View>
+            )}
+            {uploadingPhoto && (
+              <View style={styles.coverUploadingOverlay}>
+                <ActivityIndicator color={COLORS.white} />
+              </View>
+            )}
+          </TouchableOpacity>
 
-  {coverImagePendingUrl && (
-    <View style={styles.pendingBadge}>
-      <Icon name="pending-actions" size={14} color="#D97706" />
-      <Text style={styles.pendingBadgeText}>Yeni fotoğrafın admin onayı bekleniyor</Text>
-    </View>
-  )}
-</View>
+          {coverImagePendingUrl && (
+            <View style={styles.pendingBadge}>
+              <Icon name="pending-actions" size={14} color="#D97706" />
+              <Text style={styles.pendingBadgeText}>Yeni fotoğrafın admin onayı bekleniyor</Text>
+            </View>
+          )}
+
+          <Text style={styles.shopName}>{shopInfo.name || 'Shop Adı'}</Text>
+        </View>
+
+        {/* MARKET BİLGİLERİ — salt okunur */}
+        <Text style={styles.sectionLabel}>MARKET BİLGİLERİ</Text>
+        <View style={styles.list}>
+          <View style={styles.row}>
+            <View style={styles.rowIcon}>
+              <Icon name="place" size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowSubtitle}>Adres</Text>
+              <Text style={styles.rowTitle}>{shopInfo.address || '-'}</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <View style={styles.rowIcon}>
+              <Icon name="call" size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowSubtitle}>Telefon</Text>
+              <Text style={styles.rowTitle}>{shopInfo.phone || '-'}</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <View style={styles.rowIcon}>
+              <Icon name="email" size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowSubtitle}>Email</Text>
+              <Text style={styles.rowTitle}>{shopInfo.email || '-'}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* GENEL — düzenleme aksiyonları, varsayılan görünümde açık değil */}
+        <Text style={styles.sectionLabel}>GENEL</Text>
+        <View style={styles.list}>
+          <TouchableOpacity style={styles.row} onPress={openEditModal} activeOpacity={0.6}>
+            <View style={styles.rowIcon}>
+              <Icon name="edit" size={18} color={COLORS.primary} />
+            </View>
+            <Text style={styles.rowTitleOnly}>Bilgilerini Düzenle</Text>
+            <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.row} onPress={openPasswordModal} activeOpacity={0.6}>
+            <View style={styles.rowIcon}>
+              <Icon name="lock" size={18} color={COLORS.primary} />
+            </View>
+            <Text style={styles.rowTitleOnly}>Şifre Değiştir</Text>
+            <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* PANEL */}
+        <Text style={styles.sectionLabel}>PANEL</Text>
+        <View style={styles.list}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => switchWorkspace('user')}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowIcon}>
+              <Icon name="storefront" size={18} color={COLORS.primary} />
+            </View>
+            <Text style={styles.rowTitleOnly}>Normal Kullanıcı Olarak Gez</Text>
+            <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* OTURUM */}
+        <Text style={styles.sectionLabel}>OTURUM</Text>
+        <View style={styles.list}>
+          <TouchableOpacity style={styles.row} onPress={logout} activeOpacity={0.6}>
+            <View style={styles.rowIconDanger}>
+              <Icon name="logout" size={18} color={COLORS.red} />
+            </View>
+            <Text style={styles.rowTitleDanger}>Çıkış Yap</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* BİLGİLERİNİ DÜZENLE — bottom sheet */}
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEditModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Bilgilerini Düzenle</Text>
+              <TouchableOpacity onPress={closeEditModal}>
+                <Icon name="close" size={22} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Shop Adı</Text>
                 <TextInput
                   style={styles.input}
-                  value={formData.name}
-                  onChangeText={text => setFormData({ ...formData, name: text })}
+                  value={editDraft.name}
+                  onChangeText={text => setEditDraft({ ...editDraft, name: text })}
                   placeholder="Shop adınız"
                   placeholderTextColor={COLORS.textMuted}
                 />
@@ -235,8 +341,8 @@ if (error) {
                 <Text style={styles.inputLabel}>Adres</Text>
                 <TextInput
                   style={[styles.input, styles.multiline]}
-                  value={formData.address}
-                  onChangeText={text => setFormData({ ...formData, address: text })}
+                  value={editDraft.address}
+                  onChangeText={text => setEditDraft({ ...editDraft, address: text })}
                   placeholder="Shop adresi"
                   placeholderTextColor={COLORS.textMuted}
                   multiline
@@ -248,8 +354,8 @@ if (error) {
                 <Text style={styles.inputLabel}>Telefon</Text>
                 <TextInput
                   style={styles.input}
-                  value={formData.phone}
-                  onChangeText={text => setFormData({ ...formData, phone: text })}
+                  value={editDraft.phone}
+                  onChangeText={text => setEditDraft({ ...editDraft, phone: text })}
                   placeholder="05XX XXX XX XX"
                   placeholderTextColor={COLORS.textMuted}
                   keyboardType="phone-pad"
@@ -260,30 +366,57 @@ if (error) {
                 <Text style={styles.inputLabel}>Email</Text>
                 <TextInput
                   style={styles.input}
-                  value={formData.email}
-                  onChangeText={text => setFormData({ ...formData, email: text })}
+                  value={editDraft.email}
+                  onChangeText={text => setEditDraft({ ...editDraft, email: text })}
                   placeholder="Email adresi"
                   placeholderTextColor={COLORS.textMuted}
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
               </View>
+            </ScrollView>
 
+            <View style={styles.sheetButtons}>
+              <TouchableOpacity style={styles.cancelButton} onPress={closeEditModal}>
+                <Text style={styles.cancelButtonText}>İptal</Text>
+              </TouchableOpacity>
               <TouchableOpacity
-                style={styles.submitButton}
+                style={styles.saveButton}
                 onPress={handleProfileUpdate}
-                disabled={saving}
+                disabled={savingEdit}
                 activeOpacity={0.8}
               >
-                {saving ? (
-                  <ActivityIndicator color={COLORS.white} />
+                {savingEdit ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
                 ) : (
-                  <Text style={styles.submitText}>Bilgileri Güncelle</Text>
+                  <Text style={styles.saveButtonText}>Kaydet</Text>
                 )}
               </TouchableOpacity>
-            </>
-          ) : (
-            <>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ŞİFRE DEĞİŞTİR — bottom sheet */}
+      <Modal
+        visible={passwordModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closePasswordModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Şifre Değiştir</Text>
+              <TouchableOpacity onPress={closePasswordModal}>
+                <Icon name="close" size={22} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Mevcut Şifre</Text>
                 <TextInput
@@ -292,7 +425,8 @@ if (error) {
                   onChangeText={text => setPasswordData({ ...passwordData, currentPassword: text })}
                   placeholder="Mevcut şifreniz"
                   placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
                 />
               </View>
 
@@ -304,7 +438,8 @@ if (error) {
                   onChangeText={text => setPasswordData({ ...passwordData, newPassword: text })}
                   placeholder="En az 6 karakter"
                   placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
                 />
               </View>
 
@@ -316,46 +451,46 @@ if (error) {
                   onChangeText={text => setPasswordData({ ...passwordData, confirmPassword: text })}
                   placeholder="Yeni şifreyi tekrar girin"
                   placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
                 />
               </View>
 
               <TouchableOpacity
-                style={styles.submitButton}
+                style={styles.showPasswordToggle}
+                onPress={() => setShowPassword(p => !p)}
+              >
+                <Icon
+                  name={showPassword ? 'visibility' : 'visibility-off'}
+                  size={16}
+                  color={COLORS.textMuted}
+                />
+                <Text style={styles.showPasswordToggleText}>
+                  {showPassword ? 'Şifreleri gizle' : 'Şifreleri göster'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            <View style={styles.sheetButtons}>
+              <TouchableOpacity style={styles.cancelButton} onPress={closePasswordModal}>
+                <Text style={styles.cancelButtonText}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
                 onPress={handlePasswordChange}
-                disabled={saving}
+                disabled={savingPassword}
                 activeOpacity={0.8}
               >
-                {saving ? (
-                  <ActivityIndicator color={COLORS.white} />
+                {savingPassword ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
                 ) : (
-                  <Text style={styles.submitText}>Şifreyi Değiştir</Text>
+                  <Text style={styles.saveButtonText}>Değiştir</Text>
                 )}
               </TouchableOpacity>
-            </>
-          )}
-          {/* HESAP */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.browseButton}
-              onPress={() => switchWorkspace('user')}
-              activeOpacity={0.8}
-            >
-              <Icon name="storefront" size={18} color={COLORS.primary} />
-              <Text style={styles.browseButtonText}>Normal Kullanıcı Olarak Gez</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={logout}
-              activeOpacity={0.8}
-            >
-              <Icon name="logout" size={18} color={COLORS.red} />
-              <Text style={styles.logoutText}>Çıkış Yap</Text>
-            </TouchableOpacity>
+            </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -363,123 +498,129 @@ if (error) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: COLORS.bg,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appName: { fontSize: 22, fontWeight: '800', color: COLORS.primary, letterSpacing: -0.5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginBottom: 2 },
+  body: { paddingHorizontal: SPACING.xxl, paddingBottom: SPACING.xxxl + SPACING.md },
 
-  hero: { paddingHorizontal: 20, marginBottom: 16 },
-  heroLabel: { fontSize: 13, color: COLORS.textMuted, marginBottom: 2 },
-  heroName: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
-
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    gap: 8,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+  // KAPAK + AD — avatar bölümünün UserProfileScreen'deki karşılığı
+  coverSection: { alignItems: 'center', marginTop: SPACING.sm, marginBottom: SPACING.xxxl - 4 },
+  coverBox: {
+    width: '100%', height: 140,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
     backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    ...SHADOWS.sm,
+    marginBottom: SPACING.md,
   },
-  tabItemActive: {
+  coverPreview: { width: '100%', height: '100%' },
+  coverPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.xs + 2 },
+  coverPlaceholderText: { fontSize: 12, color: COLORS.textMuted },
+  coverUploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  pendingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: '#FEF3C7', borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md, alignSelf: 'stretch',
+  },
+  pendingBadgeText: { fontSize: 12, color: '#92400E', fontWeight: '600', flex: 1 },
+  shopName: { ...TYPE_SCALE.h1, fontSize: 20, color: COLORS.text },
+
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: SPACING.sm + 2,
+    marginTop: SPACING.xl,
+  },
+
+  // Tasarım sistemindeki "shadow-based, border yok" prensibine göre:
+  // border yerine gölge kullanılıyor — UserProfileScreen ile aynı.
+  list: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    ...SHADOWS.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.lg - 2,
+    paddingHorizontal: SPACING.lg - 2,
+    gap: SPACING.md,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginLeft: 58,
+  },
+  rowIcon: {
+    width: 38, height: 38,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.primaryLight,
-    borderColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabText: { fontSize: 14, fontWeight: '600', color: COLORS.textMuted },
-  tabTextActive: { color: COLORS.primary },
+  rowIconDanger: {
+    width: 38, height: 38,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.redLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  rowSubtitle: { fontSize: 12, color: COLORS.textMuted, marginBottom: 2 },
+  rowTitleOnly: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text },
+  rowTitleDanger: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.red },
 
-  body: { paddingHorizontal: 20, paddingBottom: 40 },
-
-  inputGroup: { marginBottom: 16 },
-  inputLabel: { fontSize: 13, fontWeight: '500', color: COLORS.textMuted, marginBottom: 6 },
-  input: {
+  // BOTTOM SHEET (Düzenle / Şifre Değiştir)
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 14,
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
+    padding: SPACING.xxl,
+    paddingBottom: SPACING.xxxl,
+    maxHeight: '85%',
+  },
+  sheetHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  sheetTitle: { ...TYPE_SCALE.h3, fontSize: 18, color: COLORS.text },
+
+  inputGroup: { marginBottom: SPACING.lg },
+  inputLabel: { fontSize: 13, fontWeight: '500', color: COLORS.textMuted, marginBottom: SPACING.xs + 2 },
+  input: {
+    backgroundColor: COLORS.bg,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
     fontSize: 15,
     color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
-  multiline: { height: 90, textAlignVertical: 'top' },
+  multiline: { height: 84, textAlignVertical: 'top' },
 
-  submitButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 15,
-    borderRadius: 14,
+  showPasswordToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    alignSelf: 'flex-start', marginBottom: SPACING.md,
+  },
+  showPasswordToggleText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '500' },
+
+  sheetButtons: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md },
+  cancelButton: {
+    flex: 1, paddingVertical: SPACING.md + 2, borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.bg,
     alignItems: 'center',
-    marginTop: 8,
   },
-  submitText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  footer: {
-  marginTop: 24,
-  marginBottom: 16,
-  gap: 10,
-},
-browseButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
-  paddingVertical: 14,
-  borderRadius: 12,
-  backgroundColor: '#F0FDF4',
-  borderWidth: 1,
-  borderColor: COLORS.primary,
-},
-browseButtonText: {
-  color: COLORS.primary,
-  fontWeight: '600',
-  fontSize: 14,
-},
-logoutButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
-  paddingVertical: 14,
-  borderRadius: 12,
-  backgroundColor: '#FEF2F2',
-  borderWidth: 1,
-  borderColor: '#FCA5A5',
-},
-logoutText: {
-  color: COLORS.red,
-  fontWeight: '600',
-  fontSize: 14,
-},
-photoBox: {
-  height: 140, borderRadius: 14, overflow: 'hidden',
-  backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border,
-},
-photoPreview: { width: '100%', height: '100%' },
-photoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 6 },
-photoPlaceholderText: { fontSize: 12, color: COLORS.textMuted },
-photoUploadingOverlay: {
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: 'rgba(0,0,0,0.4)',
-  justifyContent: 'center', alignItems: 'center',
-},
-pendingBadge: {
-  flexDirection: 'row', alignItems: 'center', gap: 6,
-  backgroundColor: '#FEF3C7', borderRadius: 8,
-  paddingHorizontal: 10, paddingVertical: 8, marginTop: 8,
-},
-pendingBadgeText: { fontSize: 12, color: '#92400E', fontWeight: '600', flex: 1 },
+  cancelButtonText: { fontSize: 15, fontWeight: '600', color: COLORS.textMuted },
+  saveButton: {
+    flex: 1, paddingVertical: SPACING.md + 2, borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  saveButtonText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
 });
 
 export default ShopProfileScreen;

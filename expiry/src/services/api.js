@@ -99,6 +99,10 @@ export const fetchShops = async () => {
   const response = await api.get('/shops');
   return response.data;
 };
+export const fetchShopById = async (shopId) => {
+  const res = await api.get(`/shops/${shopId}`);
+  return res.data.shop;
+};
 
 export const fetchMyShop = async () => {
   const response = await api.get('/shops/me');
@@ -239,6 +243,17 @@ export const confirmOrderByQR = async (deliveryToken) => {
   return response.data;
 };
 
+// ─── SHOP DASHBOARD ──────────────────────────────────────
+export const fetchDashboardSummary = async () => {
+  const res = await api.get('/shop/dashboard/summary');
+  return res.data;
+};
+// ─── ADMIN DASHBOARD ─────────────────────────────────────
+export const fetchAdminDashboardSummary = async () => {
+  const res = await api.get('/admin/dashboard/summary');
+  return res.data;
+};
+
 // ─── NOTIFICATIONS ───────────────────────────────────────
 export const fetchNotifications = async () => {
   const res = await api.get('/notifications');
@@ -294,8 +309,12 @@ export const updateShopStatus = async (id, status) => {
   return res.data;
 };
 
-export const fetchAuditLogs = async () => {
-  return api.get('/audit-logs');
+export const fetchAuditLogs = async (page = 1, limit = 20, action) => {
+  const params = { page, limit };
+  if (action) {
+    params.action = Array.isArray(action) ? action.join(',') : action;
+  }
+  return api.get('/audit-logs', { params });
 };
 
 export const uploadShopCoverPhoto = async (imageUri) => {

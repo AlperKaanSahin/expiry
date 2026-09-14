@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { fetchNotifications } from '../services/api';
+import { fetchNotifications, fetchAdminDashboardSummary } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { filterNotificationsByWorkspace } from '../utils/notificationFilters';
 
@@ -40,23 +41,46 @@ const ADMIN_QUICK_ACTIONS = [
 const AdminHomeScreen = ({ navigation }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifications, setRecentNotifications] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
-const loadNotifications = async () => {
-  try {
-    const res = await fetchNotifications();
-    const data = res.data || [];
-    const adminNotifications = filterNotificationsByWorkspace(data, 'admin');
-    setUnreadCount(adminNotifications.filter(n => !n.isRead).length);
-    setRecentNotifications(adminNotifications.slice(0, 3));
-  } catch (err) {
-    console.log('Bildirimler yüklenemedi:', err.message);
-  }
-};
+      const loadNotifications = async () => {
+        try {
+          const res = await fetchNotifications();
+          const data = res.data || [];
+          const adminNotifications = filterNotificationsByWorkspace(data, 'admin');
+          setUnreadCount(adminNotifications.filter(n => !n.isRead).length);
+          setRecentNotifications(adminNotifications.slice(0, 3));
+        } catch (err) {
+          console.log('Bildirimler yüklenemedi:', err.message);
+        }
+      };
+
+      const loadSummary = async () => {
+        try {
+          setSummaryLoading(true);
+          const data = await fetchAdminDashboardSummary();
+          setSummary(data);
+        } catch (err) {
+          console.log('Dashboard özeti yüklenemedi:', err.message);
+        } finally {
+          setSummaryLoading(false);
+        }
+      };
+
       loadNotifications();
+      loadSummary();
     }, [])
   );
+
+  const maxWeeklyRevenue = summary?.weeklyTrend
+    ? Math.max(...summary.weeklyTrend.map(d => d.revenue), 1)
+    : 1;
+
+  const pending = summary?.pendingActions;
+  const hasPendingActions = pending && (pending.pendingShopApplications > 0 || pending.pendingPhotoApprovals > 0);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -92,6 +116,34 @@ const loadNotifications = async () => {
           <Text style={styles.heroName}>Yönetim Paneli</Text>
         </View>
 
+        {/* BUGÜN ÖZETİ */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            {summaryLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Text style={styles.statValue}>{summary?.today?.newUsers ?? 0}</Text>
+            )}
+            <Text style={styles.statLabel}>Yeni Kayıt</Text>
+          </View>
+          <View style={styles.statCard}>
+            {summaryLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Text style={styles.statValue}>{summary?.today?.orderCount ?? 0}</Text>
+            )}
+            <Text style={styles.statLabel}>Bugünkü Sipariş</Text>
+          </View>
+          <View style={styles.statCard}>
+            {summaryLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Text style={styles.statValue}>{Math.round(summary?.today?.revenue ?? 0)}₺</Text>
+            )}
+            <Text style={styles.statLabel}>Platform Cirosu</Text>
+          </View>
+        </View>
+
         {/* QUICK ACTIONS */}
         <View style={styles.quickActions}>
           {ADMIN_QUICK_ACTIONS.map((action) => (
@@ -108,6 +160,79 @@ const loadNotifications = async () => {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* DİKKAT GEREKİYOR — bekleyen market başvuruları / fotoğraf onayları */}
+        {hasPendingActions && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>DİKKAT GEREKİYOR</Text>
+            </View>
+            <View style={styles.list}>
+              {pending.pendingShopApplications > 0 && (
+                <TouchableOpacity
+                  style={styles.notifRow}
+                  onPress={() => navigation.navigate('ShopsTab')}
+                  activeOpacity={0.6}
+                >
+                  <View style={[styles.notifIcon, { backgroundColor: '#D9770618' }]}>
+                    <Icon name="store" size={16} color="#D97706" />
+                  </View>
+                  <View style={styles.notifText}>
+                    <Text style={styles.notifTitle}>Onay Bekleyen Market Başvurusu</Text>
+                    <Text style={[styles.notifTime, { color: '#D97706', fontWeight: '700' }]}>
+                      {pending.pendingShopApplications} başvuru bekliyor
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              )}
+              {pending.pendingShopApplications > 0 && pending.pendingPhotoApprovals > 0 && (
+                <View style={styles.divider} />
+              )}
+              {pending.pendingPhotoApprovals > 0 && (
+                <TouchableOpacity
+                  style={styles.notifRow}
+                  onPress={() => navigation.navigate('ShopsTab')}
+                  activeOpacity={0.6}
+                >
+                  <View style={[styles.notifIcon, { backgroundColor: '#D9770618' }]}>
+                    <Icon name="photo-camera" size={16} color="#D97706" />
+                  </View>
+                  <View style={styles.notifText}>
+                    <Text style={styles.notifTitle}>Onay Bekleyen Kapak Fotoğrafı</Text>
+                    <Text style={[styles.notifTime, { color: '#D97706', fontWeight: '700' }]}>
+                      {pending.pendingPhotoApprovals} fotoğraf bekliyor
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* SON 7 GÜN — PLATFORM CİROSU */}
+        {summary?.weeklyTrend && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>SON 7 GÜN — PLATFORM CİROSU</Text>
+            </View>
+            <View style={styles.trendCard}>
+              <View style={styles.trendBars}>
+                {summary.weeklyTrend.map((day) => {
+                  const barHeight = Math.max((day.revenue / maxWeeklyRevenue) * 56, 4);
+                  const dayLabel = new Date(day.date).toLocaleDateString('tr-TR', { weekday: 'short' });
+                  return (
+                    <View key={day.date} style={styles.trendBarColumn}>
+                      <View style={[styles.trendBar, { height: barHeight }]} />
+                      <Text style={styles.trendBarLabel}>{dayLabel}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          </>
+        )}
 
         {/* RECENT NOTIFICATIONS */}
         {recentNotifications.length > 0 && (
@@ -168,7 +293,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: COLORS.white, fontSize: 9, fontWeight: '800' },
   body: { paddingHorizontal: 20, paddingBottom: 110 },
-  hero: { marginTop: 8, marginBottom: 24 },
+  hero: { marginTop: 8, marginBottom: 20 },
   heroBadge: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4,
     backgroundColor: COLORS.primaryLight, paddingHorizontal: 10, paddingVertical: 5,
@@ -176,6 +301,17 @@ const styles = StyleSheet.create({
   },
   heroBadgeText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   heroName: { fontSize: 26, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
+
+  // BUGÜN ÖZETİ
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  statCard: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4,
+    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 16,
+    borderWidth: 1, borderColor: COLORS.border, minHeight: 72,
+  },
+  statValue: { fontSize: 18, fontWeight: '800', color: COLORS.text },
+  statLabel: { fontSize: 11, color: COLORS.textMuted, textAlign: 'center' },
+
   quickActions: { flexDirection: 'row', gap: 10 },
   actionCard: {
     flex: 1, alignItems: 'center', gap: 8, backgroundColor: COLORS.white,
@@ -203,6 +339,16 @@ const styles = StyleSheet.create({
   notifTime: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
   unreadDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.primary },
   divider: { height: 1, backgroundColor: COLORS.border, marginLeft: 58 },
+
+  // HAFTALIK TREND
+  trendCard: {
+    backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 1,
+    borderColor: COLORS.border, paddingVertical: 16, paddingHorizontal: 12,
+  },
+  trendBars: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 76 },
+  trendBarColumn: { alignItems: 'center', gap: 6, flex: 1 },
+  trendBar: { width: 14, borderRadius: 5, backgroundColor: COLORS.primary },
+  trendBarLabel: { fontSize: 10, color: COLORS.textMuted, textTransform: 'capitalize' },
 });
 
 export default AdminHomeScreen;

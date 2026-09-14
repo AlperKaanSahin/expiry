@@ -17,6 +17,7 @@ router.get('/me/payment-settings', auth, onlyMarket, shopController.getPaymentSe
 router.patch('/me/payment-settings', auth, onlyMarket, shopController.updatePaymentSettings);
 
 router.get('/', shopController.list);
+router.get('/:id', shopController.getShopById);
 router.get('/:id/packages', shopController.getShopWithPackages);
 router.get('/:shopId/can-rate', auth, shopController.canRateShop);
 

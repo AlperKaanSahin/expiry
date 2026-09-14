@@ -89,6 +89,23 @@ exports.listActiveShops = async () => {
   return await Shop.findAll({ where: { status: 'active' } });
 };
 
+// Müşteri yüzündeki ShopDetailScreen için tekil market profili. Sadece `status: 'active'`
+// olan marketler görüntülenebilir — aksi halde onay bekleyen/reddedilmiş bir marketin
+// detay sayfası ID tahmin edilerek görüntülenebilirdi (bkz. backlog: "unapproved shops
+// can be accessed by ID"). Bu, o boşluğun aynısına bilerek düşülmemesi için var.
+exports.getShopPublicProfile = async (shopId) => {
+  const shop = await Shop.findOne({
+    where: { id: shopId, status: 'active' },
+    attributes: [
+      'id', 'name', 'address', 'phone', 'category',
+      'coverImageUrl', 'ratingAverage', 'ratingCount',
+    ],
+  });
+
+  if (!shop) throw new AppError('Market bulunamadı', 404);
+  return shop;
+};
+
 exports.getShopWithPackages = async (shopId) => {
   return await Shop.findByPk(shopId, {
     include: [{
