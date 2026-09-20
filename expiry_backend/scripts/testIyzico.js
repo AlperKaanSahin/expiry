@@ -1,15 +1,24 @@
-
 require('dotenv').config();
-const iyzipay = require('../config/iyzico');
-const Iyzipay = require('iyzipay');
+const getIyzico = require('../config/iyzico');
+const iyzipay = getIyzico();
 
 const request = {
-  locale: Iyzipay.LOCALE.TR,
-  conversationId: 'test-' + Date.now(),
-  binNumber: '552879', // sandbox test kartının ilk 6 hanesi
+  locale: 'tr',
+  conversationId: 'test-submerchant-' + Date.now(),
+  subMerchantExternalId: 'test-shop-001',
+  subMerchantType: 'PERSONAL',
+  address: 'Test Adres, Samsun',
+  contactName: 'Test',
+  contactSurname: 'Kullanici',
+  email: 'test@example.com',
+  gsmNumber: '+905000000000',
+  name: 'Test İşletme',
+  iban: 'TR180006200119000006672315',
+  identityNumber: '11111111111',
+  currency: 'TRY',
 };
 
-iyzipay.binNumber.retrieve(request, (err, result) => {
+iyzipay.subMerchant.create(request, (err, result) => {
   if (err) {
     console.error('HATA:', err);
     return;

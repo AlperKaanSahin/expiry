@@ -5,19 +5,23 @@ const eventBus = require('../events/eventBus');
 const ORDER_EVENTS = require('../events/order.events');
 const crypto = require('crypto');
 const AppError = require('../utils/AppError');
+const iyzicoService = require('./iyzicoService');
+
+const PLATFORM_FEE_FIXED_AMOUNT = 10; // ≤50 TL paketler için sabit tutar
+const PLATFORM_FEE_THRESHOLD = 50;
+const PLATFORM_FEE_PERCENTAGE = 0.20;
+
+function calculatePlatformFee(totalPrice) {
+  if (totalPrice <= PLATFORM_FEE_THRESHOLD) {
+    return PLATFORM_FEE_FIXED_AMOUNT;
+  }
+  return parseFloat((totalPrice * PLATFORM_FEE_PERCENTAGE).toFixed(2));
+}
 
 // Her durum geçişi, hangi actor'lerin (rollerin) bu geçişi tetikleyebileceğini
 // açıkça listeler. Bu liste, "kim hangi state'i değiştirebilir" sorusunun tek
 // doğru kaynağıdır — buraya eklenmeyen bir (from, to, actor) kombinasyonu
 // otomatik olarak reddedilir.
-//
-// pending -> paid   : sadece ödeme sağlayıcısı/webhook ('system') ya da admin override
-// paid -> delivered : sadece market (kendi ürününü teslimata hazırladığını işaretler)
-// delivered -> confirmed : sadece market — ve sadece confirmByQRCode üzerinden,
-//   yani alıcının fiziksel olarak QR kodunu göstermesi karşılığında. Müşterinin
-//   kendi kendine "onayla" demesi burada KASITLI olarak izin verilmiyor; aksi
-//   halde QR doğrulamasının hiçbir anlamı kalmaz.
-// confirmed -> released : market (mevcut ürün akışı böyle), admin override
 const TRANSITIONS = {
   pending: { paid: ['system', 'admin'] },
   paid: { delivered: ['market', 'admin'] },
@@ -34,11 +38,6 @@ function getTransitionRule(current, next) {
   return TRANSITIONS[current]?.[next] || null;
 }
 
-// STT (Son Tüketim Tarihi) geçmiş ürün içeren bir paketin satışa sunulması/satılması
-// 5996 sayılı Kanun m.41/1(d) kapsamında idari para cezası riski taşır. Kural: SKT'nin
-// GEÇTİĞİ gün (bugünün takvim günü > SKT'nin takvim günü) satış yasak; SKT bugünse
-// hâlâ satılabilir (STT, "tüketilebileceği son tarih" olduğu için o günü kapsar).
-// Paketteki ürünlerden biri bile bu kurala takılırsa tüm paket reddedilir.
 async function assertPackageProductsNotExpired(packageId, transaction) {
   const packageProducts = await PackageProduct.findAll({
     where: { packageId },
@@ -65,6 +64,10 @@ async function assertPackageProductsNotExpired(packageId, transaction) {
   }
 }
 
+// NOT: 'confirmed' durumunda Iyzico approve call'u BURADA (transaction içinde)
+// YAPILMIYOR — bkz. payment.handler.js. Dış bir HTTP çağrısını DB transaction'ı
+// içinde tutmak (network round-trip boyunca row lock) ölçeklenebilirlik açısından
+// kötü; approve call, transaction commit olduktan sonra event listener'da çalışıyor.
 async function runSideEffects(order, status, transaction) {
   switch (status) {
     case 'paid':
@@ -166,8 +169,6 @@ async function createOrder(userId, data) {
 
       if (!dbPackage) throw new AppError(`Geçersiz paket: ${pkg.packageId}`, 400);
 
-      // SKT kontrolü stok kontrolünden önce yapılıyor: geçersiz (tarihi geçmiş)
-      // bir paket için stok sorgulamaya bile gerek yok, doğrudan reddedilmeli.
       await assertPackageProductsNotExpired(pkg.packageId, t);
 
       const available = await PackageUnit.count({
@@ -188,15 +189,24 @@ async function createOrder(userId, data) {
     }
 
     const deliveryToken = crypto.randomBytes(16).toString('hex');
+    const platformFee = calculatePlatformFee(totalPrice);
+    const paidPrice = parseFloat((totalPrice + platformFee).toFixed(2));
 
     const order = await Order.create(
-      { userId, shopId, totalPrice, status: 'pending', deliveryToken },
+      { userId, shopId, totalPrice, platformFee, paidPrice, status: 'pending', deliveryToken },
       { transaction: t }
     );
 
-    for (const pkg of validatedPackages) {
+    for (let i = 0; i < validatedPackages.length; i++) {
+      const pkg = validatedPackages[i];
       await OrderPackage.create(
-        { orderId: order.id, packageId: pkg.packageId, quantity: pkg.quantity, price: pkg.price },
+        {
+          orderId: order.id,
+          packageId: pkg.packageId,
+          quantity: pkg.quantity,
+          price: pkg.price,
+          iyzicoItemId: `op-${order.id}-${i}`,
+        },
         { transaction: t }
       );
     }
@@ -209,22 +219,139 @@ async function createOrder(userId, data) {
   }
 }
 
+/**
+ * Bir pending order için Iyzico Checkout Form başlatır ve paymentPageUrl döner.
+ * Frontend bunu WebView'de açar.
+ */
+async function initiateCheckout(userId, orderId, req) {
+  const order = await Order.findOne({
+    where: { id: orderId, userId },
+    include: [{ model: OrderPackage, include: [{ model: Package }] }],
+  });
+
+  if (!order) throw new AppError('Sipariş bulunamadı veya erişim yetkiniz yok', 404);
+  if (order.status !== 'pending') throw new AppError('Bu sipariş zaten işlenmiş', 409);
+
+  const user = await User.findByPk(userId);
+  const shop = await Shop.findByPk(order.shopId);
+
+  if (!shop.subMerchantKey || shop.subMerchantStatus !== 'active') {
+    throw new AppError('Bu market henüz ödeme almaya hazır değil', 409);
+  }
+
+  const packageBasketItems = order.OrderPackages.map((opkg) => ({
+    id: opkg.iyzicoItemId,
+    name: opkg.Package?.name || 'Paket',
+    price: opkg.price * opkg.quantity,
+    subMerchantKey: shop.subMerchantKey,
+    subMerchantPrice: opkg.price * opkg.quantity, // market %100 alıyor, komisyon yok
+  }));
+
+  const feeBasketItem = {
+    id: `fee-${order.id}`,
+    name: 'Expiry hizmet bedeli',
+    price: Number(order.platformFee),
+    // subMerchantKey/subMerchantPrice YOK — bu tutar otomatik olarak ana hesaba düşer
+  };
+
+  const basketItems = order.platformFee > 0
+    ? [...packageBasketItems, feeBasketItem]
+    : packageBasketItems;
+
+  const callbackUrl = `${process.env.BACKEND_URL}/api/orders/checkout/callback`;
+
+  const result = await iyzicoService.initializeCheckoutForm(
+    order, basketItems, user, req.ip, callbackUrl
+  );
+
+  order.checkoutToken = result.token;
+  await order.save();
+
+  return { paymentPageUrl: result.paymentPageUrl, token: result.token };
+}
+
+/**
+ * callbackUrl'e Iyzico POST ettiğinde (body içinde `token`) çağrılır.
+ * Redirect'teki hiçbir parametreye güvenilmiyor — token ile Iyzico'dan
+ * otoriter sonucu tekrar sorguluyoruz.
+ */
+async function handleCheckoutCallback(token) {
+  const order = await Order.findOne({ where: { checkoutToken: token } });
+  if (!order) throw new AppError('Geçersiz checkout token', 404);
+
+  // Idempotency: aynı callback iki kez gelirse (Iyzico'nun retry mekanizması
+  // olabilir) ikinci kez state geçişi denemeyelim.
+  if (order.status !== 'pending') {
+    return order;
+  }
+
+  const result = await iyzicoService.retrieveCheckoutForm(token);
+
+  if (result.paymentStatus !== 'SUCCESS') {
+    // Ödeme başarısız — order 'pending' kalır, kullanıcı tekrar deneyebilir.
+    throw new AppError(result.errorMessage || 'Ödeme başarısız oldu', 402);
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const lockedOrder = await Order.findOne({
+      where: { id: order.id },
+      lock: t.LOCK.UPDATE,
+      transaction: t,
+    });
+
+    if (lockedOrder.status !== 'pending') {
+      await t.commit();
+      return lockedOrder;
+    }
+
+    // itemTransactions'daki paymentTransactionId'leri OrderPackage'lara yaz —
+    // approve call bunları kullanacak.
+    const orderPackages = await OrderPackage.findAll({
+      where: { orderId: order.id },
+      transaction: t,
+    });
+
+    for (const itemTx of result.itemTransactions || []) {
+      const matching = orderPackages.find((op) => op.iyzicoItemId === itemTx.itemId);
+      if (matching) {
+        matching.iyzicoPaymentTransactionId = itemTx.paymentTransactionId;
+        await matching.save({ transaction: t });
+      }
+    }
+
+    await changeStatusInternal(lockedOrder, 'paid', 'system', t);
+
+    await t.commit();
+    return lockedOrder;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+
 async function confirmByQRCode(marketUserId, deliveryToken) {
   const t = await sequelize.transaction();
   try {
     const order = await Order.findOne({
       where: { deliveryToken, status: 'delivered' },
+      lock: t.LOCK.UPDATE,
       include: [
         { model: User, attributes: ['id', 'firstName', 'lastName'] },
         {
           model: OrderPackage,
-          include: [{ model: Package, attributes: ['id', 'name'] }]
+          include: [{ model: Package, attributes: ['id', 'name', 'deliveryEnd'] }]
         }
       ],
       transaction: t
     });
 
     if (!order) throw new AppError('Geçersiz veya süresi dolmuş QR kod', 404);
+
+    const deliveryEnd = order.OrderPackages?.[0]?.Package?.deliveryEnd;
+    if (deliveryEnd && new Date() > new Date(deliveryEnd)) {
+      throw new AppError('Teslimat penceresi geçmiş, QR kod artık geçerli değil', 410);
+    }
 
     const shop = await Shop.findOne({
       where: { id: order.shopId, ownerId: marketUserId },
@@ -233,8 +360,6 @@ async function confirmByQRCode(marketUserId, deliveryToken) {
 
     if (!shop) throw new AppError('Bu siparişe erişim yetkiniz yok', 403);
 
-    // Actor 'market': QR kodu fiziksel olarak gösteren müşteri değil, onu okutup
-    // doğrulayan market — TRANSITIONS.delivered.confirmed kuralıyla tutarlı olması için.
     await changeStatusInternal(order, 'confirmed', 'market', t);
 
     await t.commit();
@@ -372,12 +497,15 @@ async function getShopByOwner(ownerId) {
 
 module.exports = {
   createOrder,
+  initiateCheckout,
+  handleCheckoutCallback,
   confirmByQRCode,
   simulatePayment,
   changeStatus,
   listUserOrders,
   listShopOrders,
   getShopByOwner,
-  reserveStock, // test edilebilirlik için export edildi
-  assertPackageProductsNotExpired, // test edilebilirlik için export edildi
+  reserveStock,
+  assertPackageProductsNotExpired,
+  calculatePlatformFee, // test edilebilirlik için export edildi
 };

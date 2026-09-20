@@ -134,6 +134,16 @@ export const updateShopProfile = async (data) => {
   return response.data;
 };
 
+export const fetchPaymentSettings = async () => {
+  const res = await api.get('/shops/me/payment-settings');
+  return res.data;
+};
+
+export const updatePaymentSettings = async (data) => {
+  const res = await api.patch('/shops/me/payment-settings', data);
+  return res.data;
+};
+
 export const changePassword = async (data) => {
   const res = await api.put('/users/change-password', data);
   return res.data;
@@ -224,6 +234,14 @@ export const changeOrderStatus = async (orderId, status) => {
   return response.data;
 };
 
+// Iyzico Checkout Form başlatır — dönen paymentPageUrl WebView'de açılır.
+export const initiateCheckout = async (orderId) => {
+  const response = await api.post(`/orders/${orderId}/checkout`);
+  return response.data;
+};
+
+// NOT: sadece dev ortamda çalışır (backend'de devOnly middleware'i var).
+// Gerçek ödeme akışı initiateCheckout üzerinden yürüyor.
 export const simulatePayment = async (orderId) => {
   const response = await api.post('/orders/simulate-payment', { orderId });
   return response.data;

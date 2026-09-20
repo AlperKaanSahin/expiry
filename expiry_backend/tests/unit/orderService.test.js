@@ -188,10 +188,10 @@ describe('createOrder', () => {
       expect.objectContaining({ userId: 5, shopId: 1, totalPrice: 30, status: 'pending' }),
       { transaction: t }
     );
-    expect(OrderPackage.create).toHaveBeenCalledWith(
-      { orderId: 100, packageId: 1, quantity: 2, price: 15 },
-      { transaction: t }
-    );
+expect(OrderPackage.create).toHaveBeenCalledWith(
+  { orderId: 100, packageId: 1, quantity: 2, price: 15, iyzicoItemId: 'op-100-0' },
+  { transaction: t }
+);
     expect(t.commit).toHaveBeenCalled();
     expect(result).toEqual({ id: 100 });
   });

@@ -1,5 +1,6 @@
 'use strict';
 const { Model } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
   class OrderPackage extends Model {
     static associate(models) {
@@ -7,6 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       OrderPackage.belongsTo(models.Package, { foreignKey: 'packageId' });
     }
   }
+
   OrderPackage.init({
     orderId: {
       type: DataTypes.INTEGER,
@@ -24,6 +26,16 @@ module.exports = (sequelize, DataTypes) => {
     price: {
       type: DataTypes.FLOAT,
       allowNull: true
+    },
+
+    // Iyzico checkout akışı için eklendi
+    iyzicoItemId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    iyzicoPaymentTransactionId: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   }, {
     sequelize,
@@ -31,5 +43,6 @@ module.exports = (sequelize, DataTypes) => {
     tableName: 'orderpackages',
     timestamps: true
   });
+
   return OrderPackage;
 };

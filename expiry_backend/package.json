@@ -2,10 +2,11 @@
   "name": "expiry_backend",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-    "test": "jest",
-    "start": "nodemon server.js"
-  },
+"scripts": {
+  "test": "jest",
+  "start": "nodemon server.js",
+  "test:failed": "node scripts/test-failed.js"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",

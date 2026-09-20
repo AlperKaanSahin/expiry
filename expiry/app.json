@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "Expiry",
+    "scheme": "expiry",
     "slug": "Expiry",
     "version": "1.0.0",
     "orientation": "portrait",

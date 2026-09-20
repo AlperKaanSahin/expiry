@@ -43,6 +43,7 @@ jobs:
       DB_DIALECT: mysql
       JWT_SECRET: ci-test-secret-not-real
       JWT_REFRESH_SECRET: ci-test-refresh-secret-not-real
+      IYZICO_SECRET_KEY: ci-test-iyzico-secret-not-real
 
     steps:
       - name: Kodu checkout et
