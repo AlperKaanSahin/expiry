@@ -225,14 +225,27 @@ exports.updatePaymentSettings = async (userId, data) => {
     throw new AppError('Geçersiz işletme tipi', 400);
   }
   if (!iban) throw new AppError('IBAN zorunlu', 400);
+  if (!iyzicoService.isValidTurkishIban(iban)) {
+    throw new AppError('IBAN formatı geçersiz', 400);
+  }
   if (!email) throw new AppError('Email zorunlu', 400);
 
   if (subMerchantType === 'PERSONAL') {
     if (!identityNumber) throw new AppError('Kimlik numarası zorunlu', 400);
+    if (!iyzicoService.isValidTcNo(identityNumber)) {
+      throw new AppError('Kimlik numarası geçersiz', 400);
+    }
   } else {
     if (!taxNumber || !taxOffice || !legalCompanyTitle) {
       throw new AppError('Vergi numarası, vergi dairesi ve şirket unvanı zorunlu', 400);
     }
+    if (!iyzicoService.isValidVkn(taxNumber)) {
+      throw new AppError('Vergi numarası geçersiz', 400);
+    }
+  }
+
+  if (!shop.owner?.firstName || !shop.owner?.lastName) {
+    throw new AppError('Profilinizde ad/soyad bilgisi eksik, önce onu tamamlayın', 400);
   }
 
   const iyzicoResult = await iyzicoService.createOrUpdateSubMerchant(shop, {
@@ -243,10 +256,9 @@ exports.updatePaymentSettings = async (userId, data) => {
     taxOffice,
     legalCompanyTitle,
     email,
-    contactName: shop.owner?.firstName || '',
-    contactSurname: shop.owner?.lastName || '',
+    contactName: shop.owner.firstName,
+    contactSurname: shop.owner.lastName,
   });
-  console.log('=== IYZICO RESULT ===', iyzicoResult);
 
   shop.subMerchantType = subMerchantType;
   shop.iban = iban;

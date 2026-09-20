@@ -24,15 +24,53 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     deliveryToken: {
-  type: DataTypes.STRING,
-  allowNull: true
-},
+      type: DataTypes.STRING,
+      allowNull: true
+    },
 
     // 🔥 ESCROW STATE
-status: {
-  type: DataTypes.STRING,
-  defaultValue: 'pending'
-}
+    status: {
+      type: DataTypes.STRING,
+      defaultValue: 'pending'
+    },
+
+    // ⚠️ Bunlar changeStatusInternal'da set ediliyordu ama modelde tanımlı
+    // değillerdi — Sequelize tanımsız property'lere yapılan atamayı "dirty"
+    // işaretlemediği için save() bunları hiçbir zaman DB'ye yazmıyordu.
+    // DB'de kolon olarak var mı doğrula (DESCRIBE orders) — yoksa ayrı bir
+    // migration gerekir.
+    paidAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    deliveredAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    confirmedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    releasedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+
+    // Iyzico checkout akışı için eklendi
+    platformFee: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0
+    },
+    paidPrice: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    checkoutToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
+    }
 
   }, {
     sequelize,

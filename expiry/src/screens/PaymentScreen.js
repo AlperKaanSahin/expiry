@@ -6,46 +6,115 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import Icon from '@expo/vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
-import { simulatePayment } from '../services/api';
+import { initiateCheckout } from '../services/api';
 import { COLORS } from '../theme/colors';
 import { showErrorToast } from '../utils/errorHandler';
 import { CommonActions } from '@react-navigation/native';
+
+// expiry://checkout-result?status=success&orderId=123 formatındaki deep-link'i
+// URLSearchParams'a güvenmeden elle parse eder (RN/Hermes sürümüne göre
+// URLSearchParams her zaman garanti değil).
+function parseCheckoutResultUrl(url) {
+  const queryString = url.split('?')[1] || '';
+  const params = {};
+  queryString.split('&').forEach((pair) => {
+    if (!pair) return;
+    const [key, value] = pair.split('=');
+    params[decodeURIComponent(key)] = decodeURIComponent(value || '');
+  });
+  return params;
+}
 
 const PaymentScreen = ({ route, navigation }) => {
   const { orderId } = route.params;
   const [loading, setLoading] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState(null);
 
-const handlePayment = async () => {
-  try {
-    setLoading(true);
-    await simulatePayment(orderId);
-    setPaid(true);
-  } catch (err) {
-    showErrorToast(err, Toast);
-  } finally {
-    setLoading(false);
-  }
-};
-const resetAndNavigate = (tabName, screenName) => {
-  navigation.dispatch(
-    CommonActions.reset({
-      index: 0,
-      routes: [{ name: 'Shops' }],
-    })
-  );
-  setTimeout(() => {
-    navigation.getParent()?.navigate(tabName, screenName ? { screen: screenName } : undefined);
-  }, 0);
-};
+  const handlePayment = async () => {
+    try {
+      setLoading(true);
+      const result = await initiateCheckout(orderId);
+      setCheckoutUrl(result.paymentPageUrl);
+    } catch (err) {
+      showErrorToast(err, Toast);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // WebView her navigasyon denemesinde çağrılır. expiry://checkout-result'ı
+  // yakalayınca gerçek bir navigasyona izin vermiyoruz (return false) —
+  // bunun yerine sonucu okuyup WebView'i kapatıyoruz.
+  const handleShouldStartLoadWithRequest = (request) => {
+    if (request.url.includes('/api/orders/payment-result')) {
+      const params = parseCheckoutResultUrl(request.url);
+      setCheckoutUrl(null);
+
+      if (params.status === 'success') {
+        setPaid(true);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Ödeme başarısız oldu',
+          text2: 'Lütfen tekrar deneyin',
+        });
+      }
+      return false;
+    }
+    return true;
+  };
+
+  const resetAndNavigate = (tabName, screenName) => {
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'Shops' }],
+      })
+    );
+    setTimeout(() => {
+      navigation.getParent()?.navigate(tabName, screenName ? { screen: screenName } : undefined);
+    }, 0);
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      {/* IYZICO CHECKOUT FORM — WEBVIEW */}
+      <Modal visible={!!checkoutUrl} animationType="slide" onRequestClose={() => setCheckoutUrl(null)}>
+        <SafeAreaView style={styles.webviewSafe}>
+          <View style={styles.webviewHeader}>
+            <TouchableOpacity
+              style={styles.webviewCloseButton}
+              onPress={() => setCheckoutUrl(null)}
+              activeOpacity={0.7}
+            >
+              <Icon name="close" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.webviewTitle}>Ödeme</Text>
+            <View style={{ width: 36 }} />
+          </View>
+          {checkoutUrl && (
+            <WebView
+              source={{ uri: checkoutUrl }}
+              onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={styles.webviewLoading}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+              )}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -78,9 +147,9 @@ const resetAndNavigate = (tabName, screenName) => {
             </Text>
 
             <View style={styles.infoCard}>
-              <Icon name="info-outline" size={18} color={COLORS.textMuted} />
+              <Icon name="lock" size={18} color={COLORS.textMuted} />
               <Text style={styles.infoText}>
-                Bu bir simülasyon — gerçek ödeme entegrasyonu yakında eklenecek
+                Kart bilgileriniz Iyzico'nun güvenli ödeme sayfasında alınır, hiçbir zaman bizim sunucularımıza ulaşmaz
               </Text>
             </View>
 
@@ -136,6 +205,33 @@ onPress={() => resetAndNavigate('OrdersTab', 'UserOrders')}
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
+
+  webviewSafe: { flex: 1, backgroundColor: COLORS.bg },
+  webviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  webviewCloseButton: {
+    width: 36, height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webviewTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  webviewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.bg,
+  },
 
   header: {
     flexDirection: 'row',

@@ -17,6 +17,7 @@ const path = require('path');
 
 require('./handlers/notification.handler');
 require('./handlers/audit.handler');
+require('./handlers/payment.handler');
 
 const app = express();
 
@@ -26,10 +27,14 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
-app.use(rateLimit({
+const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
-}));
+  max: 1000, // 100 çok düşüktü — normal gezinme bile kolayca aşıyordu
+});
+
+if (!['development', 'test'].includes(process.env.NODE_ENV)) {
+  app.use(generalLimiter);
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

@@ -11,6 +11,13 @@ jest.mock('../../services/notificationService', () => ({
 
 jest.mock('../../services/iyzicoService', () => ({
   createOrUpdateSubMerchant: jest.fn(),
+  // NOT: format validatörleri MOCK'LANMIYOR — gerçek isValidTurkishIban/isValidTcNo
+  // çalışıyor, o yüzden test fixture'larında GERÇEK checksum'lı değerler kullanmak
+  // zorunludur (aksi halde updatePaymentSettings, createOrUpdateSubMerchant'a hiç
+  // ulaşmadan format hatasıyla 400 fırlatır).
+  isValidTurkishIban: jest.requireActual('../../services/iyzicoService').isValidTurkishIban,
+  isValidTcNo: jest.requireActual('../../services/iyzicoService').isValidTcNo,
+  isValidVkn: jest.requireActual('../../services/iyzicoService').isValidVkn,
 }));
 jest.mock('../../events/eventBus', () => ({ emit: jest.fn() }));
 
@@ -18,6 +25,10 @@ const { Shop, User, Order, ShopRating } = require('../../models');
 const iyzicoService = require('../../services/iyzicoService');
 const shopService = require('../../services/shopService');
 const eventBus = require('../../events/eventBus');
+
+// Gerçek checksum'lı test değerleri (projede sandbox testlerinde de kullandığımız değerler)
+const VALID_IBAN = 'TR330006100519786457841326';
+const VALID_TC = '12345678950';
 
 describe('shopService.applyShop', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -30,7 +41,7 @@ describe('shopService.applyShop', () => {
   it('ilk başvuruda shop oluşturur ve SHOP_CREATED audit event yayınlar', async () => {
     Shop.findOne.mockResolvedValue(null);
     Shop.create = jest.fn().mockResolvedValue({ id: 1, name: 'Yeni Market', address: 'Adres', phone: '000' });
-    User.findOne.mockResolvedValue({ id: 99 }); // admin
+    User.findOne.mockResolvedValue({ id: 99 });
 
     await shopService.applyShop(42, { name: 'Yeni Market', address: 'Adres', phone: '000', category: 'MARKET' });
 
@@ -117,7 +128,7 @@ describe('shopService.updatePaymentSettings — ownership ve iş kuralları', ()
     Shop.findOne.mockResolvedValue(null);
 
     await expect(
-      shopService.updatePaymentSettings(999, { subMerchantType: 'PERSONAL', iban: 'TR..', email: 'a@b.com', identityNumber: '123' })
+      shopService.updatePaymentSettings(999, { subMerchantType: 'PERSONAL', iban: VALID_IBAN, email: 'a@b.com', identityNumber: VALID_TC })
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
@@ -125,26 +136,48 @@ describe('shopService.updatePaymentSettings — ownership ve iş kuralları', ()
     Shop.findOne.mockResolvedValue({ id: 1, status: 'pending', owner: {} });
 
     await expect(
-      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: 'TR..', email: 'a@b.com', identityNumber: '123' })
+      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: VALID_IBAN, email: 'a@b.com', identityNumber: VALID_TC })
     ).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it('PERSONAL tipte identityNumber eksikse AppError(400) fırlatır', async () => {
+  it('IBAN formatı geçersizse AppError(400) fırlatır (Iyzico\'ya hiç gidilmez)', async () => {
     Shop.findOne.mockResolvedValue({ id: 1, status: 'active', owner: { firstName: 'A', lastName: 'B' } });
 
     await expect(
-      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: 'TR..', email: 'a@b.com' })
+      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: 'TR..', email: 'a@b.com', identityNumber: VALID_TC })
     ).rejects.toMatchObject({ statusCode: 400 });
 
     expect(iyzicoService.createOrUpdateSubMerchant).not.toHaveBeenCalled();
   });
 
-  it('LIMITED_OR_JOINT_STOCK_COMPANY tipte vergi bilgileri eksikse AppError(400) fırlatır', async () => {
+  it('PERSONAL tipte identityNumber eksikse AppError(400) fırlatır (geçerli IBAN ile — asıl test edilen alan bu)', async () => {
+    Shop.findOne.mockResolvedValue({ id: 1, status: 'active', owner: { firstName: 'A', lastName: 'B' } });
+
+    await expect(
+      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: VALID_IBAN, email: 'a@b.com' })
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(iyzicoService.createOrUpdateSubMerchant).not.toHaveBeenCalled();
+  });
+
+  it('PERSONAL tipte identityNumber checksum\'ı geçersizse AppError(400) fırlatır', async () => {
+    Shop.findOne.mockResolvedValue({ id: 1, status: 'active', owner: { firstName: 'A', lastName: 'B' } });
+
+    await expect(
+      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: VALID_IBAN, email: 'a@b.com', identityNumber: '11111111111' })
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(iyzicoService.createOrUpdateSubMerchant).not.toHaveBeenCalled();
+  });
+
+  it('LIMITED_OR_JOINT_STOCK_COMPANY tipte vergi bilgileri eksikse AppError(400) fırlatır (geçerli IBAN ile)', async () => {
     Shop.findOne.mockResolvedValue({ id: 1, status: 'active', owner: {} });
 
     await expect(
-      shopService.updatePaymentSettings(42, { subMerchantType: 'LIMITED_OR_JOINT_STOCK_COMPANY', iban: 'TR..', email: 'a@b.com' })
+      shopService.updatePaymentSettings(42, { subMerchantType: 'LIMITED_OR_JOINT_STOCK_COMPANY', iban: VALID_IBAN, email: 'a@b.com' })
     ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(iyzicoService.createOrUpdateSubMerchant).not.toHaveBeenCalled();
   });
 
   it('Iyzico başarısız dönerse subMerchantStatus=failed olur ve AppError(502) fırlatır', async () => {
@@ -156,7 +189,7 @@ describe('shopService.updatePaymentSettings — ownership ve iş kuralları', ()
     iyzicoService.createOrUpdateSubMerchant.mockResolvedValue({ status: 'failure', errorMessage: 'IBAN hatalı' });
 
     await expect(
-      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: 'TR..', email: 'a@b.com', identityNumber: '123' })
+      shopService.updatePaymentSettings(42, { subMerchantType: 'PERSONAL', iban: VALID_IBAN, email: 'a@b.com', identityNumber: VALID_TC })
     ).rejects.toMatchObject({ statusCode: 502 });
 
     expect(mockShop.subMerchantStatus).toBe('failed');
@@ -172,7 +205,7 @@ describe('shopService.updatePaymentSettings — ownership ve iş kuralları', ()
     iyzicoService.createOrUpdateSubMerchant.mockResolvedValue({ status: 'success', subMerchantKey: 'key-123' });
 
     const result = await shopService.updatePaymentSettings(42, {
-      subMerchantType: 'PERSONAL', iban: 'TR..', email: 'a@b.com', identityNumber: '123',
+      subMerchantType: 'PERSONAL', iban: VALID_IBAN, email: 'a@b.com', identityNumber: VALID_TC,
     });
 
     expect(result.subMerchantStatus).toBe('active');
@@ -204,7 +237,7 @@ describe('shopService.rateShop — iş kuralları', () => {
   it('aynı sipariş için tekrar puan verilmeye çalışılırsa AppError(409) fırlatır', async () => {
     Shop.findByPk.mockResolvedValue({ id: 2, ratingCount: 0, ratingAverage: 0 });
     Order.findOne.mockResolvedValue({ id: 3 });
-    ShopRating.findOne.mockResolvedValue({ id: 10 }); // zaten var
+    ShopRating.findOne.mockResolvedValue({ id: 10 });
 
     await expect(shopService.rateShop(1, 2, 5, 3)).rejects.toMatchObject({ statusCode: 409 });
   });
@@ -215,7 +248,7 @@ it('geçerli puan verilince ratingAverage doğru hesaplanır', async () => {
     ratingCount: 1,
     ratingAverage: 4,
     update: jest.fn(function (values) {
-      Object.assign(this, values); // gerçek Sequelize gibi instance'ı da güncelle
+      Object.assign(this, values);
       return Promise.resolve(this);
     }),
   };
