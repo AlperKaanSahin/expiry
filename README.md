@@ -27,6 +27,8 @@ A key design decision: roles aren't separate accounts or separate apps. A market
 - Product and package management with pagination
 - QR-based delivery confirmation — single-scan pickup flow
 - Escrow-style order lifecycle
+- Iyzico marketplace payment integration — Checkout Form (hosted, PCI-scope-minimizing) checkout, per-shop submerchant onboarding, and escrow-style payouts released only on QR-confirmed delivery
+- Iyzico webhook signature verification (`X-IYZ-SIGNATURE-V3`) for asynchronous payment notifications, independent of the checkout callback path
 - Event-driven, type-based in-app notification system (routes to the correct workspace regardless of who triggered it)
 - **Real-time push notifications** (Firebase Cloud Messaging) alongside in-app notifications, backed by the same event bus
 - Shop rating system
@@ -96,6 +98,7 @@ Business logic is isolated inside the service layer while side effects such as n
 - **Ownership and ACL checks live in the service layer**, not scattered across controllers — a market can only ever query or mutate its own products, packages, and orders, enforced the same way regardless of which route triggered the call.
 - **Centralized error handling** — a custom `AppError` class distinguishes operational errors (safe to show users, e.g. "insufficient stock") from unexpected ones (never exposed with internal details), routed through a single Express error-handling middleware via an async wrapper, instead of each controller handling — and often mishandling — its own errors.
 - **Row-level locking on stock reservation** — a `SELECT ... FOR UPDATE` lock (plus deterministic ordering) prevents two concurrent orders from both reserving the same last unit of stock, a race condition that a naive read-then-write would allow.
+- **Marketplace escrow payments** — Iyzico Checkout Form basket items carry per-package `subMerchantKey`/`subMerchantPrice`, so funds are split between the shop and the platform at the payment level rather than through a manual post-hoc transfer; the shop's payout is only released (via an explicit approve call) once the buyer confirms delivery by QR code, triggered through the same event-driven side-effect pattern as notifications and audit logs.
 
 ## Testing Strategy
 
@@ -103,10 +106,10 @@ The backend uses multiple testing layers to validate business logic and real API
 
 - **Unit tests** — service-layer business logic and authentication middleware are tested in isolation with mocked dependencies.
 - **Integration tests** — HTTP endpoints are tested with Supertest against a real MySQL database.
-- **End-to-end workflows** — critical multi-step business flows are tested across multiple API boundaries, including authentication, shop approval, product and package creation, ordering, payment simulation, delivery, and QR-based confirmation.
+- **End-to-end workflows** — critical multi-step business flows are tested across multiple API boundaries, including authentication, shop approval, product and package creation, ordering, payment, delivery, and QR-based confirmation.
 - **CI validation** — GitHub Actions runs the test suite against a temporary MySQL service container, including database migrations.
 
-Testing is prioritized around security-sensitive logic, ownership boundaries, order state transitions, and other high-risk business rules.
+Testing is prioritized around security-sensitive logic, ownership boundaries, order state transitions, payment integrity, and other high-risk business rules.
 
 ## Project Structure
 
@@ -236,12 +239,18 @@ It covers:
 
 ## Recently Completed
 
+- Implemented the real Iyzico Checkout Form payment flow — hosted checkout, callback handling, and escrow payouts — replacing the development-only payment simulation
+- Added self-service Iyzico submerchant onboarding for shop owners (individual and company merchant types)
+- Implemented Iyzico webhook signature verification (`X-IYZ-SIGNATURE-V3`) as an independent safeguard alongside the checkout callback
+- Added a WebView-based payment screen to the mobile app, with server-side result-page interception to work around an Android WebView limitation with custom URL schemes
+- Fixed a bug where several order status timestamps were silently never persisted due to a missing model field declaration
+- Fixed a bug where a single failed escrow payout could block approval of the remaining packages in the same order
 - Hardened order status transitions with actor-based authorization, closing a gap that allowed a buyer to self-confirm delivery without QR verification
 - Added a production safeguard preventing the payment-simulation endpoint from running outside development/test environments
 - Replaced client-supplied MIME-type trust with content-based (magic byte) validation for image uploads, preventing spoofed file types from being stored
 - Fixed a database race condition in stock reservation using row-level locking
 - Refactored error handling across the entire API into a centralized, consistent pattern
-- Built a Jest unit testing layer covering services and authentication middleware
+- Built a Jest unit testing layer covering services and authentication middleware, since expanded to cover the full payment flow (checkout initiation, callback handling, webhook verification, escrow approval)
 - Added Supertest integration and end-to-end tests for critical API workflows
 - Added a real MySQL service container to GitHub Actions for database-backed CI testing
 - Fixed Linux case-sensitivity issues in database migrations discovered through CI
@@ -252,7 +261,7 @@ It covers:
 
 ## Roadmap
 
-- Iyzico production payment activation — currently blocked on Iyzico's business-registration requirement for marketplace payments
+- Iyzico production activation — sandbox-side integration (submerchant onboarding, checkout, escrow payouts, webhook verification) is complete; pending live merchant credentials from Iyzico before going to production
 - Email verification
 - Automatic order release scheduler
 - Automatic package price scheduler
