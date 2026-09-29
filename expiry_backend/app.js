@@ -18,6 +18,7 @@ const path = require('path');
 require('./handlers/notification.handler');
 require('./handlers/audit.handler');
 require('./handlers/payment.handler');
+require('./services/approvalRetryJob').start();
 
 const app = express();
 

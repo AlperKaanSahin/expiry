@@ -9,9 +9,6 @@ const orderValidator = require('../validators/order.validator');
 router.get('/user/me', auth, orderController.getMyUserOrders);
 router.get('/shop/me', auth, orderController.getMyShopOrders);
 router.post('/', auth, orderValidator.createOrder, validate, orderController.createOrder);
-// TODO(iyzico): Iyzico entegrasyonu tamamlanınca bu route'u kaldır, PaymentScreen.js'i
-// gerçek ödeme akışına bağla.
-router.post('/simulate-payment', auth, devOnly, orderController.simulatePayment);
 
 router.post('/:id/checkout', auth, orderController.initiateCheckout);
 
@@ -23,6 +20,10 @@ router.post(
   express.urlencoded({ extended: true }),
   orderController.iyzicoCallback
 );
+
+// TODO(iyzico): Iyzico entegrasyonu tamamlanınca bu route'u kaldır, PaymentScreen.js'i
+// gerçek ödeme akışına bağla.
+router.post('/simulate-payment', auth, devOnly, orderController.simulatePayment);
 
 // Public — asenkron webhook (checkout callback'ten AYRI mekanizma). JSON body
 // gönderiyor, global express.json() yeterli — özel bir body parser gerekmiyor.

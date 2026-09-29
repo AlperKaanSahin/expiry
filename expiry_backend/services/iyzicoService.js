@@ -37,6 +37,13 @@ function isValidVkn(vkn) {
 }
 
 // ---------------------------------------------------------------
+// Para yardımcıları (kuruş bazlı — float yuvarlama hatalarını önler)
+// ---------------------------------------------------------------
+
+const toKurus = (v) => Math.round(Number(v) * 100);
+const fromKurus = (k) => k / 100;
+
+// ---------------------------------------------------------------
 // Submerchant create / update
 // ---------------------------------------------------------------
 
@@ -133,45 +140,102 @@ function buildBillingAddress(user) {
   };
 }
 
+// Kargo yok, teslimat QR ile mağazadan alınıyor. Iyzico PHYSICAL ürün için
+// shippingAddress'i zorunlu tuttuğu için "teslim noktası" olarak mağaza adresini gönderiyoruz.
+function buildShippingAddress(user, shop) {
+  return {
+    contactName: `${user.firstName} ${user.lastName}`,
+    city: PLACEHOLDER_BUYER_CITY,
+    country: PLACEHOLDER_BUYER_COUNTRY,
+    address: shop?.address || PLACEHOLDER_BUYER_ADDRESS,
+  };
+}
+
+/**
+ * Marketplace ürün ödemesinde HER sepet kaleminin subMerchantKey'i olmak zorunda;
+ * platform komisyonu ayrı kalem olamaz. Komisyon = kalemin price'ı ile
+ * subMerchantPrice'ı arasındaki fark (fark ana Iyzico hesabında kalır).
+ *
+ * items: [{ id, name, price (mağazanın payı), subMerchantKey }]
+ * Dönen kalemlerde price = müşteri fiyatı, subMerchantPrice = mağaza payı.
+ * Komisyon kalemlere kuruş bazında orantılı dağıtılır, son kalem yuvarlama farkını alır.
+ */
+function applyPlatformFee(items, platformFee) {
+  if (!items.length) throw new AppError('Sepet boş', 400);
+
+  const missingKey = items.find((i) => !i.subMerchantKey);
+  if (missingKey) {
+    throw new AppError('Mağaza ödeme almaya hazır değil (subMerchantKey eksik)', 409);
+  }
+
+  const feeKurus = toKurus(platformFee);
+  const totalKurus = items.reduce((s, i) => s + toKurus(i.price), 0);
+  if (totalKurus <= 0) throw new AppError('Sepet tutarı geçersiz', 400);
+
+  let remaining = feeKurus;
+
+  return items.map((item, idx) => {
+    const base = toKurus(item.price);
+    const fee =
+      idx === items.length - 1
+        ? remaining
+        : Math.floor((feeKurus * base) / totalKurus);
+    remaining -= fee;
+    return {
+      ...item,
+      price: fromKurus(base + fee),
+      subMerchantPrice: fromKurus(base),
+    };
+  });
+}
+
 /**
  * Bir order için Iyzico Checkout Form başlatır.
  *
  * @param {Object} order - Order instance (id, paidPrice set edilmiş olmalı)
- * @param {Array} basketItems - [{ id, name, price, subMerchantKey?, subMerchantPrice? }]
- *   Not: subMerchantKey/subMerchantPrice OLMAYAN item'lar (örn. platform fee)
- *   otomatik olarak ana Iyzico hesabına (senin hesabına) düşer.
+ * @param {Array} basketItems - applyPlatformFee çıktısı:
+ *   [{ id, name, price, subMerchantKey, subMerchantPrice }] — hepsinde key zorunlu.
  * @param {Object} user - Order sahibi User instance
  * @param {String} requestIp - req.ip (Express) — Docker/nginx arkasındaysan
  *   app.set('trust proxy', 1) ayarının açık olduğundan emin ol, yoksa proxy IP'si gelir.
  * @param {String} callbackUrl - Iyzico'nun ödeme sonrası POST edeceği backend endpoint'i
+ * @param {Object} shop - Shop instance (teslim noktası adresi için)
  */
-async function initializeCheckoutForm(order, basketItems, user, requestIp, callbackUrl) {
+async function initializeCheckoutForm(order, basketItems, user, requestIp, callbackUrl, shop) {
   const iyzipay = getIyzico();
   const initializeAsync = util
     .promisify(iyzipay.checkoutFormInitialize.create)
     .bind(iyzipay.checkoutFormInitialize);
 
+  const priceKurus = basketItems.reduce((sum, item) => sum + toKurus(item.price), 0);
+  const paidKurus = toKurus(order.paidPrice);
+  if (priceKurus !== paidKurus) {
+    throw new AppError(
+      `Sepet toplamı (${fromKurus(priceKurus)}) ile paidPrice (${fromKurus(paidKurus)}) uyuşmuyor`,
+      500
+    );
+  }
+
   const request = {
     locale: Iyzipay.LOCALE.TR,
     conversationId: `order-${order.id}-${Date.now()}`,
-    price: basketItems.reduce((sum, item) => sum + item.price, 0).toFixed(2),
-    paidPrice: Number(order.paidPrice).toFixed(2),
+    price: fromKurus(priceKurus).toFixed(2),
+    paidPrice: fromKurus(paidKurus).toFixed(2),
     currency: Iyzipay.CURRENCY.TRY,
     basketId: `order-${order.id}`,
     paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
     callbackUrl,
     buyer: buildBuyer(user, requestIp),
     billingAddress: buildBillingAddress(user),
+    shippingAddress: buildShippingAddress(user, shop),
     basketItems: basketItems.map((item) => ({
       id: item.id,
       name: item.name,
       category1: 'Gıda',
       itemType: Iyzipay.BASKET_ITEM_TYPE.PHYSICAL,
-      price: item.price.toFixed(2),
-      ...(item.subMerchantKey ? { subMerchantKey: item.subMerchantKey } : {}),
-      ...(item.subMerchantPrice != null
-        ? { subMerchantPrice: item.subMerchantPrice.toFixed(2) }
-        : {}),
+      price: Number(item.price).toFixed(2),
+      subMerchantKey: item.subMerchantKey,
+      subMerchantPrice: Number(item.subMerchantPrice).toFixed(2),
     })),
   };
 
@@ -268,6 +332,7 @@ module.exports = {
   isValidTcNo,
   isValidTurkishIban,
   isValidVkn,
+  applyPlatformFee,
   initializeCheckoutForm,
   retrieveCheckoutForm,
   approvePaymentTransaction,

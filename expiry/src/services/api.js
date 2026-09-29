@@ -192,6 +192,11 @@ export const deleteShopProduct = async (id) => {
   return true;
 };
 
+export const deleteExpiredShopProducts = async () => {
+  const response = await api.delete('/shop/products/expired');
+  return response.data;
+};
+
 // ─── SHOP PACKAGES ───────────────────────────────────────
 export const fetchShopOwnPackages = async (page = 1, limit = 10) => {
   const response = await api.get('/shop/packages', { params: { page, limit } });
@@ -214,6 +219,10 @@ export const deleteShopPackage = async (id, count) => {
   });
 };
 
+export const deleteExpiredShopPackages = async () => {
+  const response = await api.delete('/shop/packages/expired');
+  return response.data;
+};
 // ─── ORDERS ──────────────────────────────────────────────
 export const createOrder = async ({ shopId, packages }) => {
   const response = await api.post('/orders', { shopId, packages });
@@ -237,13 +246,6 @@ export const changeOrderStatus = async (orderId, status) => {
 // Iyzico Checkout Form başlatır — dönen paymentPageUrl WebView'de açılır.
 export const initiateCheckout = async (orderId) => {
   const response = await api.post(`/orders/${orderId}/checkout`);
-  return response.data;
-};
-
-// NOT: sadece dev ortamda çalışır (backend'de devOnly middleware'i var).
-// Gerçek ödeme akışı initiateCheckout üzerinden yürüyor.
-export const simulatePayment = async (orderId) => {
-  const response = await api.post('/orders/simulate-payment', { orderId });
   return response.data;
 };
 

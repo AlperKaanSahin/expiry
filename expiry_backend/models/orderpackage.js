@@ -36,6 +36,21 @@ module.exports = (sequelize, DataTypes) => {
     iyzicoPaymentTransactionId: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+
+    // Iyzico approve (escrow release) takibi — idempotency + retry için
+    iyzicoApprovedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    approvalAttempts: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0
+    },
+    lastApprovalError: {
+      type: DataTypes.STRING(500),
+      allowNull: true
     }
   }, {
     sequelize,

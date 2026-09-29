@@ -27,6 +27,7 @@ import {
   deleteShopPackage,
   fetchShopProducts,
   fetchAllShopProducts,
+  deleteExpiredShopPackages,
 } from '../services/api';
 import { COLORS, SPACING, RADIUS, SHADOWS, TYPE_SCALE } from '../theme';
 import { showErrorToast } from '../utils/errorHandler';
@@ -171,6 +172,8 @@ const ShopPackagesScreen = () => {
   const [page, setPage] = useState(1);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [expiredCount, setExpiredCount] = useState(0);
+const [deletingExpired, setDeletingExpired] = useState(false);
 
   // Paket ekleme alanından direkt yeni ürün oluşturma — artık birincil akış
   const [newProductDraft, setNewProductDraft] = useState(EMPTY_NEW_PRODUCT);
@@ -199,6 +202,7 @@ const ShopPackagesScreen = () => {
       setPackages(data.packages);
       setTotal(data.total);
       setPage(data.page);
+      setExpiredCount(data.expiredCount || 0);
     } catch (err) {
       setError(true);
       showErrorToast(err, Toast);
@@ -375,6 +379,35 @@ const ShopPackagesScreen = () => {
       ]
     );
   };
+  const handleDeleteExpired = () => {
+  Alert.alert(
+    'Süresi Geçmiş Ürün İçeren Paketleri Sil',
+    `Son kullanma tarihi geçmiş ürün içeren ${expiredCount} paket silinecek. Bu işlem geri alınamaz. Devam edilsin mi?`,
+    [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setDeletingExpired(true);
+            const result = await deleteExpiredShopPackages();
+            const parts = [`${result.deletedCount} paket silindi`];
+            if (result.blockedCount > 0) {
+              parts.push(`${result.blockedCount} paket aktif siparişi olduğu için silinemedi`);
+            }
+            Toast.show({ type: 'success', text1: 'Tamamlandı', text2: parts.join(', ') });
+            loadPackages(1);
+          } catch (err) {
+            showErrorToast(err, Toast);
+          } finally {
+            setDeletingExpired(false);
+          }
+        }
+      }
+    ]
+  );
+};
 
   // --- Adım bazlı validasyon ---
   const validateStep1 = () => {
@@ -519,9 +552,17 @@ const ShopPackagesScreen = () => {
     : allProducts;
 
   const renderPackage = ({ item }) => (
-    <Card style={styles.card} shadow="sm">
+    <Card style={[styles.card, item.isExpired && styles.cardExpired]} shadow="sm">
       <View style={styles.cardBody}>
-        <Text style={styles.packageName}>{item.name}</Text>
+        <View style={styles.nameRow}>
+  <Text style={styles.packageName}>{item.name}</Text>
+  {item.isExpired && (
+    <View style={styles.expiredBadge}>
+      <Icon name="error-outline" size={12} color={COLORS.red} />
+      <Text style={styles.expiredBadgeText}>SKT Geçti</Text>
+    </View>
+  )}
+</View>
         <Text style={styles.packagePrice}>
           {item.price != null && item.price !== '' ? item.price : item.totalPrice} ₺
         </Text>
@@ -735,10 +776,11 @@ const ShopPackagesScreen = () => {
             </TouchableOpacity>
             {Platform.OS === 'ios' && showNewProductDatePicker && (
               <DateTimePicker
-                value={newProductDraft.expiryDate || new Date()}
-                mode="date"
-                display="default"
-                onChange={(event, date) => {
+  value={newProductDraft.expiryDate || new Date()}
+  mode="date"
+  display="default"
+  minimumDate={new Date()}
+  onChange={(event, date) => {
                   setShowNewProductDatePicker(false);
                   if (event.type === 'set' && date) {
                     setNewProductDraft({ ...newProductDraft, expiryDate: date });
@@ -1061,6 +1103,30 @@ const ShopPackagesScreen = () => {
 
       <ScreenHeader title="Paketlerim" rightIcon="add" onRightPress={() => openModal()} />
 
+      {expiredCount > 0 && (
+  <TouchableOpacity
+    style={styles.expiredBar}
+    onPress={handleDeleteExpired}
+    disabled={deletingExpired}
+    activeOpacity={0.85}
+  >
+    <View style={styles.expiredBarLeft}>
+      <Icon name="error-outline" size={18} color={COLORS.red} />
+      <Text style={styles.expiredBarText}>
+        {expiredCount} paketin içinde SKT'si geçmiş ürün var
+      </Text>
+    </View>
+    {deletingExpired ? (
+      <ActivityIndicator size={16} color={COLORS.red} />
+    ) : (
+      <View style={styles.expiredBarButton}>
+        <Icon name="delete-sweep" size={16} color={COLORS.white} />
+        <Text style={styles.expiredBarButtonText}>Hepsini Sil</Text>
+      </View>
+    )}
+  </TouchableOpacity>
+)}
+
       <FlatList
         data={packages}
         keyExtractor={item => item.id.toString()}
@@ -1206,6 +1272,33 @@ const styles = StyleSheet.create({
   description: { fontSize: 12, color: COLORS.textMuted, marginTop: 4 },
   cardActions: { gap: 4 },
   iconButton: { padding: 6, width: 32, alignItems: 'center' },
+  cardExpired: { opacity: 0.6 },
+nameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 4 },
+expiredBadge: {
+  flexDirection: 'row', alignItems: 'center', gap: 3,
+  backgroundColor: '#FDECEC',
+  borderRadius: RADIUS.sm,
+  paddingHorizontal: 6, paddingVertical: 2,
+},
+expiredBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.red },
+expiredBar: {
+  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  backgroundColor: '#FDECEC',
+  marginHorizontal: SPACING.xxl,
+  marginBottom: SPACING.md,
+  borderRadius: RADIUS.lg,
+  paddingHorizontal: SPACING.md,
+  paddingVertical: SPACING.sm + 2,
+},
+expiredBarLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+expiredBarText: { fontSize: 13, fontWeight: '600', color: COLORS.red },
+expiredBarButton: {
+  flexDirection: 'row', alignItems: 'center', gap: 4,
+  backgroundColor: COLORS.red,
+  borderRadius: RADIUS.md,
+  paddingHorizontal: SPACING.sm + 2, paddingVertical: 6,
+},
+expiredBarButtonText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
 
   emptyButton: {
     marginTop: SPACING.sm,

@@ -161,7 +161,10 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     expect(res.status).toBe(404);
   });
 
-it('EŞZAMANLILIK: son 1 stoklu pakete iki eşzamanlı ödeme onayı atılırsa sadece biri başarılı olur', async () => {
+it('EŞZAMANLILIK: son 1 stoklu pakete iki eşzamanlı sipariş oluşturma denemesi yapılırsa sadece biri başarılı olur', async () => {
+  // Rezervasyon artık createOrder anında yapılıyor (paid geçişinde değil) —
+  // rekabet noktası artık burası: iki müşteri de aynı son üniteyi isteyince
+  // sadece biri createOrder'da 201 alabilir, diğeri 409 (Yeterli stok yok) alır.
   const [customer1Res, customer2Res] = await Promise.all([
     request(app).post('/api/users/register').send({
       email: `concurrent-1+${timestamp}@test.com`, password: '123456', firstName: 'C1', lastName: 'Test',
@@ -174,7 +177,6 @@ it('EŞZAMANLILIK: son 1 stoklu pakete iki eşzamanlı ödeme onayı atılırsa 
   const token1 = customer1Res.body.accessToken;
   const token2 = customer2Res.body.accessToken;
 
-  // İkisi de sipariş oluşturabilir (createOrder'da kilit yok, bilinçli tasarım)
   const [order1Res, order2Res] = await Promise.all([
     request(app)
       .post('/api/orders')
@@ -186,26 +188,12 @@ it('EŞZAMANLILIK: son 1 stoklu pakete iki eşzamanlı ödeme onayı atılırsa 
       .send({ shopId: shopAId, packages: [{ packageId: packageAId, quantity: 1 }] }),
   ]);
 
-  expect(order1Res.status).toBe(201);
-  expect(order2Res.status).toBe(201);
+  const statuses = [order1Res.status, order2Res.status].sort();
+  expect(statuses).toEqual([201, 409]);
 
-  const orderId1 = order1Res.body.id;
-  const orderId2 = order2Res.body.id;
-
-  // Asıl kilit burada devreye girmeli — ikisi eşzamanlı ödeme dener
-  const [pay1Res, pay2Res] = await Promise.all([
-    request(app)
-      .post('/api/orders/simulate-payment')
-      .set('Authorization', `Bearer ${token1}`)
-      .send({ orderId: orderId1 }),
-    request(app)
-      .post('/api/orders/simulate-payment')
-      .set('Authorization', `Bearer ${token2}`)
-      .send({ orderId: orderId2 }),
-  ]);
-
-const statuses = [pay1Res.status, pay2Res.status].sort();
-expect(statuses).toEqual([200, 409]);
+  // Kazanan siparişi ileride kullanacağız (rezervasyon serbest bırakılmasın diye
+  // bu testte hiçbir şey silmiyoruz — aşağıdaki "paketini siler" testi artık
+  // bu rezervasyonun aktif sipariş sayılıp saymadığına bağlı, orada ele alınıyor).
 });
 
   it('market A kendi paketini siler', async () => {

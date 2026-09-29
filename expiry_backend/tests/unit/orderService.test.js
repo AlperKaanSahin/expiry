@@ -1,7 +1,7 @@
 jest.mock('../../models', () => ({
   Order: { findOne: jest.fn(), create: jest.fn() },
   OrderPackage: { findAll: jest.fn(), create: jest.fn() },
-  PackageUnit: { findAll: jest.fn(), count: jest.fn() },
+  PackageUnit: { findAll: jest.fn(), count: jest.fn(), update: jest.fn() },
   Package: { update: jest.fn(), findOne: jest.fn() },
   PackageProduct: { findAll: jest.fn() },
   ShopProduct: {},
@@ -22,10 +22,22 @@ const {
 } = require('../../services/orderService');
 const AppError = require('../../utils/AppError');
 
+// afterCommit callback'leri gerçek Sequelize'de sadece transaction commit
+// edildiğinde çalışır, rollback'te hiç çalışmaz. Mock'u da bu semantiğe
+// sadık tutuyoruz: kayda al, commit() çağrıldığında çalıştır.
 function mockTransaction() {
+  const afterCommitCallbacks = [];
   const t = {
     LOCK: { UPDATE: 'UPDATE' },
-    commit: jest.fn().mockResolvedValue(true),
+    afterCommit: jest.fn((cb) => {
+      afterCommitCallbacks.push(cb);
+    }),
+    commit: jest.fn(async () => {
+      for (const cb of afterCommitCallbacks) {
+        await cb();
+      }
+      return true;
+    }),
     rollback: jest.fn().mockResolvedValue(true),
   };
   sequelize.transaction.mockResolvedValue(t);
@@ -60,7 +72,7 @@ describe('reserveStock', () => {
     );
   });
 
-  it('stok yetersizse AppError(409) fırlatır ve hiçbir üniteyi güncellemez', async () => {
+  it('rezerve edilmiş ünite sayısı istenenden azsa (TTL dolup başka siparişe geçmiş olabilir) AppError(409) fırlatır', async () => {
     OrderPackage.findAll.mockResolvedValue([{ packageId: 10, quantity: 3 }]);
     const mockUnit1 = { id: 100, isSold: false, save: jest.fn() };
     PackageUnit.findAll.mockResolvedValue([mockUnit1]);
@@ -69,7 +81,7 @@ describe('reserveStock', () => {
     expect(mockUnit1.save).not.toHaveBeenCalled();
   });
 
-  it('PackageUnit.findAll çağrısına doğru lock ve order parametrelerini geçirir (race condition koruması)', async () => {
+  it('PackageUnit.findAll çağrısına doğru lock, order ve reservedByOrderId filtresini geçirir (race condition koruması)', async () => {
     OrderPackage.findAll.mockResolvedValue([{ packageId: 10, quantity: 1 }]);
     PackageUnit.findAll.mockResolvedValue([{ id: 100, isSold: false, save: jest.fn() }]);
     PackageUnit.count.mockResolvedValue(0);
@@ -77,7 +89,11 @@ describe('reserveStock', () => {
     await reserveStock(fakeOrder, fakeTransaction);
 
     expect(PackageUnit.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ lock: 'UPDATE', order: [['id', 'ASC']] })
+      expect.objectContaining({
+        lock: 'UPDATE',
+        order: [['id', 'ASC']],
+        where: expect.objectContaining({ reservedByOrderId: fakeOrder.id }),
+      })
     );
   });
 });
@@ -148,7 +164,7 @@ describe('createOrder', () => {
 
   it('geçersiz bir paket (başka shop\'a ait) verilirse AppError(400) fırlatır ve rollback yapar', async () => {
     const t = mockTransaction();
-    Package.findOne.mockResolvedValue(null); // shopId filtresiyle bulunamadı
+    Package.findOne.mockResolvedValue(null);
 
     await expect(
       createOrder(5, { shopId: 1, packages: [{ packageId: 99, quantity: 1 }] })
@@ -157,15 +173,14 @@ describe('createOrder', () => {
     expect(t.rollback).toHaveBeenCalled();
     expect(t.commit).not.toHaveBeenCalled();
     expect(Order.create).not.toHaveBeenCalled();
-    // Paket zaten bulunamadığı için SKT kontrolüne hiç gidilmemeli.
     expect(PackageProduct.findAll).not.toHaveBeenCalled();
   });
 
-  it('stok yetersizse AppError(409) fırlatır', async () => {
+  it('stok/rezervasyon yetersizse AppError(409) fırlatır', async () => {
     const t = mockTransaction();
     Package.findOne.mockResolvedValue({ id: 1, price: 10 });
-    PackageProduct.findAll.mockResolvedValue([]); // SKT kontrolünden geçsin, asıl test stok için
-    PackageUnit.count.mockResolvedValue(0);
+    PackageProduct.findAll.mockResolvedValue([]);
+    PackageUnit.findAll.mockResolvedValue([]); // rezerve edilebilir ünite yok
 
     await expect(
       createOrder(5, { shopId: 1, packages: [{ packageId: 1, quantity: 2 }] })
@@ -174,11 +189,12 @@ describe('createOrder', () => {
     expect(t.rollback).toHaveBeenCalled();
   });
 
-  it('geçerli veriyle siparişi doğru toplam fiyatla oluşturur', async () => {
+  it('geçerli veriyle siparişi doğru toplam fiyatla oluşturur ve üniteleri bu siparişe rezerve eder', async () => {
     const t = mockTransaction();
     Package.findOne.mockResolvedValue({ id: 1, price: 15 });
-    PackageProduct.findAll.mockResolvedValue([]); // SKT kontrolünden geçsin
-    PackageUnit.count.mockResolvedValue(10);
+    PackageProduct.findAll.mockResolvedValue([]);
+    PackageUnit.findAll.mockResolvedValue([{ id: 501 }, { id: 502 }]);
+    PackageUnit.update.mockResolvedValue([2]);
     Order.create.mockResolvedValue({ id: 100 });
     OrderPackage.create.mockResolvedValue({});
 
@@ -188,10 +204,14 @@ describe('createOrder', () => {
       expect.objectContaining({ userId: 5, shopId: 1, totalPrice: 30, status: 'pending' }),
       { transaction: t }
     );
-expect(OrderPackage.create).toHaveBeenCalledWith(
-  { orderId: 100, packageId: 1, quantity: 2, price: 15, iyzicoItemId: 'op-100-0' },
-  { transaction: t }
-);
+    expect(OrderPackage.create).toHaveBeenCalledWith(
+      { orderId: 100, packageId: 1, quantity: 2, price: 15, iyzicoItemId: 'op-100-0' },
+      { transaction: t }
+    );
+    expect(PackageUnit.update).toHaveBeenCalledWith(
+      { reservedByOrderId: 100, reservedUntil: expect.any(Date) },
+      { where: { id: [501, 502] }, transaction: t }
+    );
     expect(t.commit).toHaveBeenCalled();
     expect(result).toEqual({ id: 100 });
   });
@@ -211,7 +231,7 @@ expect(OrderPackage.create).toHaveBeenCalledWith(
     expect(t.rollback).toHaveBeenCalled();
   });
 
-  it('SKT kontrolü stok kontrolünden önce çalışır — geçersizse stok sorgusuna hiç gidilmez', async () => {
+  it('SKT kontrolü rezervasyon kontrolünden önce çalışır — geçersizse ünite sorgusuna hiç gidilmez', async () => {
     mockTransaction();
     Package.findOne.mockResolvedValue({ id: 1, price: 10 });
     PackageProduct.findAll.mockResolvedValue([
@@ -222,7 +242,7 @@ expect(OrderPackage.create).toHaveBeenCalledWith(
       createOrder(5, { shopId: 1, packages: [{ packageId: 1, quantity: 1 }] })
     ).rejects.toMatchObject({ statusCode: 409 });
 
-    expect(PackageUnit.count).not.toHaveBeenCalled();
+    expect(PackageUnit.findAll).not.toHaveBeenCalled();
   });
 
   it('SKT bugün olan ürün içeren paket satın alınabilir (mevzuata göre hâlâ geçerli)', async () => {
@@ -231,7 +251,8 @@ expect(OrderPackage.create).toHaveBeenCalledWith(
     PackageProduct.findAll.mockResolvedValue([
       { ShopProduct: { name: 'Taze Simit', expiryDate: daysFromNow(0) } },
     ]);
-    PackageUnit.count.mockResolvedValue(5);
+    PackageUnit.findAll.mockResolvedValue([{ id: 900 }]);
+    PackageUnit.update.mockResolvedValue([1]);
     Order.create.mockResolvedValue({ id: 200 });
     OrderPackage.create.mockResolvedValue({});
 
@@ -257,7 +278,7 @@ describe('confirmByQRCode', () => {
   it('sipariş bulunsa bile market siparişin sahibi değilse AppError(403) fırlatır', async () => {
     const t = mockTransaction();
     Order.findOne.mockResolvedValue({ id: 1, shopId: 7, status: 'delivered' });
-    Shop.findOne.mockResolvedValue(null); // ownerId: marketUserId ile eşleşmedi
+    Shop.findOne.mockResolvedValue(null);
 
     await expect(confirmByQRCode(999, 'gecerli-token')).rejects.toMatchObject({ statusCode: 403 });
     expect(t.rollback).toHaveBeenCalled();
@@ -330,7 +351,7 @@ describe('changeStatus', () => {
 
     const result = await changeStatus(1, 'delivered', 'admin', 999);
 
-    expect(Shop.findOne).not.toHaveBeenCalled(); // admin için shop kontrolü hiç yapılmamalı
+    expect(Shop.findOne).not.toHaveBeenCalled();
     expect(mockOrder.status).toBe('delivered');
     expect(eventBus.emit).toHaveBeenCalledWith(
       ORDER_EVENTS.DELIVERED,
@@ -355,12 +376,6 @@ describe('changeStatus', () => {
     expect(t.commit).toHaveBeenCalled();
   });
 
-  // --- Actor bazlı yetkilendirme: bir geçiş state olarak "var" olsa bile
-  // (ör. delivered -> confirmed transitions map'inde tanımlı), o geçişi
-  // TALEP EDEN actor izinli değilse 403 dönmeli, 200 değil. Bu testler,
-  // müşterinin kendi siparişini QR olmadan "confirmed" yapabildiği
-  // güvenlik açığının kapandığını doğrular.
-
   it('actor=user kendi siparişini delivered -> confirmed yapamaz (self-confirm bypass kapalı, 403)', async () => {
     const t = mockTransaction();
     const mockOrder = {
@@ -372,7 +387,7 @@ describe('changeStatus', () => {
     await expect(changeStatus(1, 'confirmed', 'user', 5)).rejects.toMatchObject({ statusCode: 403 });
 
     expect(mockOrder.save).not.toHaveBeenCalled();
-    expect(mockOrder.status).toBe('delivered'); // değişmemiş olmalı
+    expect(mockOrder.status).toBe('delivered');
     expect(t.rollback).toHaveBeenCalled();
     expect(t.commit).not.toHaveBeenCalled();
   });

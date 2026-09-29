@@ -20,7 +20,13 @@ import Icon from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
-import { fetchShopProducts, addShopProduct, updateShopProduct, deleteShopProduct } from '../services/api';
+import {
+  fetchShopProducts,
+  addShopProduct,
+  updateShopProduct,
+  deleteShopProduct,
+  deleteExpiredShopProducts,
+} from '../services/api';
 import { COLORS, SPACING, RADIUS, TYPE_SCALE } from '../theme';
 import { showErrorToast } from '../utils/errorHandler';
 import LoadingState from '../components/common/LoadingState';
@@ -52,6 +58,8 @@ const ShopProductsScreen = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [expiredCount, setExpiredCount] = useState(0);
+  const [deletingExpired, setDeletingExpired] = useState(false);
 
   const loadProducts = async (pageNumber = 1, isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -63,6 +71,7 @@ const ShopProductsScreen = () => {
       setProducts(data.products);
       setTotal(data.total);
       setPage(data.page);
+      setExpiredCount(data.expiredCount || 0);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -137,7 +146,9 @@ const ShopProductsScreen = () => {
   const handleDelete = (product) => {
     Alert.alert(
       'Ürünü Sil',
-      `"${product.name}" ürününü silmek istediğinize emin misiniz?`,
+      `"${product.name}" ürününü silmek istediğinize emin misiniz?${
+        product.isExpired ? ' Bu ürünü içeren paketler de silinecek.' : ''
+      }`,
       [
         { text: 'İptal', style: 'cancel' },
         {
@@ -161,10 +172,51 @@ const ShopProductsScreen = () => {
     );
   };
 
+  const handleDeleteExpired = () => {
+    Alert.alert(
+      'Süresi Geçmiş Ürünleri Sil',
+      `Son kullanma tarihi geçmiş ${expiredCount} ürün ve bunları içeren paketler silinecek. Bu işlem geri alınamaz. Devam edilsin mi?`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingExpired(true);
+              const result = await deleteExpiredShopProducts();
+              const parts = [`${result.deletedProductsCount} ürün silindi`];
+              if (result.deletedPackagesCount > 0) {
+                parts.push(`${result.deletedPackagesCount} paket silindi`);
+              }
+              if (result.blockedProductsCount > 0) {
+                parts.push(`${result.blockedProductsCount} ürün aktif siparişi olduğu için silinemedi`);
+              }
+              Toast.show({ type: 'success', text1: 'Tamamlandı', text2: parts.join(', ') });
+              loadProducts(1);
+            } catch (error) {
+              showErrorToast(error, Toast);
+            } finally {
+              setDeletingExpired(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderProduct = ({ item }) => (
-    <Card style={styles.card} shadow="sm">
+    <Card style={[styles.card, item.isExpired && styles.cardExpired]} shadow="sm">
       <View style={styles.cardBody}>
-        <Text style={styles.productName}>{item.name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.productName}>{item.name}</Text>
+          {item.isExpired && (
+            <View style={styles.expiredBadge}>
+              <Icon name="error-outline" size={12} color={COLORS.red} />
+              <Text style={styles.expiredBadgeText}>SKT Geçti</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
             <Icon name="attach-money" size={14} color={COLORS.primary} />
@@ -175,8 +227,10 @@ const ShopProductsScreen = () => {
             <Text style={styles.metaText}>Stok: {item.quantity}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Icon name="event" size={14} color={COLORS.primary} />
-            <Text style={styles.metaText}>{formatDate(item.expiryDate)}</Text>
+            <Icon name="event" size={14} color={item.isExpired ? COLORS.red : COLORS.primary} />
+            <Text style={[styles.metaText, item.isExpired && styles.metaTextExpired]}>
+              {formatDate(item.expiryDate)}
+            </Text>
           </View>
         </View>
       </View>
@@ -217,6 +271,30 @@ const ShopProductsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
       <ScreenHeader title="Ürünlerim" rightIcon="add" onRightPress={() => openModal()} />
+
+      {expiredCount > 0 && (
+        <TouchableOpacity
+          style={styles.expiredBar}
+          onPress={handleDeleteExpired}
+          disabled={deletingExpired}
+          activeOpacity={0.85}
+        >
+          <View style={styles.expiredBarLeft}>
+            <Icon name="error-outline" size={18} color={COLORS.red} />
+            <Text style={styles.expiredBarText}>
+              {expiredCount} ürünün SKT'si geçti
+            </Text>
+          </View>
+          {deletingExpired ? (
+            <ActivityIndicator size={16} color={COLORS.red} />
+          ) : (
+            <View style={styles.expiredBarButton}>
+              <Icon name="delete-sweep" size={16} color={COLORS.white} />
+              <Text style={styles.expiredBarButtonText}>Hepsini Sil</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
 
       <FlatList
         data={products}
@@ -354,6 +432,7 @@ const ShopProductsScreen = () => {
                     value={expiryDate}
                     mode="date"
                     display="default"
+                    minimumDate={new Date()}
                     onChange={(event, date) => {
                       // Tek aşamalı (sadece tarih) native diyalog — mode="datetime" ile
                       // yaşanan çift-diyalog "dismiss" hatası burada geçerli değil,
@@ -398,13 +477,43 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: SPACING.xxl, paddingBottom: SPACING.xxxl + SPACING.md },
 
   card: { flexDirection: 'row', alignItems: 'center' },
+  cardExpired: { opacity: 0.6 },
   cardBody: { flex: 1 },
-  productName: { ...TYPE_SCALE.bodySemiBold, fontSize: 15, color: COLORS.text, marginBottom: SPACING.sm },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  productName: { ...TYPE_SCALE.bodySemiBold, fontSize: 15, color: COLORS.text },
   metaRow: { flexDirection: 'row', gap: SPACING.md, flexWrap: 'wrap' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metaText: { fontSize: 13, color: COLORS.textMuted },
+  metaTextExpired: { color: COLORS.red, fontWeight: '600' },
   cardActions: { flexDirection: 'row', gap: 4 },
   iconButton: { padding: 6, width: 32, alignItems: 'center' },
+
+  expiredBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#FDECEC',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  expiredBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.red },
+
+  expiredBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#FDECEC',
+    marginHorizontal: SPACING.xxl,
+    marginBottom: SPACING.md,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+  },
+  expiredBarLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  expiredBarText: { fontSize: 13, fontWeight: '600', color: COLORS.red },
+  expiredBarButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.red,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.sm + 2, paddingVertical: 6,
+  },
+  expiredBarButtonText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
 
   emptyButton: {
     marginTop: SPACING.sm,

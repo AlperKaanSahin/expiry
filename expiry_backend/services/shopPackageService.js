@@ -1,7 +1,10 @@
 const { Op, fn, col } = require('sequelize');
-const { Package, Shop, PackageProduct, ShopProduct, PackageUnit, sequelize } = require('../models');
+const {
+  Package, Shop, PackageProduct, ShopProduct, PackageUnit, OrderPackage, Order, sequelize,
+} = require('../models');
 const { QueryTypes } = require('sequelize');
 const AppError = require('../utils/AppError');
+const { isDateExpired, startOfDay } = require('../utils/expiry');
 
 const getShopByUserId = async (userId) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
@@ -9,11 +12,41 @@ const getShopByUserId = async (userId) => {
   return shop;
 };
 
+// Bir paketi (ve unit/ürün ilişkilerini) tamamen kaldırır — AMA paketin 'paid'
+// veya 'delivered' durumunda (ödeme alınmış, henüz tamamlanmamış) bir siparişi
+// varsa SİLMEZ, false döner. 'pending' siparişler burada AKTİF sayılmaz —
+// ödeme henüz alınmamış bir rezervasyon, TTL dolunca kendiliğinden düşer,
+// silinmesi kimseyi mağdur etmez. 'confirmed'/'released' zaten tamamlanmış,
+// onlar da engellemez.
+const hardDeletePackageIfSafe = async (packageId, transaction) => {
+  const activeOrderCount = await OrderPackage.count({
+    where: { packageId },
+    include: [{
+      model: Order,
+      where: { status: { [Op.in]: ['paid', 'delivered'] } },
+      required: true,
+    }],
+    transaction,
+  });
+
+  if (activeOrderCount > 0) {
+    return false;
+  }
+
+  await PackageProduct.destroy({ where: { packageId }, transaction });
+  await PackageUnit.destroy({ where: { packageId }, transaction });
+  await Package.destroy({ where: { id: packageId }, transaction });
+  return true;
+};
+
+exports.hardDeletePackageIfSafe = hardDeletePackageIfSafe;
+
 // Bir `products` girdisini (var olan ürün referansı veya yeni ürün taslağı) çözümler.
 // Yeni ürün oluşturuluyorsa stok miktarı client'tan alınmaz; unitCount * perPackageQty
 // olarak sunucu tarafında hesaplanır (bu ürün sadece bu paket için var, tamamen tahsisli).
 // SKT, platformun temel değer önerisi (son kullanmaya yakın ürün) olduğu için burada
-// da zorunlu tutuluyor — client validasyonuna güvenmiyoruz.
+// da zorunlu tutuluyor — client validasyonuna güvenmiyoruz. Süresi geçmiş bir ürün
+// (yeni ya da var olan) hiçbir şekilde pakete eklenemez.
 const resolveProductEntry = async (p, shopId, unitCount, t) => {
   if (p.newProduct) {
     const { name, price, expiryDate } = p.newProduct;
@@ -25,6 +58,9 @@ const resolveProductEntry = async (p, shopId, unitCount, t) => {
     }
     if (!expiryDate || isNaN(new Date(expiryDate).getTime())) {
       throw new AppError('Yeni ürün için son kullanma tarihi zorunlu', 400);
+    }
+    if (isDateExpired(expiryDate)) {
+      throw new AppError('Son kullanma tarihi geçmiş bir ürün pakete eklenemez', 400);
     }
 
     const perPackageQty = Number(p.quantity) > 0 ? Number(p.quantity) : 1;
@@ -47,6 +83,10 @@ const resolveProductEntry = async (p, shopId, unitCount, t) => {
   });
   if (!product) throw new AppError(`Geçersiz ürün: ${p.id}`, 400);
 
+  if (isDateExpired(product.expiryDate)) {
+    throw new AppError(`"${product.name}" ürününün son kullanma tarihi geçmiş, pakete eklenemez`, 409);
+  }
+
   const qty = Number(p.quantity) > 0 ? Number(p.quantity) : 1;
   return { product, quantity: qty, price: p.price ?? product.price, isNew: false };
 };
@@ -64,7 +104,7 @@ const buildAutoPackageName = (resolvedProducts) => {
 
 exports.listPackages = async (userId, page = 1, limit = 10) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
-  if (!shop) return { total: 0, page, limit, packages: [] };
+  if (!shop) return { total: 0, page, limit, packages: [], expiredCount: 0 };
 
   const offset = (page - 1) * limit;
 
@@ -96,8 +136,26 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
     type: QueryTypes.SELECT,
   });
 
+  // NOT: Bu iki sorgu \`Packages\`/\`PackageUnits\` (büyük harf) kullanıyor, ama
+  // Package modelinin gerçek tableName'i 'packages' (küçük harf). Windows/MySQL
+  // case-insensitive olduğu için lokal de çalışıyor ama Docker'daki node:20-alpine
+  // (Linux, case-sensitive) prod'a geçmeden önce bu satırların küçük harfe
+  // çevrilmesi gerekiyor — bu turun kapsamı dışında, ayrı bir iş olarak bırakıyorum,
+  // aşağıdaki yeni sorguda da tutarlılık için aynı büyük harf kalıbını korudum.
+  const [{ expiredCount }] = await sequelize.query(`
+    SELECT COUNT(DISTINCT p.id) as expiredCount
+    FROM \`Packages\` p
+    INNER JOIN \`PackageUnits\` pu ON pu.packageId = p.id AND pu.isSold = false
+    INNER JOIN package_products pp ON pp.packageId = p.id
+    INNER JOIN shop_products sp ON sp.id = pp.shopProductId
+    WHERE p.shopId = :shopId AND sp.expiryDate < :today AND sp.deletedAt IS NULL
+  `, {
+    replacements: { shopId: shop.id, today: startOfDay(new Date()) },
+    type: QueryTypes.SELECT,
+  });
+
   if (unitCounts.length === 0) {
-    return { total: Number(total), page, limit, packages: [] };
+    return { total: Number(total), page, limit, packages: [], expiredCount: Number(expiredCount) };
   }
 
   const packageIds = unitCounts.map(u => u.packageId);
@@ -108,7 +166,7 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
     include: [
       {
         model: PackageProduct,
-        include: [{ model: ShopProduct, attributes: ['id', 'name', 'price'] }],
+        include: [{ model: ShopProduct, attributes: ['id', 'name', 'price', 'expiryDate'] }],
       },
     ],
   });
@@ -126,9 +184,11 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
           name: pp.ShopProduct.name,
           price: pp.ShopProduct.price,
           quantity: pp.quantity,
+          expiryDate: pp.ShopProduct.expiryDate,
         }));
 
       const totalPrice = products.reduce((sum, p) => sum + p.price * p.quantity, 0);
+      const isExpired = products.some(p => isDateExpired(p.expiryDate));
 
       return {
         id: pkg.id,
@@ -139,6 +199,7 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
         deliveryEnd: pkg.deliveryEnd,
         products,
         totalPrice,
+        isExpired,
         autoPriceDropEnabled: pkg.autoPriceDropEnabled ?? false,
         priceDropInterval: pkg.priceDropInterval ?? '',
         priceDropAmount: pkg.priceDropAmount ?? '',
@@ -147,7 +208,7 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
       };
     });
 
-  return { total: Number(total), page, limit, packages: orderedPackages };
+  return { total: Number(total), page, limit, packages: orderedPackages, expiredCount: Number(expiredCount) };
 };
 
 exports.createPackage = async (userId, data) => {
@@ -205,9 +266,6 @@ exports.createPackage = async (userId, data) => {
         price: rp.price
       }, { transaction: t });
 
-      // Yeni oluşturulan ürünün stoğu zaten unitCount * perPackageQty olarak
-      // create sırasında ayarlandı (bu ürün sadece bu paket için var) — tekrar
-      // düşmüyoruz, aksi halde çift düşüm olur.
       if (!rp.isNew) {
         const totalDeduct = unitCount * (Number(rp.quantity) || 1);
         rp.product.quantity = Math.max(0, (rp.product.quantity || 0) - totalDeduct);
@@ -318,9 +376,10 @@ exports.deletePackage = async (userId, packageId, count) => {
   if (remainingUnits <= 1 || !count) {
     const t = await sequelize.transaction();
     try {
-      await PackageProduct.destroy({ where: { packageId: pkg.id }, transaction: t });
-      await PackageUnit.destroy({ where: { packageId: pkg.id }, transaction: t });
-      await Package.destroy({ where: { id: pkg.id }, transaction: t });
+      const deleted = await hardDeletePackageIfSafe(pkg.id, t);
+      if (!deleted) {
+        throw new AppError('Bu paketin tamamlanmamış bir siparişi olduğu için silinemez', 409);
+      }
       await t.commit();
       return { deletedAll: true };
     } catch (err) {
@@ -340,4 +399,47 @@ exports.deletePackage = async (userId, packageId, count) => {
   await pkg.update({ quantity: newQuantity });
 
   return { deletedAll: false, deletedCount: unitsToDelete.length, remaining: newQuantity };
+};
+
+// "SKT geçen ürün içeren paketleri sil" toplu işlemi — sadece Paketlerim
+// ekranında GÖRÜNEN paketleri kapsar (remaining unit > 0), listePackages ile
+// aynı kapsam. Ürünlere DOKUNMAZ, yalnızca süresi geçmiş ürün içeren paketleri
+// kaldırır; aktif siparişi olan bir paket varsa atlanır, diğerleri silinmeye devam eder.
+exports.deleteExpiredPackages = async (userId) => {
+  const shop = await getShopByUserId(userId);
+
+  const rows = await sequelize.query(`
+    SELECT DISTINCT p.id
+    FROM \`Packages\` p
+    INNER JOIN \`PackageUnits\` pu ON pu.packageId = p.id AND pu.isSold = false
+    INNER JOIN package_products pp ON pp.packageId = p.id
+    INNER JOIN shop_products sp ON sp.id = pp.shopProductId
+    WHERE p.shopId = :shopId AND sp.expiryDate < :today AND sp.deletedAt IS NULL
+  `, {
+    replacements: { shopId: shop.id, today: startOfDay(new Date()) },
+    type: QueryTypes.SELECT,
+  });
+
+  const packageIds = rows.map(r => r.id);
+  if (packageIds.length === 0) {
+    return { deletedCount: 0, blockedCount: 0 };
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    let deletedCount = 0;
+    let blockedCount = 0;
+
+    for (const packageId of packageIds) {
+      const deleted = await hardDeletePackageIfSafe(packageId, t);
+      if (deleted) deletedCount += 1;
+      else blockedCount += 1;
+    }
+
+    await t.commit();
+    return { deletedCount, blockedCount };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 };

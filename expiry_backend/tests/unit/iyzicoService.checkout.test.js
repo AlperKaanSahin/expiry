@@ -6,10 +6,9 @@ const {
   retrieveCheckoutForm,
   approvePaymentTransaction,
   createOrUpdateSubMerchant,
+  applyPlatformFee,
 } = require('../../services/iyzicoService');
 
-// util.promisify(fn).bind(namespace) — fn'nin (request, callback) imzasında olması
-// yeterli, promisify'ın gerçek Iyzipay SDK'sı olup olmadığını bilmesine gerek yok.
 function fakeCallbackFn(implementation) {
   return jest.fn((request, callback) => {
     try {
@@ -20,6 +19,41 @@ function fakeCallbackFn(implementation) {
     }
   });
 }
+
+describe('iyzicoService.applyPlatformFee', () => {
+  it('tek kalemde komisyonun tamamını o kaleme ekler (price = base + fee, subMerchantPrice = base)', () => {
+    const items = [{ id: 'op-1-0', name: 'Paket', price: 55, subMerchantKey: 'sm-key' }];
+
+    const result = applyPlatformFee(items, 11);
+
+    expect(result).toEqual([
+      { id: 'op-1-0', name: 'Paket', price: 66, subMerchantKey: 'sm-key', subMerchantPrice: 55 },
+    ]);
+  });
+
+  it('birden fazla kalemde komisyonu orantılı dağıtır, toplam price = toplam base + fee', () => {
+    const items = [
+      { id: 'a', name: 'A', price: 30, subMerchantKey: 'sm' },
+      { id: 'b', name: 'B', price: 70, subMerchantKey: 'sm' },
+    ];
+
+    const result = applyPlatformFee(items, 10);
+
+    expect(result.reduce((sum, i) => sum + i.price, 0)).toBe(110);
+    expect(result[0].subMerchantPrice).toBe(30);
+    expect(result[1].subMerchantPrice).toBe(70);
+  });
+
+  it('herhangi bir kalemde subMerchantKey yoksa AppError(409) fırlatır', () => {
+    const items = [{ id: 'a', name: 'A', price: 30 }];
+
+    expect(() => applyPlatformFee(items, 10)).toThrow(/subMerchantKey/);
+  });
+
+  it('boş sepette AppError(400) fırlatır', () => {
+    expect(() => applyPlatformFee([], 10)).toThrow();
+  });
+});
 
 describe('iyzicoService.initializeCheckoutForm', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -32,7 +66,9 @@ describe('iyzicoService.initializeCheckoutForm', () => {
       checkoutFormInitialize: { create: createFn },
     });
 
-    const order = { id: 1, paidPrice: 66 };
+    // basketItems toplamı order.paidPrice ile eşleşmeli — initializeCheckoutForm
+    // artık bunu doğruluyor (production'da tutar sahteciliğine karşı).
+    const order = { id: 1, paidPrice: 55 };
     const basketItems = [
       { id: 'op-1-0', name: 'Paket', price: 55, subMerchantKey: 'sm-key', subMerchantPrice: 55 },
     ];
@@ -47,29 +83,25 @@ describe('iyzicoService.initializeCheckoutForm', () => {
     });
   });
 
-  it('subMerchantKey/subMerchantPrice olmayan bir item (fee) bu alanları hiç içermez', async () => {
-    const createFn = fakeCallbackFn(() => ({ status: 'success', token: 't', paymentPageUrl: 'u' }));
-    getIyzico.mockReturnValue({ checkoutFormInitialize: { create: createFn } });
-
+  it('basketItems toplamı order.paidPrice ile uyuşmuyorsa AppError(500) fırlatır', async () => {
     const order = { id: 1, paidPrice: 66 };
-    const basketItems = [{ id: 'fee-1', name: 'Hizmet bedeli', price: 11 }];
+    const basketItems = [
+      { id: 'op-1-0', name: 'Paket', price: 55, subMerchantKey: 'sm-key', subMerchantPrice: 55 },
+    ];
     const user = { id: 5, firstName: 'A', lastName: 'B', email: 'a@b.com' };
 
-    await initializeCheckoutForm(order, basketItems, user, '1.2.3.4', 'https://cb.example');
-
-    const request = createFn.mock.calls[0][0];
-    expect(request.basketItems[0]).not.toHaveProperty('subMerchantKey');
-    expect(request.basketItems[0]).not.toHaveProperty('subMerchantPrice');
+    await expect(
+      initializeCheckoutForm(order, basketItems, user, '1.2.3.4', 'https://cb.example')
+    ).rejects.toMatchObject({ statusCode: 500 });
   });
 
-  it('price alanını tüm basketItems\'ın toplamı olarak, paidPrice\'ı order.paidPrice\'dan kurar (ikisi de 2 ondalıklı string)', async () => {
+  it('price ve paidPrice alanlarını basketItems toplamından kurar (2 ondalıklı string)', async () => {
     const createFn = fakeCallbackFn(() => ({ status: 'success', token: 't', paymentPageUrl: 'u' }));
     getIyzico.mockReturnValue({ checkoutFormInitialize: { create: createFn } });
 
     const order = { id: 1, paidPrice: 66 };
     const basketItems = [
-      { id: 'op-1-0', name: 'Paket', price: 55, subMerchantKey: 'sm', subMerchantPrice: 55 },
-      { id: 'fee-1', name: 'Fee', price: 11 },
+      { id: 'op-1-0', name: 'Paket', price: 66, subMerchantKey: 'sm', subMerchantPrice: 55 },
     ];
     const user = { id: 5, firstName: 'A', lastName: 'B', email: 'a@b.com' };
 
@@ -225,7 +257,7 @@ describe('iyzicoService.createOrUpdateSubMerchant', () => {
     expect(request.taxOffice).toBe('Kadıköy');
     expect(request.taxNumber).toBe('1234567890');
     expect(request.legalCompanyTitle).toBe('ABC Ltd.');
-    expect(request.identityNumber).toBe('1234567890'); // taxNumber ile aynı değer
+    expect(request.identityNumber).toBe('1234567890');
   });
 
   it('shop.subMerchantKey zaten varsa update fonksiyonunu çağırır, subMerchantType/subMerchantExternalId göndermez', async () => {
