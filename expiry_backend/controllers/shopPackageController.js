@@ -19,9 +19,14 @@ module.exports = {
     res.json({ success: true, package: pkg });
   }),
 
-delete: catchAsync(async (req, res) => {
-  const count = req.body?.count;
-  const result = await shopPackageService.deletePackage(req.user.id, req.params.id, count);
-  res.json({ success: true, ...result });
-}),
+  delete: catchAsync(async (req, res) => {
+    const count = req.body?.count;
+    const result = await shopPackageService.deletePackage(req.user.id, req.params.id, count);
+    res.json({ success: true, ...result });
+  }),
+
+  deleteExpired: catchAsync(async (req, res) => {
+    const result = await shopPackageService.deleteExpiredPackages(req.user.id);
+    res.json(result);
+  }),
 };

@@ -1,4 +1,5 @@
 const { body } = require('express-validator');
+const { isDateExpired } = require('../utils/expiry');
 
 // Her ürün girdisi ya { id, quantity } (var olan ürün) ya da
 // { newProduct: { name, price, expiryDate }, quantity } (yeni ürün) formatında
@@ -34,6 +35,7 @@ const validateProductsArray = (products) => {
       }
     }
 
+
     if (hasNewProduct) {
       const { name, price, expiryDate } = p.newProduct;
       if (typeof name !== 'string' || !name.trim()) {
@@ -45,6 +47,9 @@ const validateProductsArray = (products) => {
       }
       if (!expiryDate || isNaN(new Date(expiryDate).getTime())) {
         throw new Error(`Ürün ${index + 1}: yeni ürün için son kullanma tarihi zorunlu`);
+      }
+      if (isDateExpired(expiryDate)) {
+        throw new Error(`Ürün ${index + 1}: son kullanma tarihi geçmiş bir ürün eklenemez`);
       }
     }
 

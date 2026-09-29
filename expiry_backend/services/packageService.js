@@ -7,6 +7,7 @@ const {
   PackageUnit,
 } = require('../models');
 const AppError = require('../utils/AppError');
+const { isDateExpired } = require('../utils/expiry');
 
 exports.getPackageById = async (id) => {
   const pkg = await Package.findByPk(id, {
@@ -75,5 +76,11 @@ exports.getShopPackages = async (shopId) => {
       ...pkg.toJSON(),
       quantity: counts.get(pkg.id) ?? 0,
     }))
-    .filter(pkg => pkg.quantity > 0);
+    .filter(pkg => pkg.quantity > 0)
+    // SKT'si geçmiş herhangi bir ürünü içeren paketi müşteriye göstermez —
+    // satın alma zaten assertPackageProductsNotExpired ile engelleniyordu (orderService.js,
+    // dokunulmadı), burada listelemeden de kaldırıyoruz.
+    .filter(pkg => !(pkg.PackageProducts || []).some(
+      pp => pp.ShopProduct && isDateExpired(pp.ShopProduct.expiryDate)
+    ));
 };

@@ -28,4 +28,9 @@ module.exports = {
     await shopProductService.deleteProduct(req.user.id, req.params.id);
     res.json({ success: true });
   }),
+
+  deleteExpired: catchAsync(async (req, res) => {
+    const result = await shopProductService.deleteExpiredProducts(req.user.id);
+    res.json(result);
+  }),
 };

@@ -1,3 +1,5 @@
+const Sentry = require('@sentry/node');
+const { Op } = require('sequelize');
 const {
   Order, OrderPackage, Package, PackageUnit, PackageProduct, ShopProduct, Shop, User, sequelize
 } = require('../models');
@@ -10,6 +12,11 @@ const iyzicoService = require('./iyzicoService');
 const PLATFORM_FEE_FIXED_AMOUNT = 10; // ≤50 TL paketler için sabit tutar
 const PLATFORM_FEE_THRESHOLD = 50;
 const PLATFORM_FEE_PERCENTAGE = 0.20;
+
+// iyzico Checkout Form'un oturum süresine yakın tutuldu — kesin değer
+// dokümandan doğrulanmadı, sandbox'ta checkout formunun ne kadar açık
+// kaldığını test edip gerekirse ayarla.
+const RESERVATION_TTL_MINUTES = 20;
 
 function calculatePlatformFee(totalPrice) {
   if (totalPrice <= PLATFORM_FEE_THRESHOLD) {
@@ -68,9 +75,18 @@ async function assertPackageProductsNotExpired(packageId, transaction) {
 // YAPILMIYOR — bkz. payment.handler.js. Dış bir HTTP çağrısını DB transaction'ı
 // içinde tutmak (network round-trip boyunca row lock) ölçeklenebilirlik açısından
 // kötü; approve call, transaction commit olduktan sonra event listener'da çalışıyor.
+//
+// Event'ler commit'ten SONRA fırlatılır: transaction rollback olursa hiçbir
+// listener (bildirim, audit, Iyzico approve) çalışmaz.
 async function runSideEffects(order, status, transaction) {
+  const emitAfterCommit = (event, payload) => {
+    transaction.afterCommit(() => {
+      eventBus.emit(event, payload);
+    });
+  };
+
   switch (status) {
-    case 'paid':
+    case 'paid': {
       await reserveStock(order, transaction);
 
       const orderPackages = await OrderPackage.findAll({
@@ -80,20 +96,19 @@ async function runSideEffects(order, status, transaction) {
       });
 
       const firstPackage = orderPackages[0]?.Package;
-      const deliveryStart = firstPackage?.deliveryStart;
-      const deliveryEnd = firstPackage?.deliveryEnd;
 
-      eventBus.emit(ORDER_EVENTS.PAID, {
+      emitAfterCommit(ORDER_EVENTS.PAID, {
         orderId: order.id,
         userId: order.userId,
         shopId: order.shopId,
-        deliveryStart,
-        deliveryEnd,
+        deliveryStart: firstPackage?.deliveryStart,
+        deliveryEnd: firstPackage?.deliveryEnd,
       });
       break;
+    }
 
     case 'delivered':
-      eventBus.emit(ORDER_EVENTS.DELIVERED, {
+      emitAfterCommit(ORDER_EVENTS.DELIVERED, {
         orderId: order.id,
         userId: order.userId,
         shopId: order.shopId,
@@ -101,7 +116,7 @@ async function runSideEffects(order, status, transaction) {
       break;
 
     case 'confirmed':
-      eventBus.emit(ORDER_EVENTS.CONFIRMED, {
+      emitAfterCommit(ORDER_EVENTS.CONFIRMED, {
         orderId: order.id,
         userId: order.userId,
         shopId: order.shopId,
@@ -109,7 +124,7 @@ async function runSideEffects(order, status, transaction) {
       break;
 
     case 'released':
-      eventBus.emit(ORDER_EVENTS.RELEASED, {
+      emitAfterCommit(ORDER_EVENTS.RELEASED, {
         orderId: order.id,
         shopId: order.shopId,
       });
@@ -117,6 +132,10 @@ async function runSideEffects(order, status, transaction) {
   }
 }
 
+// Bu fonksiyon artık YENİ ünite seçmiyor — createOrder sırasında zaten bu
+// siparişe rezerve edilmiş (reservedByOrderId = order.id) üniteleri isSold=true'ya
+// çeviriyor. reservedByOrderId filtresi race condition'ı önlüyor: başka bir
+// sipariş bu üniteleri asla göremez, çünkü onlar zaten BU siparişe ait.
 async function reserveStock(order, transaction) {
   const orderPackages = await OrderPackage.findAll({
     where: { orderId: order.id },
@@ -125,19 +144,29 @@ async function reserveStock(order, transaction) {
 
   for (const opkg of orderPackages) {
     const units = await PackageUnit.findAll({
-      where: { packageId: opkg.packageId, isSold: false },
+      where: { packageId: opkg.packageId, reservedByOrderId: order.id, isSold: false },
       order: [['id', 'ASC']],
       limit: opkg.quantity,
       lock: transaction.LOCK.UPDATE,
       transaction
     });
 
+    // Buraya sadece RESERVATION_TTL_MINUTES süresi dolmuş ve ünitelerin başka
+    // bir sipariş tarafından lazy-release ile devralınmış olması durumunda
+    // düşülür (checkout, TTL'den daha uzun sürmüş). Ödeme muhtemelen zaten
+    // alınmıştır — handleCheckoutCallback bu durumu (rollback + Sentry 'fatal')
+    // zaten yakalıyor, manuel iade gerektirir.
     if (units.length < opkg.quantity) {
-      throw new AppError('Stok yetersiz', 409);
+      throw new AppError(
+        'Rezervasyon süresi dolduğu için stok onaylanamadı, manuel kontrol gerekiyor',
+        409
+      );
     }
 
     for (const unit of units) {
       unit.isSold = true;
+      unit.reservedByOrderId = null;
+      unit.reservedUntil = null;
       await unit.save({ transaction });
     }
 
@@ -153,6 +182,16 @@ async function reserveStock(order, transaction) {
   }
 }
 
+/**
+ * Stok rezervasyonu artık BURADA (sipariş oluşturma anında) yapılıyor, 'paid'
+ * geçişinde değil — aksi halde iki müşteri son 1 adet stoklu pakete eşzamanlı
+ * GERÇEK ödeme yapabilir, biri ödemeyi tamamlar ama 'paid' geçişi
+ * 'Stok yetersiz' ile rollback olur ve parası çekilmiş bir müşteri elde kalır.
+ *
+ * "Lazy release": süresi geçmiş (reservedUntil < now) rezervasyonlar ayrı bir
+ * cron olmadan, bir sonraki createOrder çağrısı tarafından otomatik olarak
+ * müsait sayılır.
+ */
 async function createOrder(userId, data) {
   const { shopId, packages } = data;
 
@@ -171,12 +210,24 @@ async function createOrder(userId, data) {
 
       await assertPackageProductsNotExpired(pkg.packageId, t);
 
-      const available = await PackageUnit.count({
-        where: { packageId: pkg.packageId, isSold: false },
-        transaction: t
+      const now = new Date();
+
+      const reservedUnits = await PackageUnit.findAll({
+        where: {
+          packageId: pkg.packageId,
+          isSold: false,
+          [Op.or]: [
+            { reservedByOrderId: null },
+            { reservedUntil: { [Op.lt]: now } },
+          ],
+        },
+        order: [['id', 'ASC']],
+        limit: pkg.quantity,
+        lock: t.LOCK.UPDATE,
+        transaction: t,
       });
 
-      if (available < pkg.quantity) throw new AppError('Yeterli stok yok', 409);
+      if (reservedUnits.length < pkg.quantity) throw new AppError('Yeterli stok yok', 409);
 
       const realPrice = dbPackage.price;
       totalPrice += realPrice * pkg.quantity;
@@ -184,7 +235,8 @@ async function createOrder(userId, data) {
       validatedPackages.push({
         packageId: pkg.packageId,
         quantity: pkg.quantity,
-        price: realPrice
+        price: realPrice,
+        unitIds: reservedUnits.map(u => u.id),
       });
     }
 
@@ -197,6 +249,8 @@ async function createOrder(userId, data) {
       { transaction: t }
     );
 
+    const reservedUntil = new Date(Date.now() + RESERVATION_TTL_MINUTES * 60 * 1000);
+
     for (let i = 0; i < validatedPackages.length; i++) {
       const pkg = validatedPackages[i];
       await OrderPackage.create(
@@ -208,6 +262,11 @@ async function createOrder(userId, data) {
           iyzicoItemId: `op-${order.id}-${i}`,
         },
         { transaction: t }
+      );
+
+      await PackageUnit.update(
+        { reservedByOrderId: order.id, reservedUntil },
+        { where: { id: pkg.unitIds }, transaction: t }
       );
     }
 
@@ -222,6 +281,11 @@ async function createOrder(userId, data) {
 /**
  * Bir pending order için Iyzico Checkout Form başlatır ve paymentPageUrl döner.
  * Frontend bunu WebView'de açar.
+ *
+ * Sepette her OrderPackage için bir kalem gönderilir (id = iyzicoItemId), böylece
+ * callback'teki itemTransactions -> OrderPackage eşlemesi birebir çalışır ve her
+ * kalemin kendi paymentTransactionId'si approve için saklanır. Platform komisyonu
+ * kalemlere price/subMerchantPrice farkı olarak dağıtılır.
  */
 async function initiateCheckout(userId, orderId, req) {
   const order = await Order.findOne({
@@ -231,37 +295,30 @@ async function initiateCheckout(userId, orderId, req) {
 
   if (!order) throw new AppError('Sipariş bulunamadı veya erişim yetkiniz yok', 404);
   if (order.status !== 'pending') throw new AppError('Bu sipariş zaten işlenmiş', 409);
+  if (!order.OrderPackages?.length) throw new AppError('Siparişte paket bulunamadı', 409);
 
-  const user = await User.findByPk(userId);
+  const user = await User.findByPk(userId, {
+    attributes: ['id', 'email', 'firstName', 'lastName', 'address'],
+  });
   const shop = await Shop.findByPk(order.shopId);
 
-  if (!shop.subMerchantKey || shop.subMerchantStatus !== 'active') {
+  if (!shop || !shop.subMerchantKey || shop.subMerchantStatus !== 'active') {
     throw new AppError('Bu market henüz ödeme almaya hazır değil', 409);
   }
 
-  const packageBasketItems = order.OrderPackages.map((opkg) => ({
-    id: opkg.iyzicoItemId,
-    name: opkg.Package?.name || 'Paket',
-    price: opkg.price * opkg.quantity,
+  const baseItems = order.OrderPackages.map((op) => ({
+    id: op.iyzicoItemId,
+    name: op.Package?.name || 'Expiry Paketi',
+    price: Number(op.price) * op.quantity, // mağazanın payı (satır toplamı)
     subMerchantKey: shop.subMerchantKey,
-    subMerchantPrice: opkg.price * opkg.quantity, // market %100 alıyor, komisyon yok
   }));
 
-  const feeBasketItem = {
-    id: `fee-${order.id}`,
-    name: 'Expiry hizmet bedeli',
-    price: Number(order.platformFee),
-    // subMerchantKey/subMerchantPrice YOK — bu tutar otomatik olarak ana hesaba düşer
-  };
-
-  const basketItems = order.platformFee > 0
-    ? [...packageBasketItems, feeBasketItem]
-    : packageBasketItems;
+  const basketItems = iyzicoService.applyPlatformFee(baseItems, order.platformFee);
 
   const callbackUrl = `${process.env.BACKEND_URL}/api/orders/checkout/callback`;
 
   const result = await iyzicoService.initializeCheckoutForm(
-    order, basketItems, user, req.ip, callbackUrl
+    order, basketItems, user, req.ip, callbackUrl, shop
   );
 
   order.checkoutToken = result.token;
@@ -292,6 +349,25 @@ async function handleCheckoutCallback(token) {
     throw new AppError(result.errorMessage || 'Ödeme başarısız oldu', 402);
   }
 
+  // Iyzico'dan dönen sonuç bu order'a ve beklenen sepet tutarına ait mi?
+  // (alan response'ta varsa kontrol edilir). paidPrice ile KARŞILAŞTIRILMIYOR:
+  // taksitli ödemede iyzico taksit farkını paidPrice'a ekler, meşru ödeme reddedilirdi.
+  if (result.basketId && result.basketId !== `order-${order.id}`) {
+    console.error(`[checkout] basketId uyuşmazlığı: order=${order.id}, iyzico=${result.basketId}`);
+    Sentry.captureMessage(`checkout basketId uyuşmazlığı order=${order.id}`, 'error');
+    throw new AppError('Ödeme sonucu siparişle eşleşmiyor', 409);
+  }
+  if (
+    result.price != null &&
+    Math.round(Number(result.price) * 100) !== Math.round(Number(order.paidPrice) * 100)
+  ) {
+    console.error(
+      `[checkout] tutar uyuşmazlığı: order=${order.id}, beklenen=${order.paidPrice}, iyzico price=${result.price}`
+    );
+    Sentry.captureMessage(`checkout tutar uyuşmazlığı order=${order.id}`, 'error');
+    throw new AppError('Ödeme tutarı sipariş tutarıyla uyuşmuyor', 409);
+  }
+
   const t = await sequelize.transaction();
   try {
     const lockedOrder = await Order.findOne({
@@ -315,9 +391,22 @@ async function handleCheckoutCallback(token) {
     for (const itemTx of result.itemTransactions || []) {
       const matching = orderPackages.find((op) => op.iyzicoItemId === itemTx.itemId);
       if (matching) {
-        matching.iyzicoPaymentTransactionId = itemTx.paymentTransactionId;
+        matching.iyzicoPaymentTransactionId = String(itemTx.paymentTransactionId);
         await matching.save({ transaction: t });
       }
+    }
+
+    // Ödeme ZATEN alındı: eşlenemeyen kalem için throw ETME (müşteriden para çekilip
+    // sipariş oluşmamış olurdu). Görünür kıl; payment.handler approve öncesi
+    // iyzico'dan eksik id'leri geri doldurmayı dener.
+    const unmapped = orderPackages.filter((op) => !op.iyzicoPaymentTransactionId);
+    if (unmapped.length) {
+      const ids = unmapped.map((op) => op.id).join(', ');
+      console.error(`[checkout] order ${order.id}: paymentTransactionId eşlenemeyen OrderPackage'lar: ${ids}`);
+      Sentry.captureMessage(
+        `checkout: paymentTransactionId eşlenemedi order=${order.id} orderPackages=${ids}`,
+        'error'
+      );
     }
 
     await changeStatusInternal(lockedOrder, 'paid', 'system', t);
@@ -326,6 +415,13 @@ async function handleCheckoutCallback(token) {
     return lockedOrder;
   } catch (err) {
     await t.rollback();
+    // Buraya gelindiyse ödeme alınmış ama order 'paid' yapılamamış demektir
+    // (örn. rezervasyon süresi dolmuş). Müşteri parası çekilmiş durumda —
+    // manuel müdahale/iade gerekir.
+    Sentry.captureException(err, {
+      level: 'fatal',
+      extra: { orderId: order.id, token, note: 'ödeme alındı ama order paid yapılamadı' },
+    });
     throw err;
   }
 }
@@ -364,28 +460,6 @@ async function confirmByQRCode(marketUserId, deliveryToken) {
 
     await t.commit();
     return order;
-  } catch (err) {
-    await t.rollback();
-    throw err;
-  }
-}
-
-async function simulatePayment(userId, orderId) {
-  const t = await sequelize.transaction();
-  try {
-    const order = await Order.findOne({
-      where: { id: orderId, userId },
-      lock: t.LOCK.UPDATE,
-      transaction: t
-    });
-
-    if (!order) throw new AppError('Sipariş bulunamadı veya erişim yetkiniz yok', 404);
-    if (order.status !== 'pending') throw new AppError('Bu sipariş zaten işlenmiş', 409);
-
-    await changeStatusInternal(order, 'paid', 'system', t);
-
-    await t.commit();
-    return { success: true, order };
   } catch (err) {
     await t.rollback();
     throw err;
@@ -494,18 +568,39 @@ async function listShopOrders(shopId, statusGroup = 'active', page = 1, limit = 
 async function getShopByOwner(ownerId) {
   return await Shop.findOne({ where: { ownerId } });
 }
+async function simulatePayment(userId, orderId) {
+  const t = await sequelize.transaction();
+  try {
+    const order = await Order.findOne({
+      where: { id: orderId, userId },
+      lock: t.LOCK.UPDATE,
+      transaction: t
+    });
+
+    if (!order) throw new AppError('Sipariş bulunamadı veya erişim yetkiniz yok', 404);
+    if (order.status !== 'pending') throw new AppError('Bu sipariş zaten işlenmiş', 409);
+
+    await changeStatusInternal(order, 'paid', 'system', t);
+
+    await t.commit();
+    return { success: true, order };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
 
 module.exports = {
   createOrder,
   initiateCheckout,
   handleCheckoutCallback,
   confirmByQRCode,
-  simulatePayment,
   changeStatus,
+  simulatePayment,
   listUserOrders,
   listShopOrders,
   getShopByOwner,
   reserveStock,
   assertPackageProductsNotExpired,
   calculatePlatformFee, // test edilebilirlik için export edildi
-};
+}; 

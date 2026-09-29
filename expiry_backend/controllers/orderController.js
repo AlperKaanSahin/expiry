@@ -1,7 +1,17 @@
+const Sentry = require('@sentry/node');
 const orderService = require('../services/orderService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const iyzicoService = require('../services/iyzicoService');
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // Iyzico'nun asenkron webhook bildirimi (checkout form callback'ten AYRI bir
 // mekanizma — fraud/gecikmeli sonuç gibi durumlar için). Public, JWT yok.
@@ -11,9 +21,6 @@ const iyzicoWebhook = catchAsync(async (req, res) => {
   const signature = req.headers['x-iyz-signature-v3'];
 
   if (!signature) {
-    // İmza hiç yoksa muhtemelen hesapta X-IYZ-SIGNATURE-V3 özelliği aktif değil
-    // (entegrasyon@iyzico.com ile aktif ettirilmesi gerekiyor) — bunu "imza yanlış"
-    // hatasından ayırt edilebilir logluyoruz, teşhisi kolaylaştırsın diye.
     console.error('[iyzico webhook] İmza header\'ı (X-IYZ-SIGNATURE-V3) hiç gelmedi — hesapta bu özellik aktif mi kontrol et');
     return res.status(401).json({ error: 'İmza eksik' });
   }
@@ -33,10 +40,12 @@ const iyzicoWebhook = catchAsync(async (req, res) => {
     try {
       await orderService.handleCheckoutCallback(token);
     } catch (err) {
-      // handleCheckoutCallback zaten idempotent (order 'pending' değilse no-op).
-      // Burada hata muhtemelen Iyzico'nun retrieve çağrısı başarısız olduğunda oluşur —
-      // logla ama yine 2xx dön, aksi halde Iyzico 15dk'da bir 3 kez retry eder.
+      // handleCheckoutCallback idempotent (order 'pending' değilse no-op).
+      // Her durumda 200 dönüyoruz: Iyzico'nun kendi retry mekanizması var
+      // (15dk'da 3 kez), bunu tetiklemek istemiyoruz — hatayı sadece
+      // görünür kılıp (log + Sentry) burada yutuyoruz.
       console.error('[iyzico webhook] handleCheckoutCallback hatası:', err.message);
+      Sentry.captureException(err, { extra: { token, source: 'iyzico-webhook' } });
     }
   }
 
@@ -46,11 +55,6 @@ const iyzicoWebhook = catchAsync(async (req, res) => {
 const createOrder = catchAsync(async (req, res) => {
   const order = await orderService.createOrder(req.user.id, req.body);
   res.status(201).json(order);
-});
-
-const simulatePayment = catchAsync(async (req, res) => {
-  const result = await orderService.simulatePayment(req.user.id, req.body.orderId);
-  res.json(result);
 });
 
 const initiateCheckout = catchAsync(async (req, res) => {
@@ -64,6 +68,8 @@ const initiateCheckout = catchAsync(async (req, res) => {
 // içinde alıyoruz. WebView'in yakalayıp kapatması için custom scheme'e redirect
 // ediyoruz — RN tarafında bu scheme'i dinleyen bir onShouldStartLoadWithRequest
 // (veya onNavigationStateChange) handler'ı gerekiyor, o ayrı bir iş.
+// NOT: RN tarafı redirect URL'indeki status'a güvenmemeli; ekranı kapattıktan sonra
+// sipariş durumunu backend'den (GET /orders/user/me) doğrulamalı.
 const iyzicoCallback = catchAsync(async (req, res) => {
   const token = req.body?.token;
   const baseRedirect = `${process.env.BACKEND_URL}/api/orders/payment-result`;
@@ -76,6 +82,9 @@ const iyzicoCallback = catchAsync(async (req, res) => {
     const order = await orderService.handleCheckoutCallback(token);
     return res.redirect(303, `${baseRedirect}?status=success&orderId=${order.id}`);
   } catch (err) {
+    if (!(err instanceof AppError) || err.statusCode !== 402) {
+      Sentry.captureException(err, { extra: { token, source: 'iyzico-callback' } });
+    }
     return res.redirect(303, `${baseRedirect}?status=failed&message=${encodeURIComponent(err.message || '')}`);
   }
 });
@@ -83,11 +92,12 @@ const iyzicoCallback = catchAsync(async (req, res) => {
 // WebView'in onShouldStartLoadWithRequest'i intercept edip navigasyonu engellemesi
 // gerekiyor (return false) — buraya normalde hiç gelinmemeli. Buraya bir kullanıcı
 // gerçekten ulaşırsa (intercept başarısız olduysa) en azından anlamlı bir mesaj görsün.
+// Query parametreleri kullanıcı kontrolünde: HTML'e basmadan önce escape edilir.
 const paymentResultPage = (req, res) => {
   const { status, message } = req.query;
   const humanMessage = status === 'success'
     ? 'Ödemeniz tamamlandı. Uygulamaya dönebilirsiniz.'
-    : `Ödeme başarısız oldu. ${message || ''}`;
+    : `Ödeme başarısız oldu. ${escapeHtml(message)}`;
 
   res.send(`<!DOCTYPE html>
 <html lang="tr">
@@ -148,9 +158,13 @@ const getMyUserOrders = catchAsync(async (req, res) => {
   res.json(result);
 });
 
+const simulatePayment = catchAsync(async (req, res) => {
+  const result = await orderService.simulatePayment(req.user.id, req.body.orderId);
+  res.json(result);
+});
+
 module.exports = {
   createOrder,
-  simulatePayment,
   initiateCheckout,
   iyzicoCallback,
   iyzicoWebhook,
@@ -160,5 +174,6 @@ module.exports = {
   confirmOrder,
   confirmByQRCode,
   getMyShopOrders,
-  getMyUserOrders
+  getMyUserOrders,
+  simulatePayment,
 };

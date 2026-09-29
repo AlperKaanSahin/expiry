@@ -2,8 +2,8 @@ const request = require('supertest');
 const crypto = require('crypto');
 
 // Sadece Iyzico'ya GERÇEKTEN gidecek fonksiyonları mock'luyoruz — verifyWebhookSignature
-// ve diğer validatörler GERÇEK implementasyon (jest.requireActual), çünkü asıl test ettiğimiz
-// şey imza doğrulamasının gerçekten çalıştığı.
+// ve applyPlatformFee GERÇEK implementasyon (jest.requireActual), çünkü asıl test ettiğimiz
+// şey imza doğrulamasının ve sepet kurulumunun gerçekten çalıştığı.
 jest.mock('../../services/iyzicoService', () => {
   const actual = jest.requireActual('../../services/iyzicoService');
   return {
@@ -17,6 +17,7 @@ jest.mock('../../services/iyzicoService', () => {
 
 const app = require('../../app');
 const { User, Shop, Package, PackageUnit, Order, OrderPackage } = require('../../models');
+const orderService = require('../../services/orderService');
 const iyzicoService = require('../../services/iyzicoService');
 
 function buildSignature({ iyziEventType, iyziPaymentId, token, paymentConversationId, status }) {
@@ -26,7 +27,7 @@ function buildSignature({ iyziEventType, iyziPaymentId, token, paymentConversati
 }
 
 describe('Iyzico webhook akışı: POST /api/orders/webhook/iyzico', () => {
-  let owner, user, shop, pkg, order;
+  let owner, user, shop, pkg, order, orderPackage;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -69,23 +70,26 @@ describe('Iyzico webhook akışı: POST /api/orders/webhook/iyzico', () => {
     });
     await PackageUnit.create({ packageId: pkg.id, isSold: false });
 
-    order = await Order.create({
-      userId: user.id,
+    // Order, gerçek createOrder akışından geçirilerek oluşturuluyor — reservedByOrderId/
+    // reservedUntil'i burada elle taklit ETMİYORUZ. Böylece reserveStock/createOrder
+    // ileride değişirse bu test de o gerçek davranışı otomatik takip eder, fixture
+    // sessizce eskimez.
+    order = await orderService.createOrder(user.id, {
       shopId: shop.id,
-      totalPrice: 55,
-      platformFee: 11,
-      paidPrice: 66,
-      status: 'pending',
-      deliveryToken: `test-delivery-token-${suffix}`,
-      checkoutToken: `test-checkout-token-${suffix}`,
+      packages: [{ packageId: pkg.id, quantity: 1 }],
     });
-    await OrderPackage.create({
-      orderId: order.id,
-      packageId: pkg.id,
-      quantity: 1,
-      price: 55,
-      iyzicoItemId: `op-${order.id}-0`,
+
+    orderPackage = await OrderPackage.findOne({ where: { orderId: order.id } });
+
+    // checkoutToken normalde initiateCheckout ile Iyzico'dan dönen token'la set edilir —
+    // gerçek akış çağrılıyor, sadece dış Iyzico çağrısı (initializeCheckoutForm) mock'lanıyor.
+    iyzicoService.initializeCheckoutForm.mockResolvedValue({
+      token: `test-checkout-token-${suffix}`,
+      paymentPageUrl: 'https://sandbox-payment.iyzipay.com/xyz',
     });
+
+    await orderService.initiateCheckout(user.id, order.id, { ip: '127.0.0.1' });
+    order = await Order.findByPk(order.id);
   });
 
   afterEach(async () => {
@@ -143,7 +147,7 @@ describe('Iyzico webhook akışı: POST /api/orders/webhook/iyzico', () => {
 
     iyzicoService.retrieveCheckoutForm.mockResolvedValue({
       paymentStatus: 'SUCCESS',
-      itemTransactions: [{ itemId: `op-${order.id}-0`, paymentTransactionId: 'tx-webhook-1' }],
+      itemTransactions: [{ itemId: orderPackage.iyzicoItemId, paymentTransactionId: 'tx-webhook-1' }],
     });
 
     const res = await request(app)
@@ -218,7 +222,6 @@ describe('Iyzico webhook akışı: POST /api/orders/webhook/iyzico', () => {
       .set('X-IYZ-SIGNATURE-V3', signature)
       .send(payload);
 
-    // 2xx dönmemiz gerekiyor — aksi halde Iyzico 15dk'da bir retry eder.
     expect(res.status).toBe(200);
 
     const unchanged = await Order.findByPk(order.id);

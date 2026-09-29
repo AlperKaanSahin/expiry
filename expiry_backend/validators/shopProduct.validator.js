@@ -1,4 +1,12 @@
 const { body } = require('express-validator');
+const { isDateExpired } = require('../utils/expiry');
+
+const notExpired = (value) => {
+  if (isDateExpired(value)) {
+    throw new Error('Son kullanma tarihi geçmiş bir tarih olamaz');
+  }
+  return true;
+};
 
 exports.createProduct = [
   body('name')
@@ -12,7 +20,9 @@ exports.createProduct = [
     .withMessage('Geçerli bir miktar giriniz'),
   body('expiryDate')
     .isISO8601()
-    .withMessage('Geçerli bir tarih giriniz'),
+    .withMessage('Geçerli bir tarih giriniz')
+    .bail()
+    .custom(notExpired),
 ];
 
 exports.updateProduct = [
@@ -31,5 +41,7 @@ exports.updateProduct = [
   body('expiryDate')
     .optional()
     .isISO8601()
-    .withMessage('Geçerli bir tarih giriniz'),
+    .withMessage('Geçerli bir tarih giriniz')
+    .bail()
+    .custom(notExpired),
 ];

@@ -9,6 +9,10 @@ const shopProductValidator = require('../validators/shopProduct.validator');
 router.get('/', auth, onlyMarket, shopProductController.list);
 router.get('/all', auth, onlyMarket, shopProductController.listAll);
 router.post('/', auth, onlyMarket, shopProductValidator.createProduct, validate, shopProductController.create);
+
+// /:id'den ÖNCE tanımlanmalı — yoksa Express bunu id='expired' sanır.
+router.delete('/expired', auth, onlyMarket, shopProductController.deleteExpired);
+
 router.put('/:id', auth, onlyMarket, shopProductValidator.updateProduct, validate, shopProductController.update);
 router.delete('/:id', auth, onlyMarket, shopProductController.delete);
 
