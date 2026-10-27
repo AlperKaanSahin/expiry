@@ -12,12 +12,55 @@ const getShopByUserId = async (userId) => {
   return shop;
 };
 
+// Ünite rezervasyonu (createOrder) hâlâ geçerli mi? createOrder'ın "müsait" tanımının
+// tam tersi: reservedByOrderId boşsa ya da reservedUntil geçmişse ünite müsait sayılır
+// (lazy release), aksi halde bir müşteri o anda ödeme aşamasında demektir.
+const isReservationLive = (unit, now) => {
+  if (unit.reservedByOrderId == null) return false;
+  if (unit.reservedUntil == null) return true;
+  return new Date(unit.reservedUntil) >= now;
+};
+
+// Paketin satılmamış ünitelerini id ASC sırasıyla kilitler (createOrder ve reserveStock
+// ile aynı kilit sırası, deadlock olmaz) ve geçerli rezervasyonu olanlarla müsaitleri
+// ayırır. Kilit, eşzamanlı bir createOrder'ın rezervasyonu commit etmesini bekler; silme
+// ya da azaltma kararı bu yüzden güncel rezervasyon durumuna göre verilir.
+const lockUnsoldUnits = async (packageId, transaction) => {
+  const units = await PackageUnit.findAll({
+    where: { packageId, isSold: false },
+    order: [['id', 'ASC']],
+    lock: transaction.LOCK.UPDATE,
+    transaction,
+  });
+  const now = new Date();
+  return {
+    reserved: units.filter((u) => isReservationLive(u, now)),
+    free: units.filter((u) => !isReservationLive(u, now)),
+  };
+};
+
+// `wanted` kadar müsait ünite seçer (en yüksek id'liler, eski davranışla aynı). Satılmamış
+// ünite sayısından fazlası istenirse eski davranış korunur (eldeki kadar). Rezerve ünite
+// yüzünden müsait ünite yetmezse 409 — ödeme aşamasındaki müşterinin ünitesi silinmez.
+const selectUnitsToRemove = ({ free, reserved }, wanted) => {
+  const attempt = Math.min(wanted, free.length + reserved.length);
+  if (free.length < attempt) {
+    throw new AppError(
+      `Bu paketin ${reserved.length} ünitesi şu an müşterilerin ödeme aşamasında (rezerve), istenen adet kadar müsait ünite yok. Birkaç dakika sonra tekrar deneyin`,
+      409
+    );
+  }
+  return free.slice(free.length - attempt);
+};
+
 // Bir paketi (ve unit/ürün ilişkilerini) tamamen kaldırır — AMA paketin 'paid'
 // veya 'delivered' durumunda (ödeme alınmış, henüz tamamlanmamış) bir siparişi
-// varsa SİLMEZ, false döner. 'pending' siparişler burada AKTİF sayılmaz —
-// ödeme henüz alınmamış bir rezervasyon, TTL dolunca kendiliğinden düşer,
-// silinmesi kimseyi mağdur etmez. 'confirmed'/'released' zaten tamamlanmış,
-// onlar da engellemez.
+// varsa, YA DA ünitelerinden biri şu an bir müşterinin ödeme aşamasındaysa
+// (createOrder'ın TTL'li rezervasyonu henüz dolmadıysa) SİLMEZ, false döner.
+// Rezervasyonu ezmek, müşterinin parası çekilip siparişin oluşmaması demektir
+// (bkz. orderService.reserveStock). Süresi dolmuş 'pending' rezervasyonlar
+// engellemez: ünite zaten lazy release ile müsait sayılıyor. 'confirmed'/'released'
+// zaten tamamlanmış, onlar da engellemez.
 const hardDeletePackageIfSafe = async (packageId, transaction) => {
   const activeOrderCount = await OrderPackage.count({
     where: { packageId },
@@ -30,6 +73,11 @@ const hardDeletePackageIfSafe = async (packageId, transaction) => {
   });
 
   if (activeOrderCount > 0) {
+    return false;
+  }
+
+  const { reserved } = await lockUnsoldUnits(packageId, transaction);
+  if (reserved.length > 0) {
     return false;
   }
 
@@ -343,12 +391,10 @@ exports.updatePackage = async (userId, packageId, data) => {
       const rows = Array.from({ length: quantity - currentCount }, () => ({ packageId: pkg.id, isSold: false }));
       await PackageUnit.bulkCreate(rows, { transaction: t });
     } else if (quantity < currentCount) {
-      const unitsToDelete = await PackageUnit.findAll({
-        where: { packageId: pkg.id, isSold: false },
-        order: [['id', 'DESC']],
-        limit: currentCount - quantity,
-        transaction: t,
-      });
+      // Sadece müsait (rezervasyonu olmayan ya da süresi dolmuş) üniteler silinir;
+      // ödeme aşamasındaki bir müşterinin ünitesi azaltmayla ezilemez.
+      const units = await lockUnsoldUnits(pkg.id, t);
+      const unitsToDelete = selectUnitsToRemove(units, currentCount - quantity);
       for (const unit of unitsToDelete) await unit.destroy({ transaction: t });
     }
 
@@ -386,23 +432,37 @@ exports.deletePackage = async (userId, packageId, count) => {
     }
   }
 
-  const unitsToDelete = await PackageUnit.findAll({
-    where: { packageId: pkg.id, isSold: false },
-    order: [['id', 'DESC']],
-    limit: Number(count)
-  });
-  for (const unit of unitsToDelete) await unit.destroy();
+  const requestedCount = Number(count);
+  if (!Number.isInteger(requestedCount) || requestedCount < 1) {
+    throw new AppError('Geçersiz silme adedi', 400);
+  }
 
-  const newQuantity = await PackageUnit.count({ where: { packageId: pkg.id, isSold: false } });
-  await pkg.update({ quantity: newQuantity });
+  // Kısmi silme: sadece müsait üniteler silinir, ödeme aşamasındaki rezervasyonlar korunur.
+  const t = await sequelize.transaction();
+  try {
+    const units = await lockUnsoldUnits(pkg.id, t);
+    const unitsToDelete = selectUnitsToRemove(units, requestedCount);
+    for (const unit of unitsToDelete) await unit.destroy({ transaction: t });
 
-  return { deletedAll: false, deletedCount: unitsToDelete.length, remaining: newQuantity };
+    const newQuantity = await PackageUnit.count({
+      where: { packageId: pkg.id, isSold: false },
+      transaction: t,
+    });
+    await pkg.update({ quantity: newQuantity }, { transaction: t });
+
+    await t.commit();
+    return { deletedAll: false, deletedCount: unitsToDelete.length, remaining: newQuantity };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 };
 
 // "SKT geçen ürün içeren paketleri sil" toplu işlemi — sadece Paketlerim
 // ekranında GÖRÜNEN paketleri kapsar (remaining unit > 0), listePackages ile
 // aynı kapsam. Ürünlere DOKUNMAZ, yalnızca süresi geçmiş ürün içeren paketleri
-// kaldırır; aktif siparişi olan bir paket varsa atlanır, diğerleri silinmeye devam eder.
+// kaldırır; aktif siparişi ya da geçerli rezervasyonu olan bir paket varsa atlanır,
+// diğerleri silinmeye devam eder.
 exports.deleteExpiredPackages = async (userId) => {
   const shop = await getShopByUserId(userId);
 
