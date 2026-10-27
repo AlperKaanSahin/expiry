@@ -3,7 +3,7 @@ jest.mock('../../models', () => ({
   Order: {},
 }));
 jest.mock('../../handlers/payment.handler', () => ({
-  approveOrderPackages: jest.fn(),
+  approveOrderPackagesAndRelease: jest.fn(),
   MAX_APPROVAL_ATTEMPTS: 10,
 }));
 jest.mock('@sentry/node', () => ({
@@ -11,22 +11,22 @@ jest.mock('@sentry/node', () => ({
 }));
 
 const { OrderPackage } = require('../../models');
-const { approveOrderPackages } = require('../../handlers/payment.handler');
+const { approveOrderPackagesAndRelease } = require('../../handlers/payment.handler');
 const Sentry = require('@sentry/node');
 const { start, stop, runApprovalRetrySweep } = require('../../services/approvalRetryJob');
 
 describe('approvalRetryJob.runApprovalRetrySweep', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('approve edilmemiş ve deneme hakkı tükenmemiş her order için approveOrderPackages çağırır', async () => {
+  it('approve edilmemiş ve deneme hakkı tükenmemiş her order için approveOrderPackagesAndRelease çağırır', async () => {
     OrderPackage.findAll.mockResolvedValue([{ orderId: 10 }, { orderId: 11 }]);
-    approveOrderPackages.mockResolvedValue(true);
+    approveOrderPackagesAndRelease.mockResolvedValue(true);
 
     await runApprovalRetrySweep();
 
-    expect(approveOrderPackages).toHaveBeenCalledWith(10);
-    expect(approveOrderPackages).toHaveBeenCalledWith(11);
-    expect(approveOrderPackages).toHaveBeenCalledTimes(2);
+    expect(approveOrderPackagesAndRelease).toHaveBeenCalledWith(10);
+    expect(approveOrderPackagesAndRelease).toHaveBeenCalledWith(11);
+    expect(approveOrderPackagesAndRelease).toHaveBeenCalledTimes(2);
   });
 
   it('tarama sonucu boşsa hiçbir şey yapmadan biter', async () => {
@@ -34,31 +34,31 @@ describe('approvalRetryJob.runApprovalRetrySweep', () => {
 
     await runApprovalRetrySweep();
 
-    expect(approveOrderPackages).not.toHaveBeenCalled();
+    expect(approveOrderPackagesAndRelease).not.toHaveBeenCalled();
   });
 
-  it('bir order için approveOrderPackages hata fırlatırsa diğer order\'lar için deneme devam eder, Sentry\'ye bildirir', async () => {
+  it('bir order için approveOrderPackagesAndRelease hata fırlatırsa diğer order\'lar için deneme devam eder, Sentry\'ye bildirir', async () => {
     OrderPackage.findAll.mockResolvedValue([{ orderId: 10 }, { orderId: 11 }]);
-    approveOrderPackages
+    approveOrderPackagesAndRelease
       .mockRejectedValueOnce(new Error('iyzico zaman aşımı'))
       .mockResolvedValueOnce(true);
 
     await runApprovalRetrySweep();
 
-    expect(approveOrderPackages).toHaveBeenCalledTimes(2);
+    expect(approveOrderPackagesAndRelease).toHaveBeenCalledTimes(2);
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 
   it('bir tur hâlâ çalışırken eşzamanlı ikinci çağrı overlap guard tarafından atlanır', async () => {
     OrderPackage.findAll.mockResolvedValue([{ orderId: 10 }]);
-    approveOrderPackages.mockResolvedValue(true);
+    approveOrderPackagesAndRelease.mockResolvedValue(true);
 
     const firstSweep = runApprovalRetrySweep();
-    const secondSweep = runApprovalRetrySweep(); // isRunning bayrağı ilk çağrıda senkron set edildiği için bu atlanır
+    const secondSweep = runApprovalRetrySweep();
 
     await Promise.all([firstSweep, secondSweep]);
 
-    expect(approveOrderPackages).toHaveBeenCalledTimes(1);
+    expect(approveOrderPackagesAndRelease).toHaveBeenCalledTimes(1);
   });
 
   it('tarama sorgusu (OrderPackage.findAll) hata fırlatırsa Sentry\'ye bildirir, exception dışarı taşmaz', async () => {
@@ -67,7 +67,7 @@ describe('approvalRetryJob.runApprovalRetrySweep', () => {
     await expect(runApprovalRetrySweep()).resolves.toBeUndefined();
 
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-    expect(approveOrderPackages).not.toHaveBeenCalled();
+    expect(approveOrderPackagesAndRelease).not.toHaveBeenCalled();
   });
 });
 
