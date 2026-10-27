@@ -2,7 +2,7 @@ const request = require('supertest');
 const app = require('../../app');
 const { sequelize } = require('../../models');
 
-const { futureDate, futureIso } = require('../helpers/dates');
+const { futureDate, futureIso, utcSqlDateTime } = require('../helpers/dates');
 
 describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık', () => {
   const timestamp = Date.now();
@@ -198,7 +198,29 @@ it('EŞZAMANLILIK: son 1 stoklu pakete iki eşzamanlı sipariş oluşturma denem
   // bu rezervasyonun aktif sipariş sayılıp saymadığına bağlı, orada ele alınıyor).
 });
 
-  it('market A kendi paketini siler', async () => {
+  it('market A, ödeme aşamasındaki (rezerve) paketi silemez (409)', async () => {
+    // Önceki eşzamanlılık testinin kazanan siparişi pending ve rezervasyonu 20 dk geçerli.
+    const res = await request(app)
+      .delete(`/api/shop/packages/${packageAId}`)
+      .set('Authorization', `Bearer ${marketAToken}`);
+
+    expect(res.status).toBe(409);
+  });
+
+  it('market A, rezerve paketi içeren ürünü silemez (409)', async () => {
+    const res = await request(app)
+      .delete(`/api/shop/products/${productAId}`)
+      .set('Authorization', `Bearer ${marketAToken}`);
+
+    expect(res.status).toBe(409);
+  });
+
+  it('rezervasyon süresi dolunca market A paketini siler', async () => {
+    await sequelize.query(
+      'UPDATE `PackageUnits` SET reservedUntil = :past WHERE packageId = :packageId AND isSold = false',
+      { replacements: { past: utcSqlDateTime(new Date(Date.now() - 60 * 1000)), packageId: packageAId } }
+    );
+
     const res = await request(app)
       .delete(`/api/shop/packages/${packageAId}`)
       .set('Authorization', `Bearer ${marketAToken}`);
@@ -207,7 +229,7 @@ it('EŞZAMANLILIK: son 1 stoklu pakete iki eşzamanlı sipariş oluşturma denem
     expect(res.body.success).toBe(true);
   });
 
-  it('market A kendi ürününü siler', async () => {
+  it('paket silindikten sonra market A kendi ürününü siler', async () => {
     const res = await request(app)
       .delete(`/api/shop/products/${productAId}`)
       .set('Authorization', `Bearer ${marketAToken}`);

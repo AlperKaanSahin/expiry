@@ -16,4 +16,13 @@ function futureIso(days, hourUtc = 10) {
   return d.toISOString();
 }
 
-module.exports = { futureDate, futureIso };
+// Ham SQL replacements'ına Date nesnesi verilirse Sequelize onu process'in YEREL saat
+// dilimine göre biçimlendirir; model üzerinden yazılan DATETIME değerleri ise UTC
+// saklanıyor. Yerel saat UTC değilse (örn. UTC+3) değer kayar. Ham SQL'de zaman
+// damgasını bu fonksiyonla UTC 'YYYY-MM-DD HH:mm:ss' string'i olarak ver.
+function utcSqlDateTime(date) {
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
+    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
+
+module.exports = { futureDate, futureIso, utcSqlDateTime };
