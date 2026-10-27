@@ -26,6 +26,9 @@ function mockTransaction() {
   return t;
 }
 
+const { futureDate } = require('../helpers/dates');
+const FUTURE_1 = futureDate(30);
+
 describe('shopPackageService.createPackage — ownership ve stok', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -186,13 +189,13 @@ describe('shopPackageService.createPackage — ownership ve stok', () => {
       await shopPackageService.createPackage(42, {
         name: 'Paket', quantity: 2,
         products: [{
-          newProduct: { name: 'Taze Ekmek', price: 20, expiryDate: '2027-01-01' },
+          newProduct: { name: 'Taze Ekmek', price: 20, expiryDate: FUTURE_1 },
           quantity: 3,
         }],
       });
 
       expect(capturedProductCreateData.quantity).toBe(6);
-      expect(capturedProductCreateData.expiryDate).toBe('2027-01-01');
+      expect(capturedProductCreateData.expiryDate).toBe(FUTURE_1);
       // Var olan ürün path'indeki gibi ayrıca stoktan düşülmemeli — createdProduct
       // objesinde save() hiç yok, çağrılmaya çalışılsaydı test zaten patlardı.
       expect(t.commit).toHaveBeenCalled();
@@ -213,7 +216,7 @@ describe('shopPackageService.createPackage — ownership ve stok', () => {
       await shopPackageService.createPackage(42, {
         quantity: 1,
         products: [{
-          newProduct: { name: 'Taze Ekmek', price: 20, expiryDate: '2027-01-01' },
+          newProduct: { name: 'Taze Ekmek', price: 20, expiryDate: FUTURE_1 },
           quantity: 1,
         }],
       });
@@ -246,7 +249,7 @@ describe('shopPackageService.createPackage — ownership ve stok', () => {
         products: [
           { id: 1, quantity: 1, price: 5 },
           { id: 2, quantity: 1, price: 5 },
-          { newProduct: { name: 'Poğaça', price: 10, expiryDate: '2027-01-01' }, quantity: 1 },
+          { newProduct: { name: 'Poğaça', price: 10, expiryDate: FUTURE_1 }, quantity: 1 },
         ],
       });
 
@@ -330,7 +333,7 @@ describe('shopPackageService.updatePackage — ownership ve isim davranışı', 
     await shopPackageService.updatePackage(42, 1, {
       quantity: 2,
       products: [{
-        newProduct: { name: 'Yeni Ürün', price: 12, expiryDate: '2027-01-01' },
+        newProduct: { name: 'Yeni Ürün', price: 12, expiryDate: FUTURE_1 },
         quantity: 5,
       }],
     });

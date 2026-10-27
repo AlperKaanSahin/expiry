@@ -2,6 +2,8 @@ const request = require('supertest');
 const app = require('../../app');
 const { sequelize } = require('../../models');
 
+const { futureDate, futureIso } = require('../helpers/dates');
+
 describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık', () => {
   const timestamp = Date.now();
   const marketAEmail = `catalog-a+${timestamp}@test.com`;
@@ -68,7 +70,7 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     const res = await request(app)
       .post('/api/shop/products')
       .set('Authorization', `Bearer ${marketAToken}`)
-      .send({ name: 'Ürün A', price: 10, quantity: 50, expiryDate: '2027-01-01' });
+      .send({ name: 'Ürün A', price: 10, quantity: 50, expiryDate: futureDate(30) });
 
     expect(res.status).toBe(201);
     productAId = res.body.id;
@@ -78,7 +80,7 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     const res = await request(app)
       .post('/api/shop/products')
       .set('Authorization', `Bearer ${marketBToken}`)
-      .send({ name: 'Ürün B', price: 15, quantity: 30, expiryDate: '2027-01-01' });
+      .send({ name: 'Ürün B', price: 15, quantity: 30, expiryDate: futureDate(30) });
 
     expect(res.status).toBe(201);
     productBId = res.body.id;
@@ -99,7 +101,7 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     const res = await request(app)
       .put(`/api/shop/products/${productBId}`)
       .set('Authorization', `Bearer ${marketAToken}`)
-      .send({ name: 'Hacklenmiş', price: 1, quantity: 1, expiryDate: '2027-01-01' });
+      .send({ name: 'Hacklenmiş', price: 1, quantity: 1, expiryDate: futureDate(30) });
 
     expect(res.status).toBe(404);
   });
@@ -116,7 +118,7 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     const res = await request(app)
       .post('/api/shop/products')
       .set('Authorization', `Bearer ${customerToken}`)
-      .send({ name: 'Yasak Ürün', price: 1, quantity: 1, expiryDate: '2027-01-01' });
+      .send({ name: 'Yasak Ürün', price: 1, quantity: 1, expiryDate: futureDate(30) });
 
     expect(res.status).toBe(403);
   });
@@ -130,7 +132,7 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
     const res = await request(app)
       .put(`/api/shop/products/${productAId}`)
       .set('Authorization', `Bearer ${marketAToken}`)
-      .send({ name: 'Güncellenmiş Ürün A', price: 12, quantity: 40, expiryDate: '2027-02-01' });
+      .send({ name: 'Güncellenmiş Ürün A', price: 12, quantity: 40, expiryDate: futureDate(60) });
 
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Güncellenmiş Ürün A');
@@ -143,8 +145,8 @@ describe('Shop katalog akışı: ürün/paket CRUD, ownership, eşzamanlılık',
       .send({
         name: 'Son Kutu',
         quantity: 1,
-        deliveryStart: '2027-01-01T10:00:00Z',
-        deliveryEnd: '2027-01-01T18:00:00Z',
+        deliveryStart: futureIso(30, 10),
+        deliveryEnd: futureIso(30, 18),
         products: [{ id: productAId, quantity: 1, price: 12 }],
       });
 

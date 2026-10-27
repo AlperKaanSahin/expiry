@@ -28,6 +28,10 @@ function mockTransaction() {
   return t;
 }
 
+const { futureDate } = require('../helpers/dates');
+const FUTURE_1 = futureDate(30);
+const FUTURE_2 = futureDate(60);
+
 describe('shopProductService — ownership sınırları', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -65,10 +69,10 @@ describe('shopProductService — ownership sınırları', () => {
     Shop.findOne.mockResolvedValue({ id: 7, ownerId: 42 });
     ShopProduct.create.mockResolvedValue({ id: 1, name: 'Elma', shopId: 7 });
 
-    await shopProductService.createProduct(42, { name: 'Elma', price: 5, quantity: 10, expiryDate: '2027-01-01' });
+    await shopProductService.createProduct(42, { name: 'Elma', price: 5, quantity: 10, expiryDate: FUTURE_1 });
 
     expect(ShopProduct.create).toHaveBeenCalledWith({
-      name: 'Elma', price: 5, quantity: 10, expiryDate: '2027-01-01', shopId: 7,
+      name: 'Elma', price: 5, quantity: 10, expiryDate: FUTURE_1, shopId: 7,
     });
   });
 
@@ -99,10 +103,10 @@ describe('shopProductService — ownership sınırları', () => {
     const mockProduct = { id: 5, name: 'Eski', update: jest.fn().mockResolvedValue(true) };
     ShopProduct.findOne.mockResolvedValue(mockProduct);
 
-    await shopProductService.updateProduct(42, 5, { name: 'Yeni', price: 20, quantity: 3, expiryDate: '2027-02-01' });
+    await shopProductService.updateProduct(42, 5, { name: 'Yeni', price: 20, quantity: 3, expiryDate: FUTURE_2 });
 
     expect(mockProduct.update).toHaveBeenCalledWith({
-      name: 'Yeni', price: 20, quantity: 3, expiryDate: '2027-02-01',
+      name: 'Yeni', price: 20, quantity: 3, expiryDate: FUTURE_2,
     });
   });
 

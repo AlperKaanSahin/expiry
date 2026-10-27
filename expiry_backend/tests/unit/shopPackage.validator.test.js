@@ -1,3 +1,4 @@
+const { futureDate, futureIso } = require('../helpers/dates');
 const { validationResult } = require('express-validator');
 const shopPackageValidator = require('../../validators/shopPackage.validator');
 
@@ -13,16 +14,16 @@ async function runValidation(rules, body) {
 const validPackageBase = {
   name: 'Test Paketi',
   quantity: 1,
-  deliveryStart: '2027-01-01T10:00:00Z',
-  deliveryEnd: '2027-01-01T18:00:00Z',
+  deliveryStart: futureIso(30, 10),
+  deliveryEnd: futureIso(30, 18),
 };
 
 describe('shopPackage.validator.createPackage', () => {
   it('name gönderilmezse hata vermez (opsiyonel)', async () => {
     const result = await runValidation(shopPackageValidator.createPackage, {
       quantity: 1,
-      deliveryStart: '2027-01-01T10:00:00Z',
-      deliveryEnd: '2027-01-01T18:00:00Z',
+      deliveryStart: futureIso(30, 10),
+      deliveryEnd: futureIso(30, 18),
       products: [{ id: 1, quantity: 1 }],
     });
 
@@ -63,7 +64,7 @@ describe('shopPackage.validator.createPackage', () => {
       ...validPackageBase,
       products: [{
         id: 1,
-        newProduct: { name: 'Ekmek', price: 10, expiryDate: '2027-01-01' },
+        newProduct: { name: 'Ekmek', price: 10, expiryDate: futureDate(30) },
         quantity: 1,
       }],
     });
@@ -93,7 +94,7 @@ describe('shopPackage.validator.createPackage', () => {
     const result = await runValidation(shopPackageValidator.createPackage, {
       ...validPackageBase,
       products: [{
-        newProduct: { name: 'Taze Poğaça', price: 15, expiryDate: '2027-01-01' },
+        newProduct: { name: 'Taze Poğaça', price: 15, expiryDate: futureDate(30) },
         quantity: 1,
       }],
     });
@@ -129,7 +130,7 @@ describe('shopPackage.validator.createPackage', () => {
     const result = await runValidation(shopPackageValidator.createPackage, {
       ...validPackageBase,
       products: [{
-        newProduct: { name: '  ', price: 15, expiryDate: '2027-01-01' },
+        newProduct: { name: '  ', price: 15, expiryDate: futureDate(30) },
         quantity: 1,
       }],
     });
@@ -141,7 +142,7 @@ describe('shopPackage.validator.createPackage', () => {
     const result = await runValidation(shopPackageValidator.createPackage, {
       ...validPackageBase,
       products: [{
-        newProduct: { name: 'Taze Poğaça', price: -5, expiryDate: '2027-01-01' },
+        newProduct: { name: 'Taze Poğaça', price: -5, expiryDate: futureDate(30) },
         quantity: 1,
       }],
     });
@@ -203,7 +204,7 @@ describe('shopPackage.validator.updatePackage', () => {
   it('geçerli newProduct ile products gönderilirse hata vermez', async () => {
     const result = await runValidation(shopPackageValidator.updatePackage, {
       products: [{
-        newProduct: { name: 'Yeni Ürün', price: 10, expiryDate: '2027-01-01' },
+        newProduct: { name: 'Yeni Ürün', price: 10, expiryDate: futureDate(30) },
         quantity: 1,
       }],
     });

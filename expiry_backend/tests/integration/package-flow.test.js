@@ -2,6 +2,8 @@ const request = require('supertest');
 const app = require('../../app');
 const { sequelize } = require('../../models');
 
+const { futureDate, futureIso } = require('../helpers/dates');
+
 describe('Paket görüntüleme akışı: getById, shop packages', () => {
   const timestamp = Date.now();
   const shopOwnerEmail = `pkgowner+${timestamp}@test.com`;
@@ -64,7 +66,7 @@ describe('Paket görüntüleme akışı: getById, shop packages', () => {
     const res = await request(app)
       .post('/api/shop/products')
       .set('Authorization', `Bearer ${shopOwnerToken}`)
-      .send({ name: 'Pkg Ürün', price: 10, quantity: 50, expiryDate: '2027-01-01' });
+      .send({ name: 'Pkg Ürün', price: 10, quantity: 50, expiryDate: futureDate(30) });
 
     expect(res.status).toBe(201);
     productId = res.body.id;
@@ -77,8 +79,8 @@ describe('Paket görüntüleme akışı: getById, shop packages', () => {
       .send({
         name: 'Stoklu Paket',
         quantity: 3,
-        deliveryStart: '2027-01-01T10:00:00Z',
-        deliveryEnd: '2027-01-01T18:00:00Z',
+        deliveryStart: futureIso(30, 10),
+        deliveryEnd: futureIso(30, 18),
         products: [{ id: productId, quantity: 1, price: 10 }],
       });
 
@@ -93,8 +95,8 @@ describe('Paket görüntüleme akışı: getById, shop packages', () => {
       .send({
         name: 'Tükenecek Paket',
         quantity: 1,
-        deliveryStart: '2027-01-01T10:00:00Z',
-        deliveryEnd: '2027-01-01T18:00:00Z',
+        deliveryStart: futureIso(30, 10),
+        deliveryEnd: futureIso(30, 18),
         products: [{ id: productId, quantity: 1, price: 10 }],
       });
 
