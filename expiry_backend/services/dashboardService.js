@@ -54,7 +54,7 @@ exports.getShopSummary = async (userId) => {
   const [activeRow] = await sequelize.query(`
     SELECT COUNT(DISTINCT pu.packageId) AS activeCount
     FROM \`PackageUnits\` pu
-    INNER JOIN \`Packages\` p ON p.id = pu.packageId
+    INNER JOIN \`packages\` p ON p.id = pu.packageId
     WHERE p.shopId = :shopId AND pu.isSold = false
   `, {
     replacements: { shopId: shop.id },
@@ -71,7 +71,7 @@ exports.getShopSummary = async (userId) => {
       p.name AS packageName,
       MIN(sp.expiryDate) AS minExpiryDate,
       COUNT(DISTINCT pu.id) AS remainingUnits
-    FROM \`Packages\` p
+    FROM \`packages\` p
     INNER JOIN \`package_products\` pp ON pp.packageId = p.id
     INNER JOIN \`shop_products\` sp ON sp.id = pp.shopProductId
     INNER JOIN \`PackageUnits\` pu ON pu.packageId = p.id AND pu.isSold = false

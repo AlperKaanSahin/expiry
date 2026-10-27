@@ -111,7 +111,7 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
   const unitCounts = await sequelize.query(`
     SELECT pu.packageId, COUNT(pu.id) as remaining
     FROM \`PackageUnits\` pu
-    INNER JOIN \`Packages\` p ON p.id = pu.packageId
+    INNER JOIN \`packages\` p ON p.id = pu.packageId
     WHERE p.shopId = :shopId AND pu.isSold = false
     GROUP BY pu.packageId
     HAVING COUNT(pu.id) > 0
@@ -126,7 +126,7 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
     SELECT COUNT(*) as total FROM (
       SELECT pu.packageId
       FROM \`PackageUnits\` pu
-      INNER JOIN \`Packages\` p ON p.id = pu.packageId
+      INNER JOIN \`packages\` p ON p.id = pu.packageId
       WHERE p.shopId = :shopId AND pu.isSold = false
       GROUP BY pu.packageId
       HAVING COUNT(pu.id) > 0
@@ -136,15 +136,13 @@ exports.listPackages = async (userId, page = 1, limit = 10) => {
     type: QueryTypes.SELECT,
   });
 
-  // NOT: Bu iki sorgu \`Packages\`/\`PackageUnits\` (büyük harf) kullanıyor, ama
-  // Package modelinin gerçek tableName'i 'packages' (küçük harf). Windows/MySQL
-  // case-insensitive olduğu için lokal de çalışıyor ama Docker'daki node:20-alpine
-  // (Linux, case-sensitive) prod'a geçmeden önce bu satırların küçük harfe
-  // çevrilmesi gerekiyor — bu turun kapsamı dışında, ayrı bir iş olarak bırakıyorum,
-  // aşağıdaki yeni sorguda da tutarlılık için aynı büyük harf kalıbını korudum.
+  // Ham SQL'de tablo adları gerçek (case-sensitive) adlarıyla yazılmalı: 'packages'
+  // (Package.tableName), 'PackageUnits' (PackageUnit modelinde tableName yok, Sequelize
+  // çoğullaştırıyor). Windows MySQL farkı gizler, Linux'ta patlar. Bu sorgular
+  // tests/integration/shop-raw-sql-flow.test.js ile gerçek DB'ye karşı test ediliyor.
   const [{ expiredCount }] = await sequelize.query(`
     SELECT COUNT(DISTINCT p.id) as expiredCount
-    FROM \`Packages\` p
+    FROM \`packages\` p
     INNER JOIN \`PackageUnits\` pu ON pu.packageId = p.id AND pu.isSold = false
     INNER JOIN package_products pp ON pp.packageId = p.id
     INNER JOIN shop_products sp ON sp.id = pp.shopProductId
@@ -410,7 +408,7 @@ exports.deleteExpiredPackages = async (userId) => {
 
   const rows = await sequelize.query(`
     SELECT DISTINCT p.id
-    FROM \`Packages\` p
+    FROM \`packages\` p
     INNER JOIN \`PackageUnits\` pu ON pu.packageId = p.id AND pu.isSold = false
     INNER JOIN package_products pp ON pp.packageId = p.id
     INNER JOIN shop_products sp ON sp.id = pp.shopProductId
