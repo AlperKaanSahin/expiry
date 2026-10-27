@@ -2,6 +2,8 @@ const request = require('supertest');
 const app = require('../../app');
 const { sequelize, User, RefreshToken, UserDevice } = require('../../models');
 
+const { futureDate, futureIso } = require('../helpers/dates');
+
 describe('Auth akışı: kayıt → giriş → profil → token → şifre → cihaz → hesap silme', () => {
   const timestamp = Date.now();
 
@@ -575,7 +577,7 @@ describe('Auth akışı: validasyon, yetkilendirme, ek senaryolar', () => {
     const productRes = await request(app)
       .post('/api/shop/products')
       .set('Authorization', `Bearer ${shopOwnerToken}`)
-      .send({ name: 'Active Order Ürün', price: 10, quantity: 10, expiryDate: '2027-01-01' });
+      .send({ name: 'Active Order Ürün', price: 10, quantity: 10, expiryDate: futureDate(30) });
 
     const packageRes = await request(app)
       .post('/api/shop/packages')
@@ -583,8 +585,8 @@ describe('Auth akışı: validasyon, yetkilendirme, ek senaryolar', () => {
       .send({
         name: 'Active Order Paket',
         quantity: 5,
-        deliveryStart: '2027-01-01T10:00:00Z',
-        deliveryEnd: '2027-01-01T18:00:00Z',
+        deliveryStart: futureIso(30, 10),
+        deliveryEnd: futureIso(30, 18),
         products: [{ id: productRes.body.id, quantity: 1, price: 10 }],
       });
 

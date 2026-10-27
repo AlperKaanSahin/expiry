@@ -2,6 +2,8 @@ const request = require('supertest');
 const app = require('../../app');
 const { sequelize } = require('../../models');
 
+const { futureDate, futureIso } = require('../helpers/dates');
+
 describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/paket → sipariş → ödeme → teslimat → onay → release', () => {
   const timestamp = Date.now();
   const shopOwnerEmail = `shopowner+${timestamp}@test.com`;
@@ -75,7 +77,7 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
     const res = await request(app)
       .post('/api/shop/products')
       .set('Authorization', `Bearer ${shopOwnerToken}`)
-      .send({ name: 'Test Ürün', price: 20, quantity: 100, expiryDate: '2027-01-01' });
+      .send({ name: 'Test Ürün', price: 20, quantity: 100, expiryDate: futureDate(30) });
 
     expect(res.status).toBe(201);
     productId = res.body.id;
@@ -88,8 +90,8 @@ describe('Uçtan uca sipariş akışı: kayıt → başvuru → onay → ürün/
       .send({
         name: 'Test Paket',
         quantity: 5,
-        deliveryStart: '2027-01-01T10:00:00Z',
-        deliveryEnd: '2027-01-01T18:00:00Z',
+        deliveryStart: futureIso(30, 10),
+        deliveryEnd: futureIso(30, 18),
         products: [{ id: productId, quantity: 1, price: 20 }],
       });
 
