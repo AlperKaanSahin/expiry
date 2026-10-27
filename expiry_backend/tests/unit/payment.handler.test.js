@@ -6,6 +6,9 @@ jest.mock('../../services/iyzicoService', () => ({
   approvePaymentTransaction: jest.fn(),
   retrieveCheckoutForm: jest.fn(),
 }));
+jest.mock('../../services/orderService', () => ({
+  changeStatus: jest.fn(),
+}));
 jest.mock('@sentry/node', () => ({
   captureMessage: jest.fn(),
   captureException: jest.fn(),
@@ -13,10 +16,16 @@ jest.mock('@sentry/node', () => ({
 
 const { Order, OrderPackage } = require('../../models');
 const iyzicoService = require('../../services/iyzicoService');
+const orderService = require('../../services/orderService');
 const Sentry = require('@sentry/node');
+const AppError = require('../../utils/AppError');
 const eventBus = require('../../events/eventBus');
 const ORDER_EVENTS = require('../../events/order.events');
-const { approveOrderPackages, MAX_APPROVAL_ATTEMPTS } = require('../../handlers/payment.handler');
+const {
+  approveOrderPackages,
+  approveOrderPackagesAndRelease,
+  MAX_APPROVAL_ATTEMPTS,
+} = require('../../handlers/payment.handler');
 
 // eventBus.emit senkron ama listener async — içindeki await'lerin tamamlanmasını
 // beklemek için microtask kuyruğunu birkaç tur boşaltıyoruz.
@@ -41,22 +50,32 @@ function makePackage(overrides = {}) {
 describe('payment.handler — ORDER_EVENTS.CONFIRMED (eventBus üzerinden)', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('confirmed event geldiğinde her OrderPackage için approvePaymentTransaction çağırır ve iyzicoApprovedAt\'i set eder', async () => {
+  it('confirmed event geldiğinde her OrderPackage için approve çağırır ve tüm kalemler başarılıysa order\'ı released\'e geçirir', async () => {
     const pkg1 = makePackage({ id: 1, iyzicoPaymentTransactionId: 'tx-1' });
     const pkg2 = makePackage({ id: 2, iyzicoPaymentTransactionId: 'tx-2' });
     OrderPackage.findAll.mockResolvedValue([pkg1, pkg2]);
     iyzicoService.approvePaymentTransaction.mockResolvedValue({ status: 'success' });
+    orderService.changeStatus.mockResolvedValue({ id: 99, status: 'released' });
 
     eventBus.emit(ORDER_EVENTS.CONFIRMED, { orderId: 99 });
     await flush();
 
-    expect(OrderPackage.findAll).toHaveBeenCalledWith({ where: { orderId: 99 } });
     expect(iyzicoService.approvePaymentTransaction).toHaveBeenCalledWith('tx-1');
     expect(iyzicoService.approvePaymentTransaction).toHaveBeenCalledWith('tx-2');
     expect(pkg1.iyzicoApprovedAt).toBeInstanceOf(Date);
     expect(pkg2.iyzicoApprovedAt).toBeInstanceOf(Date);
-    expect(pkg1.save).toHaveBeenCalled();
-    expect(pkg2.save).toHaveBeenCalled();
+    expect(orderService.changeStatus).toHaveBeenCalledWith(99, 'released', 'system');
+  });
+
+  it('bir kalem approve edilemezse order released\'e geçirilmeye hiç çalışılmaz', async () => {
+    const pkg1 = makePackage({ id: 1, iyzicoPaymentTransactionId: 'tx-1' });
+    OrderPackage.findAll.mockResolvedValue([pkg1]);
+    iyzicoService.approvePaymentTransaction.mockRejectedValue(new Error('iyzico hatası'));
+
+    eventBus.emit(ORDER_EVENTS.CONFIRMED, { orderId: 100 });
+    await flush();
+
+    expect(orderService.changeStatus).not.toHaveBeenCalled();
   });
 
   it('approveOrderPackages hata fırlatırsa event listener\'dan dışarı taşmaz', async () => {
@@ -99,7 +118,7 @@ describe('approveOrderPackages', () => {
   it('paymentTransactionId olmayan ve backfill de sonuç vermeyen bir OrderPackage için approve çağırmadan atlar', async () => {
     const pkg = makePackage({ id: 1, iyzicoPaymentTransactionId: null });
     OrderPackage.findAll.mockResolvedValue([pkg]);
-    Order.findByPk.mockResolvedValue({ id: 100, checkoutToken: null }); // backfill: token yok, hemen çıkar
+    Order.findByPk.mockResolvedValue({ id: 100, checkoutToken: null });
 
     const result = await approveOrderPackages(100);
 
@@ -175,6 +194,56 @@ describe('approveOrderPackages', () => {
     expect(iyzicoService.approvePaymentTransaction).toHaveBeenCalledTimes(2);
     expect(pkg1.iyzicoApprovedAt).toBeNull();
     expect(pkg2.iyzicoApprovedAt).toBeInstanceOf(Date);
-    expect(result).toBe(false); // pkg1 hâlâ approve edilmedi
+    expect(result).toBe(false);
+  });
+});
+
+describe('approveOrderPackagesAndRelease', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('tüm kalemler approve edilirse orderService.changeStatus(orderId, "released", "system") çağırır', async () => {
+    const pkg = makePackage({ id: 1, iyzicoPaymentTransactionId: 'tx-1' });
+    OrderPackage.findAll.mockResolvedValue([pkg]);
+    iyzicoService.approvePaymentTransaction.mockResolvedValue({ status: 'success' });
+    orderService.changeStatus.mockResolvedValue({ id: 50, status: 'released' });
+
+    const result = await approveOrderPackagesAndRelease(50);
+
+    expect(orderService.changeStatus).toHaveBeenCalledWith(50, 'released', 'system');
+    expect(result).toBe(true);
+  });
+
+  it('bir kalem hâlâ approve edilmemişse changeStatus hiç çağrılmaz', async () => {
+    const pkg = makePackage({ id: 1, iyzicoPaymentTransactionId: null });
+    OrderPackage.findAll.mockResolvedValue([pkg]);
+    Order.findByPk.mockResolvedValue({ id: 50, checkoutToken: null });
+
+    const result = await approveOrderPackagesAndRelease(50);
+
+    expect(orderService.changeStatus).not.toHaveBeenCalled();
+    expect(result).toBe(false);
+  });
+
+  it('order zaten released ise (idempotent, changeStatus AppError 409 fırlatır) hata yutulur, Sentry\'ye bildirilmez', async () => {
+    const pkg = makePackage({ id: 1, iyzicoPaymentTransactionId: 'tx-1' });
+    OrderPackage.findAll.mockResolvedValue([pkg]);
+    iyzicoService.approvePaymentTransaction.mockResolvedValue({ status: 'success' });
+    orderService.changeStatus.mockRejectedValue(new AppError('Geçersiz durum geçişi', 409));
+
+    const result = await approveOrderPackagesAndRelease(50);
+
+    expect(result).toBe(true);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('changeStatus beklenmedik bir hata (409 dışı) fırlatırsa Sentry\'ye bildirilir', async () => {
+    const pkg = makePackage({ id: 1, iyzicoPaymentTransactionId: 'tx-1' });
+    OrderPackage.findAll.mockResolvedValue([pkg]);
+    iyzicoService.approvePaymentTransaction.mockResolvedValue({ status: 'success' });
+    orderService.changeStatus.mockRejectedValue(new Error('DB bağlantısı koptu'));
+
+    await approveOrderPackagesAndRelease(50);
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 });

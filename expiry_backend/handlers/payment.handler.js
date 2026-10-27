@@ -3,17 +3,11 @@ const eventBus = require('../events/eventBus');
 const ORDER_EVENTS = require('../events/order.events');
 const { Order, OrderPackage } = require('../models');
 const iyzicoService = require('../services/iyzicoService');
+const orderService = require('../services/orderService');
+const AppError = require('../utils/AppError');
 
-// Bir OrderPackage otomatik retry tarafından (services/approvalRetryJob.js) kaç kez
-// denendikten sonra "kalıcı başarısız" sayılıp insan müdahalesine bırakılacağını
-// belirler. Bu sabit iki yerden kullanılıyor: burada (confirmed event'indeki ilk
-// deneme) ve retry job'da (periyodik tekrar deneme) — tek yerden kontrol edilsin.
 const MAX_APPROVAL_ATTEMPTS = 10;
 
-/**
- * Callback'te paymentTransactionId eşlenemediyse (itemId uyuşmazlığı vb.)
- * iyzico'dan sonucu tekrar çekip eksik id'leri doldurur.
- */
 async function backfillTransactionIds(orderId) {
   const order = await Order.findByPk(orderId, { attributes: ['id', 'checkoutToken'] });
   if (!order?.checkoutToken) return;
@@ -31,19 +25,6 @@ async function backfillTransactionIds(orderId) {
   }
 }
 
-/**
- * Bir order'ın henüz approve edilmemiş OrderPackage'larını iyzico'da approve eder.
- * Idempotent: iyzicoApprovedAt dolu olanlar atlanır, bu yüzden hem event listener
- * hem de retry job (services/approvalRetryJob.js) güvenle çağırabilir.
- *
- * Her item bağımsız — biri başarısız olursa diğerleri denenmeye devam eder.
- * MAX_APPROVAL_ATTEMPTS'e ulaşmış bir item bir daha denenmez — eşik aşıldığı anda
- * Sentry'ye BİR KEZ bildirilir, sonraki geçişlerde sessizce atlanır (insan
- * müdahalesi bekleniyor demektir, retry job'un iyzico'yu sonsuza dek dövmesi
- * engellenmiş olur).
- *
- * Dönen değer: tüm item'lar approve edildi mi.
- */
 async function approveOrderPackages(orderId) {
   let orderPackages = await OrderPackage.findAll({ where: { orderId } });
 
@@ -68,7 +49,6 @@ async function approveOrderPackages(orderId) {
     if (opkg.iyzicoApprovedAt) continue;
 
     if (opkg.approvalAttempts >= MAX_APPROVAL_ATTEMPTS) {
-      // Eşik daha önce aşılmış ve Sentry'ye bildirilmiş — sessizce atla.
       allApproved = false;
       continue;
     }
@@ -119,16 +99,44 @@ async function approveOrderPackages(orderId) {
   return allApproved;
 }
 
+/**
+ * approveOrderPackages'ı çalıştırır; TÜM kalemler approve edildiyse order'ı
+ * otomatik 'released'e geçirir — 'released' zaten "iyzico parayı markete
+ * geçirdi" anlamına geliyor, bu bir insan kararı değil bir gerçek, market'in
+ * elle işaretlemesini beklemek gereksiz ve unutulmaya açık bir adım.
+ *
+ * Idempotent: order zaten 'released' ise (örn. retry job ikinci kez çalıştı
+ * ama release zaten önceden gerçekleşmişse) changeStatus'un fırlattığı 409
+ * BEKLENEN bir durumdur, sessizce yutulur — Sentry'ye bildirilmez. Başka
+ * türden bir hata (örn. gerçek bir DB sorunu) olursa bildirilir.
+ */
+async function approveOrderPackagesAndRelease(orderId) {
+  const allApproved = await approveOrderPackages(orderId);
+  if (!allApproved) return allApproved;
+
+  try {
+    await orderService.changeStatus(orderId, 'released', 'system');
+  } catch (err) {
+    const isIdempotentNoOp = err instanceof AppError && err.statusCode === 409;
+    if (!isIdempotentNoOp) {
+      console.error(`[payment.handler] orderId=${orderId} otomatik release başarısız:`, err.message || err);
+      Sentry.captureException(err, { extra: { orderId, source: 'payment.handler-auto-release' } });
+    }
+  }
+
+  return allApproved;
+}
+
 // Iyzico approve call'u BİLEREK confirmed transaction'ının dışında çalışıyor
 // (dış HTTP çağrısını DB lock'u altında tutmamak için). Event commit sonrasında
 // fırlatılıyor (bkz. orderService.runSideEffects), dolayısıyla rollback olmuş
 // bir order için approve çalışmaz.
 eventBus.on(ORDER_EVENTS.CONFIRMED, async ({ orderId }) => {
   try {
-    await approveOrderPackages(orderId);
+    await approveOrderPackagesAndRelease(orderId);
   } catch (err) {
     console.error(`[payment.handler] orderId=${orderId} approve akışı başarısız:`, err.message || err);
   }
 });
 
-module.exports = { approveOrderPackages, MAX_APPROVAL_ATTEMPTS };
+module.exports = { approveOrderPackages, approveOrderPackagesAndRelease, MAX_APPROVAL_ATTEMPTS };

@@ -13,9 +13,6 @@ const PLATFORM_FEE_FIXED_AMOUNT = 10; // ≤50 TL paketler için sabit tutar
 const PLATFORM_FEE_THRESHOLD = 50;
 const PLATFORM_FEE_PERCENTAGE = 0.20;
 
-// iyzico Checkout Form'un oturum süresine yakın tutuldu — kesin değer
-// dokümandan doğrulanmadı, sandbox'ta checkout formunun ne kadar açık
-// kaldığını test edip gerekirse ayarla.
 const RESERVATION_TTL_MINUTES = 20;
 
 function calculatePlatformFee(totalPrice) {
@@ -29,11 +26,24 @@ function calculatePlatformFee(totalPrice) {
 // açıkça listeler. Bu liste, "kim hangi state'i değiştirebilir" sorusunun tek
 // doğru kaynağıdır — buraya eklenmeyen bir (from, to, actor) kombinasyonu
 // otomatik olarak reddedilir.
+//
+// delivered -> confirmed: actor 'market-qr' — SADECE confirmByQRCode() içinden
+// kullanılır (deliveryToken + teslimat penceresi doğrulaması geçtikten sonra).
+// Genel changeStatus()/POST /:id/status yolunun kullandığı 'market' actor'ü
+// burada BİLEREK YOK: aksi halde market, müşteri hiç QR göstermeden kendi
+// siparişini "confirmed" yapabilirdi.
+//
+// confirmed -> released: actor 'system' — payment.handler.js'deki
+// approveOrderPackagesAndRelease tarafından, iyzico approve TÜM kalemler için
+// başarılı olduğunda OTOMATİK tetiklenir (para zaten markete geçmiş demektir,
+// bu bir insan kararı değil bir gerçek). 'market'/'admin' elle override için
+// hâlâ duruyor — otomatik tetikleme bir sebepten başarısız olursa manuel
+// düzeltme yolu kapanmasın diye.
 const TRANSITIONS = {
   pending: { paid: ['system', 'admin'] },
   paid: { delivered: ['market', 'admin'] },
-  delivered: { confirmed: ['market', 'admin'] },
-  confirmed: { released: ['market', 'admin'] },
+  delivered: { confirmed: ['market-qr', 'admin'] },
+  confirmed: { released: ['market', 'admin', 'system'] },
 };
 
 const STATUS_GROUPS = {
@@ -71,13 +81,6 @@ async function assertPackageProductsNotExpired(packageId, transaction) {
   }
 }
 
-// NOT: 'confirmed' durumunda Iyzico approve call'u BURADA (transaction içinde)
-// YAPILMIYOR — bkz. payment.handler.js. Dış bir HTTP çağrısını DB transaction'ı
-// içinde tutmak (network round-trip boyunca row lock) ölçeklenebilirlik açısından
-// kötü; approve call, transaction commit olduktan sonra event listener'da çalışıyor.
-//
-// Event'ler commit'ten SONRA fırlatılır: transaction rollback olursa hiçbir
-// listener (bildirim, audit, Iyzico approve) çalışmaz.
 async function runSideEffects(order, status, transaction) {
   const emitAfterCommit = (event, payload) => {
     transaction.afterCommit(() => {
@@ -132,10 +135,6 @@ async function runSideEffects(order, status, transaction) {
   }
 }
 
-// Bu fonksiyon artık YENİ ünite seçmiyor — createOrder sırasında zaten bu
-// siparişe rezerve edilmiş (reservedByOrderId = order.id) üniteleri isSold=true'ya
-// çeviriyor. reservedByOrderId filtresi race condition'ı önlüyor: başka bir
-// sipariş bu üniteleri asla göremez, çünkü onlar zaten BU siparişe ait.
 async function reserveStock(order, transaction) {
   const orderPackages = await OrderPackage.findAll({
     where: { orderId: order.id },
@@ -151,11 +150,6 @@ async function reserveStock(order, transaction) {
       transaction
     });
 
-    // Buraya sadece RESERVATION_TTL_MINUTES süresi dolmuş ve ünitelerin başka
-    // bir sipariş tarafından lazy-release ile devralınmış olması durumunda
-    // düşülür (checkout, TTL'den daha uzun sürmüş). Ödeme muhtemelen zaten
-    // alınmıştır — handleCheckoutCallback bu durumu (rollback + Sentry 'fatal')
-    // zaten yakalıyor, manuel iade gerektirir.
     if (units.length < opkg.quantity) {
       throw new AppError(
         'Rezervasyon süresi dolduğu için stok onaylanamadı, manuel kontrol gerekiyor',
@@ -182,16 +176,6 @@ async function reserveStock(order, transaction) {
   }
 }
 
-/**
- * Stok rezervasyonu artık BURADA (sipariş oluşturma anında) yapılıyor, 'paid'
- * geçişinde değil — aksi halde iki müşteri son 1 adet stoklu pakete eşzamanlı
- * GERÇEK ödeme yapabilir, biri ödemeyi tamamlar ama 'paid' geçişi
- * 'Stok yetersiz' ile rollback olur ve parası çekilmiş bir müşteri elde kalır.
- *
- * "Lazy release": süresi geçmiş (reservedUntil < now) rezervasyonlar ayrı bir
- * cron olmadan, bir sonraki createOrder çağrısı tarafından otomatik olarak
- * müsait sayılır.
- */
 async function createOrder(userId, data) {
   const { shopId, packages } = data;
 
@@ -278,15 +262,6 @@ async function createOrder(userId, data) {
   }
 }
 
-/**
- * Bir pending order için Iyzico Checkout Form başlatır ve paymentPageUrl döner.
- * Frontend bunu WebView'de açar.
- *
- * Sepette her OrderPackage için bir kalem gönderilir (id = iyzicoItemId), böylece
- * callback'teki itemTransactions -> OrderPackage eşlemesi birebir çalışır ve her
- * kalemin kendi paymentTransactionId'si approve için saklanır. Platform komisyonu
- * kalemlere price/subMerchantPrice farkı olarak dağıtılır.
- */
 async function initiateCheckout(userId, orderId, req) {
   const order = await Order.findOne({
     where: { id: orderId, userId },
@@ -309,7 +284,7 @@ async function initiateCheckout(userId, orderId, req) {
   const baseItems = order.OrderPackages.map((op) => ({
     id: op.iyzicoItemId,
     name: op.Package?.name || 'Expiry Paketi',
-    price: Number(op.price) * op.quantity, // mağazanın payı (satır toplamı)
+    price: Number(op.price) * op.quantity,
     subMerchantKey: shop.subMerchantKey,
   }));
 
@@ -327,17 +302,10 @@ async function initiateCheckout(userId, orderId, req) {
   return { paymentPageUrl: result.paymentPageUrl, token: result.token };
 }
 
-/**
- * callbackUrl'e Iyzico POST ettiğinde (body içinde `token`) çağrılır.
- * Redirect'teki hiçbir parametreye güvenilmiyor — token ile Iyzico'dan
- * otoriter sonucu tekrar sorguluyoruz.
- */
 async function handleCheckoutCallback(token) {
   const order = await Order.findOne({ where: { checkoutToken: token } });
   if (!order) throw new AppError('Geçersiz checkout token', 404);
 
-  // Idempotency: aynı callback iki kez gelirse (Iyzico'nun retry mekanizması
-  // olabilir) ikinci kez state geçişi denemeyelim.
   if (order.status !== 'pending') {
     return order;
   }
@@ -345,13 +313,9 @@ async function handleCheckoutCallback(token) {
   const result = await iyzicoService.retrieveCheckoutForm(token);
 
   if (result.paymentStatus !== 'SUCCESS') {
-    // Ödeme başarısız — order 'pending' kalır, kullanıcı tekrar deneyebilir.
     throw new AppError(result.errorMessage || 'Ödeme başarısız oldu', 402);
   }
 
-  // Iyzico'dan dönen sonuç bu order'a ve beklenen sepet tutarına ait mi?
-  // (alan response'ta varsa kontrol edilir). paidPrice ile KARŞILAŞTIRILMIYOR:
-  // taksitli ödemede iyzico taksit farkını paidPrice'a ekler, meşru ödeme reddedilirdi.
   if (result.basketId && result.basketId !== `order-${order.id}`) {
     console.error(`[checkout] basketId uyuşmazlığı: order=${order.id}, iyzico=${result.basketId}`);
     Sentry.captureMessage(`checkout basketId uyuşmazlığı order=${order.id}`, 'error');
@@ -381,8 +345,6 @@ async function handleCheckoutCallback(token) {
       return lockedOrder;
     }
 
-    // itemTransactions'daki paymentTransactionId'leri OrderPackage'lara yaz —
-    // approve call bunları kullanacak.
     const orderPackages = await OrderPackage.findAll({
       where: { orderId: order.id },
       transaction: t,
@@ -396,9 +358,6 @@ async function handleCheckoutCallback(token) {
       }
     }
 
-    // Ödeme ZATEN alındı: eşlenemeyen kalem için throw ETME (müşteriden para çekilip
-    // sipariş oluşmamış olurdu). Görünür kıl; payment.handler approve öncesi
-    // iyzico'dan eksik id'leri geri doldurmayı dener.
     const unmapped = orderPackages.filter((op) => !op.iyzicoPaymentTransactionId);
     if (unmapped.length) {
       const ids = unmapped.map((op) => op.id).join(', ');
@@ -415,9 +374,6 @@ async function handleCheckoutCallback(token) {
     return lockedOrder;
   } catch (err) {
     await t.rollback();
-    // Buraya gelindiyse ödeme alınmış ama order 'paid' yapılamamış demektir
-    // (örn. rezervasyon süresi dolmuş). Müşteri parası çekilmiş durumda —
-    // manuel müdahale/iade gerekir.
     Sentry.captureException(err, {
       level: 'fatal',
       extra: { orderId: order.id, token, note: 'ödeme alındı ama order paid yapılamadı' },
@@ -426,6 +382,12 @@ async function handleCheckoutCallback(token) {
   }
 }
 
+/**
+ * Market, müşterinin telefonundaki/QR kodundaki deliveryToken'ı okutarak
+ * teslimatı onaylar. Bu, delivered -> confirmed geçişinin GÜVENLİ yoludur —
+ * teslimat penceresi kontrolü + doğru shop sahipliği burada doğrulanıyor,
+ * bu yüzden changeStatusInternal'a actor='market-qr' geçiriyoruz.
+ */
 async function confirmByQRCode(marketUserId, deliveryToken) {
   const t = await sequelize.transaction();
   try {
@@ -456,7 +418,7 @@ async function confirmByQRCode(marketUserId, deliveryToken) {
 
     if (!shop) throw new AppError('Bu siparişe erişim yetkiniz yok', 403);
 
-    await changeStatusInternal(order, 'confirmed', 'market', t);
+    await changeStatusInternal(order, 'confirmed', 'market-qr', t);
 
     await t.commit();
     return order;
@@ -568,6 +530,7 @@ async function listShopOrders(shopId, statusGroup = 'active', page = 1, limit = 
 async function getShopByOwner(ownerId) {
   return await Shop.findOne({ where: { ownerId } });
 }
+
 async function simulatePayment(userId, orderId) {
   const t = await sequelize.transaction();
   try {
@@ -603,4 +566,4 @@ module.exports = {
   reserveStock,
   assertPackageProductsNotExpired,
   calculatePlatformFee, // test edilebilirlik için export edildi
-}; 
+};
