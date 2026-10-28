@@ -7,6 +7,16 @@ const eventBus = require('../events/eventBus');
 const AUDIT_EVENTS = require('../events/audit.events');
 const storageService = require('./storageService');
 
+// Herkese açık (müşteri yüzü) yanıtlarda dönebilecek market alanları. Shop modelinde
+// IBAN, kimlik/vergi numarası, subMerchantKey gibi hassas alanlar var; kimlik doğrulamasız
+// bir endpoint'te Shop kaydı ASLA attributes kısıtlaması olmadan dönmemeli. Whitelist
+// kullanıyoruz (blacklist değil): modele eklenecek yeni kolonlar varsayılan olarak sızmaz.
+// Bu sabit tests/integration/shop-public-leak.test.js ile korunuyor.
+const SHOP_PUBLIC_ATTRIBUTES = [
+  'id', 'name', 'address', 'phone', 'category',
+  'coverImageUrl', 'ratingAverage', 'ratingCount',
+];
+
 exports.applyShop = async (userId, data) => {
   if (!data?.name || !data?.address || !data?.phone || !data?.category) {
     throw new AppError('Eksik market bilgisi', 400);
@@ -85,8 +95,12 @@ exports.getMyShopProfile = async (userId) => {
   return shop;
 };
 
+// Kimlik doğrulamasız çağrılıyor (GET /api/shops): sadece whitelist alanlar döner.
 exports.listActiveShops = async () => {
-  return await Shop.findAll({ where: { status: 'active' } });
+  return await Shop.findAll({
+    where: { status: 'active' },
+    attributes: SHOP_PUBLIC_ATTRIBUTES,
+  });
 };
 
 // Müşteri yüzündeki ShopDetailScreen için tekil market profili. Sadece `status: 'active'`
@@ -96,18 +110,21 @@ exports.listActiveShops = async () => {
 exports.getShopPublicProfile = async (shopId) => {
   const shop = await Shop.findOne({
     where: { id: shopId, status: 'active' },
-    attributes: [
-      'id', 'name', 'address', 'phone', 'category',
-      'coverImageUrl', 'ratingAverage', 'ratingCount',
-    ],
+    attributes: SHOP_PUBLIC_ATTRIBUTES,
   });
 
   if (!shop) throw new AppError('Market bulunamadı', 404);
   return shop;
 };
 
+// Kimlik doğrulamasız çağrılıyor (GET /api/shops/:id/packages): sadece whitelist alanlar döner.
+// NOT: Shop.hasMany(Package) tanımlı olmadığı için bu include şu an "Package is not
+// associated to Shop!" ile 500 veriyor, yani endpoint fiilen çalışmıyor ve frontend de
+// çağırmıyor (leak testinde görüldü). Whitelist savunma amaçlı duruyor; endpoint'in
+// kaldırılması backlog'daki API cleanup maddesi. Market durumu (status) de kontrol edilmiyor.
 exports.getShopWithPackages = async (shopId) => {
   return await Shop.findByPk(shopId, {
+    attributes: SHOP_PUBLIC_ATTRIBUTES,
     include: [{
       model: Package,
       include: [{
@@ -286,6 +303,7 @@ exports.updatePaymentSettings = async (userId, data) => {
     subMerchantKey: shop.subMerchantKey,
   };
 };
+
 exports.updateCoverPhoto = async (userId, fileBuffer, mimetype) => {
   const shop = await Shop.findOne({ where: { ownerId: userId } });
   if (!shop) throw new AppError('Market bulunamadı', 404);
