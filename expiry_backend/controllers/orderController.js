@@ -13,6 +13,24 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// Market tarafına dönen sipariş yanıtlarından çıkarılacak alanlar.
+// deliveryToken teslim QR'ının sırrıdır ve SADECE siparişi veren müşteri görmeli: market
+// bunu görürse müşteri hiç gelmeden siparişi delivered -> confirmed yapıp escrow'daki
+// parayı alabilir (confirmByQRCode token'ı bilen her market sahibine izin verir).
+// checkoutToken Iyzico ödeme oturumuna ait, markete gerekmiyor.
+// Bu bir blacklist: ShopOrdersScreen'in hangi alanları okuduğunu görmeden whitelist'e
+// geçmek ekranı bozabilir; whitelist/defaultScope ayrı bir iş olarak backlog'da.
+// tests/integration/order-token-leak.test.js ile korunuyor.
+const MARKET_HIDDEN_ORDER_FIELDS = ['deliveryToken', 'checkoutToken'];
+
+function toMarketOrderView(order) {
+  const plain = typeof order.toJSON === 'function' ? order.toJSON() : { ...order };
+  for (const field of MARKET_HIDDEN_ORDER_FIELDS) {
+    delete plain[field];
+  }
+  return plain;
+}
+
 // Iyzico'nun asenkron webhook bildirimi (checkout form callback'ten AYRI bir
 // mekanizma — fraud/gecikmeli sonuç gibi durumlar için). Public, JWT yok.
 // Header'daki X-IYZ-SIGNATURE-V3 doğrulanmadan hiçbir şey işlenmiyor.
@@ -118,7 +136,7 @@ const changeOrderStatus = catchAsync(async (req, res) => {
     req.user.id
   );
 
-  res.json(order);
+  res.json(isMarket ? toMarketOrderView(order) : order);
 });
 
 const confirmOrder = catchAsync(async (req, res) => {
@@ -129,12 +147,12 @@ const confirmOrder = catchAsync(async (req, res) => {
 const confirmByQRCode = catchAsync(async (req, res) => {
   const { deliveryToken } = req.body;
   const order = await orderService.confirmByQRCode(req.user.id, deliveryToken);
-  res.json(order);
+  res.json(toMarketOrderView(order));
 });
 
 const markDelivered = catchAsync(async (req, res) => {
   const order = await orderService.changeStatus(req.params.id, 'delivered', 'market', req.user.id);
-  res.json(order);
+  res.json(toMarketOrderView(order));
 });
 
 const getMyShopOrders = catchAsync(async (req, res) => {
@@ -146,7 +164,7 @@ const getMyShopOrders = catchAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
 
   const result = await orderService.listShopOrders(shop.id, statusGroup, page, limit);
-  res.json(result);
+  res.json({ ...result, orders: result.orders.map(toMarketOrderView) });
 });
 
 const getMyUserOrders = catchAsync(async (req, res) => {
