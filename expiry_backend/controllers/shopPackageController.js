@@ -1,10 +1,10 @@
 const shopPackageService = require('../services/shopPackageService');
 const catchAsync = require('../utils/catchAsync');
+const { parsePagination } = require('../utils/pagination');
 
 module.exports = {
   list: catchAsync(async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const { page, limit } = parsePagination(req.query);
     const result = await shopPackageService.listPackages(req.user.id, page, limit);
     res.json(result);
   }),

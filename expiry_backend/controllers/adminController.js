@@ -1,10 +1,10 @@
 const adminService = require('../services/adminService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
+const { parsePagination } = require('../utils/pagination');
 
 exports.getAllUsers = catchAsync(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const { page, limit } = parsePagination(req.query);
 
   const result = await adminService.getAllUsers(page, limit);
 
@@ -42,8 +42,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
 });
 
 exports.getAllShops = catchAsync(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const { page, limit } = parsePagination(req.query);
   const result = await adminService.getAllShops(page, limit);
   res.json(result);
 });
