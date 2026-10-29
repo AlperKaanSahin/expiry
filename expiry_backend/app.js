@@ -47,10 +47,6 @@ if (!['development', 'test'].includes(process.env.NODE_ENV)) {
   app.use('/api/users/register', authLimiter);
 }
 
-app.get('/test-error', (req, res) => {
-  throw new Error('Sentry backend test hatası');
-});
-
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/shops', require('./routes/shopRoutes'));
 app.use('/api/shop/products', require('./routes/shopProductRoutes'));

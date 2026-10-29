@@ -3,6 +3,7 @@ const orderService = require('../services/orderService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const iyzicoService = require('../services/iyzicoService');
+const { parsePagination } = require('../utils/pagination');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -160,8 +161,7 @@ const getMyShopOrders = catchAsync(async (req, res) => {
   if (!shop) throw new AppError('Market bulunamadı', 404);
 
   const statusGroup = req.query.tab === 'past' ? 'past' : 'active';
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const { page, limit } = parsePagination(req.query);
 
   const result = await orderService.listShopOrders(shop.id, statusGroup, page, limit);
   res.json({ ...result, orders: result.orders.map(toMarketOrderView) });
@@ -169,8 +169,7 @@ const getMyShopOrders = catchAsync(async (req, res) => {
 
 const getMyUserOrders = catchAsync(async (req, res) => {
   const statusGroup = req.query.tab === 'past' ? 'past' : 'active';
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const { page, limit } = parsePagination(req.query);
 
   const result = await orderService.listUserOrders(req.user.id, statusGroup, page, limit);
   res.json(result);
