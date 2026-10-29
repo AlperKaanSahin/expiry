@@ -15,6 +15,15 @@ const PLATFORM_FEE_PERCENTAGE = 0.20;
 
 const RESERVATION_TTL_MINUTES = 20;
 
+// Ödeme sayfası açılırken (initiateCheckout) rezervasyon bu süreye uzatılır, ödeme sürerken
+// başka bir müşteri üniteleri lazy release ile alamasın diye. DOĞRULANMADI: iyzico checkout
+// form oturumunun gerçek süresi sandbox'ta test edilmeli (formu aç, bekle, öde).
+const CHECKOUT_RESERVATION_TTL_MINUTES = 40;
+
+// Siparişin rezervasyonu, oluşturulduğu andan itibaren en fazla bu kadar tutulur. Sınır
+// olmazsa ödeme sayfasını tekrar tekrar açan biri son üniteyi süresiz bloke edebilir.
+const MAX_RESERVATION_HOLD_MINUTES = 60;
+
 function calculatePlatformFee(totalPrice) {
   if (totalPrice <= PLATFORM_FEE_THRESHOLD) {
     return PLATFORM_FEE_FIXED_AMOUNT;
@@ -262,6 +271,59 @@ async function createOrder(userId, data) {
   }
 }
 
+// Ödeme sayfası açılmadan ÖNCE çağrılır. createOrder'daki rezervasyon TTL'i dolmuş ve üniteler
+// başka bir müşteriye geçmişse (lazy release), bu sipariş için ödeme alınırsa para çekilir ama
+// reserveStock stok bulamaz (para alındı, sipariş yok, manuel iade). Burada:
+//  - siparişin her kalemi için hâlâ reservedByOrderId = bu sipariş olan üniteler kilitlenir;
+//    biri eksikse 409 (para çekilmeden müşteri bilgilendirilir);
+//  - üniteler hâlâ bizdeyse rezervasyon uzatılır, ödeme sürerken başkası alamaz. createOrder da
+//    aynı üniteleri FOR UPDATE ile seçtiği için biz commit edene kadar bekler, sonra satır
+//    "müsait" koşuluna uymaz;
+//  - uzatma, sipariş oluşturulduktan sonra en fazla MAX_RESERVATION_HOLD_MINUTES'e kadar gider.
+async function extendReservationForCheckout(order) {
+  const now = new Date();
+  const createdAt = order.createdAt ? new Date(order.createdAt) : now;
+  const holdLimit = new Date(createdAt.getTime() + MAX_RESERVATION_HOLD_MINUTES * 60 * 1000);
+  const newUntil = new Date(
+    Math.min(now.getTime() + CHECKOUT_RESERVATION_TTL_MINUTES * 60 * 1000, holdLimit.getTime())
+  );
+
+  if (newUntil <= now) {
+    throw new AppError('Rezervasyon süresi doldu, siparişi yeniden oluşturun', 409);
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const unitIds = [];
+    const orderPackages = [...order.OrderPackages].sort((a, b) => a.packageId - b.packageId);
+
+    for (const opkg of orderPackages) {
+      const units = await PackageUnit.findAll({
+        where: { packageId: opkg.packageId, reservedByOrderId: order.id, isSold: false },
+        order: [['id', 'ASC']],
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+
+      if (units.length < opkg.quantity) {
+        throw new AppError('Rezervasyon süresi doldu, siparişi yeniden oluşturun', 409);
+      }
+
+      unitIds.push(...units.slice(0, opkg.quantity).map((u) => u.id));
+    }
+
+    await PackageUnit.update(
+      { reservedUntil: newUntil },
+      { where: { id: unitIds }, transaction: t }
+    );
+
+    await t.commit();
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+
 async function initiateCheckout(userId, orderId, req) {
   const order = await Order.findOne({
     where: { id: orderId, userId },
@@ -280,6 +342,9 @@ async function initiateCheckout(userId, orderId, req) {
   if (!shop || !shop.subMerchantKey || shop.subMerchantStatus !== 'active') {
     throw new AppError('Bu market henüz ödeme almaya hazır değil', 409);
   }
+
+  // Ödeme sayfasını açmadan önce stok rezervasyonunu doğrula/uzat (bkz. fonksiyonun yorumu).
+  await extendReservationForCheckout(order);
 
   const baseItems = order.OrderPackages.map((op) => ({
     id: op.iyzicoItemId,

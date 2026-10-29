@@ -2,7 +2,7 @@ jest.mock('../../models', () => ({
   Order: { findOne: jest.fn() },
   OrderPackage: { findAll: jest.fn(), create: jest.fn() },
   Package: { update: jest.fn(), findOne: jest.fn() },
-  PackageUnit: { findAll: jest.fn(), count: jest.fn() },
+  PackageUnit: { findAll: jest.fn(), count: jest.fn(), update: jest.fn() },
   PackageProduct: { findAll: jest.fn() },
   ShopProduct: {},
   Shop: { findOne: jest.fn(), findByPk: jest.fn() },
@@ -52,9 +52,15 @@ function mockTransaction() {
 describe('orderService.initiateCheckout', () => {
   const originalBackendUrl = process.env.BACKEND_URL;
 
-  beforeEach(() => {
+    beforeEach(() => {
     jest.clearAllMocks();
     process.env.BACKEND_URL = 'https://test.example.com';
+
+    // initiateCheckout artık ödeme sayfasını açmadan önce rezervasyonu doğrulayıp uzatıyor
+    // (bkz. extendReservationForCheckout): transaction ve siparişe ayrılmış ünite mock'ları.
+    mockTransaction();
+    PackageUnit.findAll.mockResolvedValue(Array.from({ length: 10 }, (_, i) => ({ id: 900 + i })));
+    PackageUnit.update.mockResolvedValue([10]);
   });
 
   afterAll(() => {
@@ -215,6 +221,19 @@ describe('orderService.initiateCheckout', () => {
 
     await expect(initiateCheckout(5, 46, { ip: '1.1.1.1' })).rejects.toThrow('Iyzico hatası');
     expect(mockOrder.save).not.toHaveBeenCalled();
+  });
+    it('siparişe ayrılmış ünite kalmadıysa (rezervasyon başkasına geçti) AppError(409) fırlatır, ödeme sayfası açılmaz', async () => {
+    Order.findOne.mockResolvedValue({
+      id: 47, status: 'pending', shopId: 7, platformFee: 10, paidPrice: 40, createdAt: new Date(),
+      OrderPackages: [{ iyzicoItemId: 'op-47-0', packageId: 3, price: 30, quantity: 2, Package: { name: 'X' } }],
+    });
+    User.findByPk.mockResolvedValue({ id: 5, firstName: 'A', lastName: 'B', email: 'a@b.com' });
+    Shop.findByPk.mockResolvedValue({ id: 7, subMerchantKey: 'sm-key', subMerchantStatus: 'active' });
+    PackageUnit.findAll.mockResolvedValue([{ id: 901 }]); // 2 gerekiyor, 1 kaldı
+
+    await expect(initiateCheckout(5, 47, { ip: '1.1.1.1' })).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(iyzicoService.initializeCheckoutForm).not.toHaveBeenCalled();
   });
 });
 
